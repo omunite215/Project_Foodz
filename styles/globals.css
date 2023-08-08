@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Alice&family=Poppins:wght@400;600&display=swap');
+
+*{
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+#checkbox {
+  display: none;
+}
+
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  transition-duration: .5s;
+}
+
+.bars {
+  width: 100%;
+  height: 4px;
+  background-color: #777E90;
+  border-radius: 4px;
+}
+
+#checkbox:checked + .toggle .bars {
+  position: absolute;
+  transition-duration: .5s;
+}
+
+#checkbox:checked + .toggle #bar2 {
+  transform: scaleX(0);
+  transition-duration: .1s;
+}
+
+#checkbox:checked + .toggle #bar1 {
+  width: 100%;
+  transform: rotate(45deg);
+  transition-duration: .5s;
+}
+
+#checkbox:checked + .toggle #bar3 {
+  width: 100%;
+  transform: rotate(-45deg);
+  transition-duration: .5s;
+}
+
+#checkbox:checked + .toggle {
+  transition-duration: .5s;
+  transform: rotate(180deg);
+}
+
+#hero-circle-background{
+  position: absolute;
+    top: 0;
+    right: 0;
+    z-index: -1;
+    width: 100%; /* Take up half of the hero section */
+    height: 100%; /* Stretch the height to match the hero section */
+    background-color: #DDF3D8;
+    border-radius: 0 100% 100% 0 / 100% 100% 0 0; /* Create a half-oval shape */
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 50px; /* Adjust the padding as needed */
+    -webkit-transform: scaleX(-1);
+    transform: scaleX(-1);
+    overflow: hidden;
+  
+}
+
+label{
+color: #353945;
+font-family: 'Poppins', sans-serif;
+font-size: 1rem;
+font-style: normal;
+font-weight: 400;
+line-height: normal;
+}
+
+select,input{
+border-radius: 0.75rem;
+border: 1px solid var(--neutral-4, #777E90);
+}
