@@ -4,7 +4,7 @@ import Image from "next/image";
 const HowToCard = ({ imageSrc, title, bg, description }: HowToCardProps) => {
   return (
     <div
-      className={`flex flex-col justify-center items-center gap-6 ${
+      className={`flex flex-col justify-center items-center gap-6 max-w-[24.063rem] ${
         bg
           ? "bg-white rounded-xl shadow-[0_10px_27px_0px_rgba(53,53,53,0.05)]"
           : "bg-transparent"

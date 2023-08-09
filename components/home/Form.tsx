@@ -1,3 +1,4 @@
+"use client";
 import Image from "next/image";
 import Link from "next/link";
 import { OrderNowButton } from "../common";
@@ -5,7 +6,7 @@ import { menuContent } from "@/constants";
 
 const Form = () => {
   return (
-    <section className=" flex flex-col gap-[6.5rem] flex-1 w-full justify-center items-start">
+    <div className=" flex flex-col gap-[6.5rem] flex-1 w-full justify-center items-start sm:px-16 px-6">
       <div className=" w-full flex flex-col justify-center items-center gap-3 text-center">
         <h1 className=" font-alice text-5xl text-textBlack font-normal leading-normal capitalize">
           Get the best Taste <span className=" text-primaryGreen">Now!</span>
@@ -15,10 +16,12 @@ const Form = () => {
           will reach you in 60 minutes.
         </h2>
       </div>
-      <div className="w-full flex justify-between items-start">
-        <section className=" flex flex-col justify-center items-start gap-6 font-poppins leading-normal font-normal">
+      <div className="w-full flex md:flex-row flex-col justify-between items-start">
+        <div className=" flex flex-col justify-center items-start gap-6 font-poppins leading-normal font-normal">
           <div className=" flex flex-col gap-1">
-            <h1 className=" text-[#141416] text-2xl">What&#8217;s your Taste?</h1>
+            <h1 className=" text-[#141416] text-2xl">
+              What&#8217;s your Taste?
+            </h1>
             <h3 className=" text-paraTextColor text-base">
               Fill out the form and let us know your taste.
             </h3>
@@ -72,22 +75,23 @@ const Form = () => {
             </div>
             <div className="flex flex-col">
               <label htmlFor="note">Note for us</label>
-              <textarea name="note" id="" cols={30} rows={10}>
-                More spicy, more sauce..
+              <textarea name="note" id="" cols={30} rows={10} defaultValue="More spicy, more sauce..">
               </textarea>
             </div>
             <h3 className=" text-textNeutralBlack font-poppins text-base ">
               You will pay{" "}
-              <span className=" font-alice text-primaryGreen text-2xl">$0.00</span>
+              <span className=" font-alice text-primaryGreen text-2xl">
+                $0.00
+              </span>
             </h3>
             <button type="submit">
               <OrderNowButton />
             </button>
           </form>
-        </section>
+        </div>
         <Image src="../../scooter.svg" width={540} height={430} alt="scooter" />
       </div>
-    </section>
+    </div>
   );
 };
 

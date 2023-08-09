@@ -29,12 +29,12 @@ export const howWeKeepContent = [
     },
     {
         imageSrc: "../../featureMeal.svg",
-        title: "Receive The Order",
+        title: "Prepare Your Meal",
         description: "That help us know what delicious meal you will try, but I don’t write anything"
     },
     {
         imageSrc: "../../featureDelivery.svg",
-        title: "Receive The Order",
+        title: "Delivery Your Meal",
         description: "That help us know what delicious meal you will try, but I don’t write anything"
     },
 ]

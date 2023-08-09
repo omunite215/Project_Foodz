@@ -61,25 +61,51 @@
   transition-duration: .5s;
   transform: rotate(180deg);
 }
-
-#hero-circle-background{
-  position: absolute;
-    top: 0;
-    right: 0;
-    z-index: -1;
-    width: 100%; /* Take up half of the hero section */
-    height: 100%; /* Stretch the height to match the hero section */
-    background-color: #DDF3D8;
-    border-radius: 0 100% 100% 0 / 100% 100% 0 0; /* Create a half-oval shape */
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 0 50px; /* Adjust the padding as needed */
-    -webkit-transform: scaleX(-1);
-    transform: scaleX(-1);
-    overflow: hidden;
-  
+@media only screen and (min-width: 768px) {
+  #hero-circle-background{
+    position: absolute;
+      top: 0;
+      right: 0;
+      z-index: -1;
+      width: 100%; /* Take up half of the hero section */
+      height: 100%; /* Stretch the height to match the hero section */
+      background-color: #DDF3D8;
+      border-radius: 0 100% 100% 0 / 100% 100% 0 0; /* Create a half-oval shape */
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 50px; /* Adjust the padding as needed */
+      -webkit-transform: scaleX(-1);
+      transform: scaleX(-1);
+      overflow: hidden;
+    
+  }
 }
+
+@media only screen and (max-width: 768px){
+  #hero-circle-background{
+    position: absolute;
+      top: 0;
+      bottom: 0;
+      z-index: -1;
+      width: 100%; /* Take up half of the hero section */
+      height: 100%; /* Stretch the height to match the hero section */
+      background-color: #DDF3D8;
+      border-radius: 100% 100% 100% 100% / 100% 100% 0 0; /* Create a half-oval shape */
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 100px; /* Adjust the padding as needed */
+      -webkit-transform: scaleX(-1);
+      transform: scaleX(-1);
+      overflow: hidden;
+    
+  }
+}
+
+
+
+
 
 label{
 color: #353945;

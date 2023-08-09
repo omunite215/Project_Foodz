@@ -8,6 +8,7 @@ export default function Home() {
       <SpecialOffers/>
       <StarChef/>
       <HowWeKeep/>
+      <Form/>
     </main>
   )
 }
