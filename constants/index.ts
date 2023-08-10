@@ -64,4 +64,63 @@ export const menuContent = [
         title: "Beef Noodle Soup",
         price: 21.99
     }
-]
+];
+
+export const footerLinks = [
+    {
+      title: "Support",
+      links: [
+        {
+          name: "Help Centre",
+          link: "/contact",
+        },
+        {
+          name: "Safety Information",
+          link: "/blog",
+        },
+        {
+          name: "Cancellation Options",
+          link: "/contact",
+        },
+        {
+          name: "Report Complaint",
+          link: "/contact",
+        },
+      ],
+    },
+    {
+      title: "Community",
+      links: [
+        {
+          name: "Customer Review",
+          link: "/blog",
+        },
+        {
+          name: "Newsletter",
+          link: "/blog",
+        },
+      ],
+    },
+    {
+      title: "About",
+      links: [
+        {
+          name: "Our Chef",
+          link: "/contact",
+        },
+        {
+          name: "Careers",
+          link: "/contact",
+        },
+        {
+            name: "Blog",
+            link: "/blog",
+          },
+          {
+            name: "Contact",
+            link: "/contact",
+          },
+      ],
+    },
+  ];
+  

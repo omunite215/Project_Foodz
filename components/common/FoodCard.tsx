@@ -5,7 +5,7 @@ import { OrderNowButton } from ".";
 
 const FoodCard = ({ imageSrc, title, price, show, content }: FoodCardProps) => {
   return (
-    <div className="flex flex-col rounded-[0.9375rem] bg-white shadow-[0px_10px_27px_0px_rgba(53,53,53,0.05)] md:w-[28rem] sm:w-[17.8125rem] w-[19.375rem]">
+    <div className="flex flex-col rounded-[0.9375rem] bg-white shadow-[0px_10px_27px_0px_rgba(53,53,53,0.05)] md:w-[24rem] w-[17.8125rem]">
       <div className="flex justify-center items-center pt-6 px-7">
         <Image
           src={imageSrc}

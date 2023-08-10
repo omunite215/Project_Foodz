@@ -2,9 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Alice&family=Poppins:wght@400;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Alice&family=Poppins:wght@400;600&display=swap");
 
-*{
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -25,98 +25,105 @@
   align-items: flex-start;
   justify-content: center;
   gap: 10px;
-  transition-duration: .5s;
+  transition-duration: 0.5s;
 }
 
 .bars {
   width: 100%;
   height: 4px;
-  background-color: #777E90;
+  background-color: #777e90;
   border-radius: 4px;
 }
 
 #checkbox:checked + .toggle .bars {
   position: absolute;
-  transition-duration: .5s;
+  transition-duration: 0.5s;
 }
 
 #checkbox:checked + .toggle #bar2 {
   transform: scaleX(0);
-  transition-duration: .1s;
+  transition-duration: 0.1s;
 }
 
 #checkbox:checked + .toggle #bar1 {
   width: 100%;
   transform: rotate(45deg);
-  transition-duration: .5s;
+  transition-duration: 0.5s;
 }
 
 #checkbox:checked + .toggle #bar3 {
   width: 100%;
   transform: rotate(-45deg);
-  transition-duration: .5s;
+  transition-duration: 0.5s;
 }
 
 #checkbox:checked + .toggle {
-  transition-duration: .5s;
+  transition-duration: 0.5s;
   transform: rotate(180deg);
 }
 @media only screen and (min-width: 768px) {
-  #hero-circle-background{
+  #hero-circle-background {
     position: absolute;
-      top: 0;
-      right: 0;
-      z-index: -1;
-      width: 100%; /* Take up half of the hero section */
-      height: 100%; /* Stretch the height to match the hero section */
-      background-color: #DDF3D8;
-      border-radius: 0 100% 100% 0 / 100% 100% 0 0; /* Create a half-oval shape */
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      padding: 0 50px; /* Adjust the padding as needed */
-      -webkit-transform: scaleX(-1);
-      transform: scaleX(-1);
-      overflow: hidden;
-    
+    top: 0;
+    right: 0;
+    z-index: -1;
+    width: 100%; /* Take up half of the hero section */
+    height: 100%; /* Stretch the height to match the hero section */
+    background-color: #ddf3d8;
+    border-radius: 0 100% 100% 0 / 100% 100% 0 0; /* Create a half-oval shape */
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 50px; /* Adjust the padding as needed */
+    -webkit-transform: scaleX(-1);
+    transform: scaleX(-1);
+    overflow: hidden;
   }
 }
 
-@media only screen and (max-width: 768px){
-  #hero-circle-background{
+@media only screen and (max-width: 768px) {
+  #hero-circle-background {
     position: absolute;
-      top: 0;
-      bottom: 0;
-      z-index: -1;
-      width: 100%; /* Take up half of the hero section */
-      height: 100%; /* Stretch the height to match the hero section */
-      background-color: #DDF3D8;
-      border-radius: 100% 100% 100% 100% / 100% 100% 0 0; /* Create a half-oval shape */
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      padding: 0 100px; /* Adjust the padding as needed */
-      -webkit-transform: scaleX(-1);
-      transform: scaleX(-1);
-      overflow: hidden;
-    
+    top: 0;
+    bottom: 0;
+    z-index: -1;
+    width: 100%; /* Take up half of the hero section */
+    height: 100%; /* Stretch the height to match the hero section */
+    background-color: #ddf3d8;
+    border-radius: 100% 100% 100% 100% / 100% 100% 0 0; /* Create a half-oval shape */
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 100px; /* Adjust the padding as needed */
+    -webkit-transform: scaleX(-1);
+    transform: scaleX(-1);
+    overflow: hidden;
   }
 }
 
-
-
-
-
-label{
-color: #353945;
-font-family: 'Poppins', sans-serif;
-font-size: 1rem;
-font-style: normal;
-font-weight: 400;
-line-height: normal;
+label {
+  color: #353945;
+  font-family: "Poppins", sans-serif;
+  font-size: 1rem;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
 }
 
-select,input{
-border-radius: 0.75rem;
-border: 1px solid var(--neutral-4, #777E90);
+select,
+input {
+  display: flex;
+  padding: 0.625rem 1.25rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex: 1 0 0;
+  align-self: stretch;
+  border-radius: 0.75rem;
+  border: 1px solid var(--neutral-4, #777e90);
+}
+
+
+
+option{
+  margin: 15px 10px;
 }

@@ -6,7 +6,7 @@ import { menuContent } from "@/constants";
 
 const Form = () => {
   return (
-    <div className=" flex flex-col gap-[6.5rem] flex-1 w-full justify-center items-start sm:px-16 px-6">
+    <div className=" flex flex-col gap-[6.5rem] flex-1 w-full justify-center md:items-start items-center py-14 sm:px-16 px-6">
       <div className=" w-full flex flex-col justify-center items-center gap-3 text-center">
         <h1 className=" font-alice text-5xl text-textBlack font-normal leading-normal capitalize">
           Get the best Taste <span className=" text-primaryGreen">Now!</span>
@@ -26,7 +26,7 @@ const Form = () => {
               Fill out the form and let us know your taste.
             </h3>
           </div>
-          <form action="" className=" flex flex-col gap-4">
+          <form action="" className=" flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <div className="flex w-full justify-between items-start">
                 <label htmlFor="meal">Select your Meal</label>
@@ -34,7 +34,16 @@ const Form = () => {
                   View menu
                 </Link>
               </div>
-              <select name="meal" id="" placeholder="What&#8217;s your Taste?">
+              <select name="meal" id="">
+                <option
+                  value="What&#8217;s your Taste?"
+                  disabled
+                  selected
+                  hidden
+                  className=" disabled:text-textNeutralBlack"
+                >
+                  What&#8217;s your Taste?
+                </option>
                 {menuContent.map((item) => (
                   <option value={item.title} key={item.title}>
                     {item.title}&nbsp;price: ${item.price}
@@ -42,21 +51,26 @@ const Form = () => {
                 ))}
               </select>
               <p className=" font-poppins text-sm text-primaryGreen">
-                Add 1 Taste+
+                Add 1 Taste +
               </p>
             </div>
-            <div className="flex justify-between items-start">
-              <div>
+            <div className="flex justify-between items-start gap-3">
+              <div className="flex flex-col gap-2">
                 <label htmlFor="name">Order Name</label>
                 <input type="text" name="name" id="" placeholder="Your name" />
               </div>
-              <div>
+              <div className="flex flex-col gap-2">
                 <label htmlFor="phone">Phone Number</label>
-                <input type="tel" name="phone" id="" placeholder="Your name" />
+                <input
+                  type="tel"
+                  name="phone"
+                  id=""
+                  placeholder="(+84) 123 465 798"
+                />
               </div>
             </div>
 
-            <div className="w-full flex flex-col">
+            <div className="w-full flex flex-col gap-2">
               <label htmlFor="address">Your Address</label>
               <input
                 type="text"
@@ -67,16 +81,25 @@ const Form = () => {
             </div>
             <div className="flex flex-col gap-2">
               <label htmlFor="payment">Payment Method</label>
-              <select name="payment" id="" placeholder="I'll pay cash">
-                <option value="cash">cash</option>
+              <select name="payment" id="">
+                <option value="I&#8217;ll Pay Cash" disabled selected hidden>
+                  I&#8217;ll Pay Cash
+                </option>
+                <option value="cash">Cash</option>
                 <option value="card">Credit/Debit Card</option>
                 <option value="netbanking">Net Banking</option>
               </select>
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-2">
               <label htmlFor="note">Note for us</label>
-              <textarea name="note" id="" cols={30} rows={10} defaultValue="More spicy, more sauce..">
-              </textarea>
+              <textarea
+                name="note"
+                id=""
+                cols={30}
+                rows={5}
+                placeholder="More spicy, more sauce.."
+                className=" placeholder:text-textNeutralBlack resize-none pt-[0.625rem] pl-[1.25rem] rounded-[0.75rem] border-[1px] border-solid border-textNeutralBlack"
+              ></textarea>
             </div>
             <h3 className=" text-textNeutralBlack font-poppins text-base ">
               You will pay{" "}
@@ -84,12 +107,10 @@ const Form = () => {
                 $0.00
               </span>
             </h3>
-            <button type="submit">
-              <OrderNowButton />
-            </button>
+            <OrderNowButton />
           </form>
         </div>
-        <Image src="../../scooter.svg" width={540} height={430} alt="scooter" />
+        <Image src="../../scooter.svg" width={540} height={430} alt="scooter" className=" sm:block hidden" />
       </div>
     </div>
   );

@@ -24,6 +24,7 @@ export default function RootLayout({
           <section className=" bg-bgWhite flex justify-center items-start">
             <section className=" xl:max-w-[71.25rem] w-full z-0">
             {children}
+            <Footer/>
             </section>
           </section>
         </main>
