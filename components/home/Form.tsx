@@ -28,7 +28,7 @@ const Form = () => {
           </div>
           <form action="" className=" flex flex-col gap-5">
             <div className="flex flex-col gap-2">
-              <div className="flex w-full justify-between items-start">
+              <div className="flex sm:w-full w-3/4 justify-between items-start">
                 <label htmlFor="meal">Select your Meal</label>
                 <Link href="/menu" className=" text-primaryGreen">
                   View menu
@@ -54,12 +54,12 @@ const Form = () => {
                 Add 1 Taste +
               </p>
             </div>
-            <div className="flex justify-between items-start gap-3">
-              <div className="flex flex-col gap-2">
+            <div className="flex sm:flex-row flex-col justify-between items-start gap-3">
+              <div className="flex w-full flex-col gap-2">
                 <label htmlFor="name">Order Name</label>
                 <input type="text" name="name" id="" placeholder="Your name" />
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex w-full flex-col gap-2">
                 <label htmlFor="phone">Phone Number</label>
                 <input
                   type="tel"
@@ -101,7 +101,7 @@ const Form = () => {
                 className=" placeholder:text-textNeutralBlack resize-none pt-[0.625rem] pl-[1.25rem] rounded-[0.75rem] border-[1px] border-solid border-textNeutralBlack"
               ></textarea>
             </div>
-            <h3 className=" text-textNeutralBlack font-poppins text-base ">
+            <h3 className=" text-textNeutralBlack font-poppins text-base flex justify-start items-center gap-1 ">
               You will pay{" "}
               <span className=" font-alice text-primaryGreen text-2xl">
                 $0.00
@@ -110,7 +110,13 @@ const Form = () => {
             <OrderNowButton />
           </form>
         </div>
-        <Image src="../../scooter.svg" width={540} height={430} alt="scooter" className=" sm:block hidden" />
+        <Image
+          src="../../scooter.svg"
+          width={540}
+          height={430}
+          alt="scooter"
+          className=" sm:block hidden"
+        />
       </div>
     </div>
   );
