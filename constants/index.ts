@@ -1,4 +1,21 @@
-export const navLinks = ["Home" , "Menu", "Blog", "Contact"];
+export const navLinks = [
+  {
+    title: "Home",
+    linkTitle: "/"
+  },
+  {
+    title: "Menu",
+    linkTitle: "menu"
+  },
+  {
+    title: "Blog",
+    linkTitle: "blog"
+  },
+  {
+    title: "Contact",
+    linkTitle: "contact"
+  },
+]
 
 export const foodCardContent = [
     {

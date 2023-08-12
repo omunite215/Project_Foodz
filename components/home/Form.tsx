@@ -38,7 +38,6 @@ const Form = () => {
                 <option
                   value="What&#8217;s your Taste?"
                   disabled
-                  selected
                   hidden
                   className=" disabled:text-textNeutralBlack"
                 >
@@ -82,7 +81,7 @@ const Form = () => {
             <div className="flex flex-col gap-2">
               <label htmlFor="payment">Payment Method</label>
               <select name="payment" id="">
-                <option value="I&#8217;ll Pay Cash" disabled selected hidden>
+                <option value="I&#8217;ll Pay Cash" disabled hidden>
                   I&#8217;ll Pay Cash
                 </option>
                 <option value="cash">Cash</option>

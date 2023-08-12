@@ -3,7 +3,7 @@ import { Hero, SpecialOffers, StarChef, HowWeKeep, Form } from "@/components/hom
 
 export default function Home() {
   return (
-    <main className="">
+    <main>
       <Hero/>
       <SpecialOffers/>
       <StarChef/>
