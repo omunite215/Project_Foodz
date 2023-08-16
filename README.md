@@ -1,9 +1,10 @@
+# FoodZ - A Food Delivery Landing Page
 ![screenshot](image.png)
-This is my first project using Next.Js
+This is Food Delivery Web Page project using Next.Js
 
-A website which is a product page of a Metaverse displaying its products features, clients , feedbacks and many more.
+A website which is a landing page of a Food Delivery Website displaying its products features, clients , feedbacks and many more.
 
-This Project is hosted in Netlify : [Metaverse](https://omsmetaverse.netlify.app/)
+This Project is hosted in Netlify : [FoodZ](https://foodzbyom.netlify.app)
 
 # Getting Started
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
@@ -24,13 +25,13 @@ Javascript, HTML, CSS, Next.JS, framermotion and Tailwind.
 1. Clone the repository to your local machine
 
 ```bash
-  git clone https://github.com/omunite215/Metaverse.git
+  git clone https://github.com/omunite215/FoodZ.git
 
 ```
 2. Navigate to the project directory
 
 ```bash
-  cd Metaverse
+  cd FoodZ
 ```
 3. Install the necessary dependencies
 ```bash
@@ -47,7 +48,6 @@ The website should now be up and running on http://localhost:3000.
 ## Built With:
 
 - Next.JS - A JavaScript library based on React for building Full stack Web Apps.
-- Framermotion - A production ready animation library
 - Tailwind - A Modern CSS framework
 - HTML - Standard markup language for creating web pages
 - CSS - Style sheet language used for describing the look and formatting of a document written in HTML
@@ -55,7 +55,6 @@ The website should now be up and running on http://localhost:3000.
 ## Features
 
 - Modern UI/UX.
-- Smooth animations.
 - Optimized.
 - Responsive.
 
@@ -66,7 +65,6 @@ The website should now be up and running on http://localhost:3000.
 
 **Server:** Netlify
 
-**Figma:** [Figma File](https://www.figma.com/file/EyzNoOFak1Nb1bBx9ZKI7E/Modern-UI%2FUX-Framer-Motion?node-id=1-4&t=kIcviOUNQqhsJ1c5-0)
 
 
 
