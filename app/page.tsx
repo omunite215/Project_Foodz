@@ -1,14 +1,10 @@
-import { Hero, SpecialOffers, StarChef, HowWeKeep, Form } from "@/components/home";
-
+import { Hero } from '@/components/Home'
+import Image from 'next/image'
 
 export default function Home() {
   return (
-    <main>
+    <section>
       <Hero/>
-      <SpecialOffers/>
-      <StarChef/>
-      <HowWeKeep/>
-      <Form/>
-    </main>
+    </section>
   )
 }

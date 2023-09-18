@@ -1,9 +1,15 @@
 import Image from "next/image";
-import Link from "next/link";
-import { FoodCardProps } from "@/types";
-import { OrderNowButton } from ".";
+import { Button } from "./Button";
 
-const FoodCard = ({ imageSrc, title, price, show, content }: FoodCardProps) => {
+interface SpecialOfferCardProps {
+    imageSrc: string;
+    title: string;
+    price: number;
+    show: boolean;
+    content: string[];
+}
+
+const SpecialOfferCard = ({ imageSrc, title, price, show, content }: SpecialOfferCardProps) => {
   return (
     <div className="flex flex-col rounded-[0.9375rem] bg-white shadow-[0px_10px_27px_0px_rgba(53,53,53,0.05)] md:w-[24rem] w-[17.8125rem]">
       <div className="flex justify-center items-center pt-6 px-7">
@@ -43,11 +49,11 @@ const FoodCard = ({ imageSrc, title, price, show, content }: FoodCardProps) => {
           <h1 className=" font-alice font-normal text-primaryGreen md:text-[2.5rem] text-[2rem] leading-10">
             ${price}
           </h1>
-          <OrderNowButton />
+          <Button />
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default FoodCard;
+export default SpecialOfferCard

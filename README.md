@@ -1,108 +1,34 @@
-# FoodZ - A Food Delivery Landing Page
-![screenshot](image.png)
-This is Food Delivery Web Page project using Next.Js
+This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-A website which is a landing page of a Food Delivery Website displaying its products features, clients , feedbacks and many more.
+## Getting Started
 
-This Project is hosted in Netlify : [FoodZ](https://foodzbyom.netlify.app)
-
-# Getting Started
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
-
-Prerequisites
-Before you start, make sure you have the following software installed on your computer:
-
-Node.js
-npm (Node Package Manager)
-
-
-## 🛠 Skills
-Javascript, HTML, CSS, Next.JS, framermotion and Tailwind.
-
-
-## How to use this Repository?
-
-1. Clone the repository to your local machine
+First, run the development server:
 
 ```bash
-  git clone https://github.com/omunite215/FoodZ.git
-
-```
-2. Navigate to the project directory
-
-```bash
-  cd FoodZ
-```
-3. Install the necessary dependencies
-```bash
-  npm install
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
 ```
 
-4. Start the development server
-```bash
-  npm start
-```
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-The website should now be up and running on http://localhost:3000.
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-## Built With:
+This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
 
-- Next.JS - A JavaScript library based on React for building Full stack Web Apps.
-- Tailwind - A Modern CSS framework
-- HTML - Standard markup language for creating web pages
-- CSS - Style sheet language used for describing the look and formatting of a document written in HTML
+## Learn More
 
-## Features
+To learn more about Next.js, take a look at the following resources:
 
-- Modern UI/UX.
-- Optimized.
-- Responsive.
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
 
-## Tech Stack
+## Deploy on Vercel
 
-**Client:** Next.JS, React, Tailwind, Framermotion
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-**Server:** Netlify
-
-
-
-
-
-## 🚀 About Me
-Front - End Web Development Enthusiast
-Specializations:
-- UI/UX Design.
-- Front-End Web Development
-
-
-## Other Common Github Profile Sections
-
-👯‍♀️ I'm looking to collaborate on Front-End Web Dev Projects on React.JS
-
-
-
-
-## Feedback
-
-If you have any feedback, please reach out to me at omunite21@gmail.com
-
-
-## Authors
-- This project is made using tutorial of [Javascript Mastery](https://www.youtube.com/watch?v=ugCN_gynFYw&t=170s)
-
-- [@Om Patel](https://github.com/omunite215)
-
-
-## Acknowledgements
-
- - [Awesome Readme Templates](https://awesomeopensource.com/project/elangosundar/awesome-README-templates)
- - [Awesome README](https://github.com/matiassingers/awesome-readme)
- - [How to write a Good readme](https://bulldogjob.com/news/449-how-to-write-a-good-readme-for-your-github-project)
- - [React Docs](https://reactjs.org/)
-
-
-
-<p align="center">
-  <img src="https://github.com/omunite215/hoobank/assets/78680563/eed23408-14a8-4d04-82b6-6d982f1dcca7" alt="Om's Logo Image"/>
-</p>
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.

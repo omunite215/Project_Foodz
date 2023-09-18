@@ -3,31 +3,33 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { navLinks } from "@/constants";
-import { Fade } from "react-awesome-reveal";
-import OrderNowButton from "./OrderNowButton";
+import { Button } from "./Button";
 
 const Navbar = () => {
   const [toggle, setToggle] = useState(false);
+  const [active, setActive] = useState("Home");
   return (
-    <Fade direction="down" cascade damping={0.1}>
-    <section className="w-full flex py-6 justify-between items-center">
-      <Image src="../../logo.svg" width={140} height={40} alt="logo" />
-      <Fade direction="down" delay={1e-2}>
-      <ul className=" list-none sm:flex hidden justify-end items-center flex-1 gap-8">
+    <section className="w-full py-6 flexBetween">
+      <Image src="../../Logo/logo.svg" width={140} height={40} alt="logo" priority={true}/>
+      <ul className=" list-none sm:flexEnd hidden gap-8">
         {navLinks.map((item) => (
           <li
             key={item.title}
-            className=" font-poppins font-medium cursor-pointer hover:text-primaryGreen text-base"
+            className={`font-poppins font-medium cursor-pointer hover:text-primaryGreen text-base ${
+              active === item.title
+                ? "text-primaryGreen"
+                : "text-textNeutralBlack"
+            }`}
+            onClick={() => setActive(item.title)}
           >
             <Link href={`/${item.linkTitle}`}>{item.title}</Link>
           </li>
         ))}
         <li>
-          <OrderNowButton />
+          <Button />
         </li>
       </ul>
-      </Fade>
-      <div className="sm:hidden flex flex-1 justify-end items-center z-40">
+      <div className="sm:hidden flexEnd">
         <input
           id="checkbox"
           type="checkbox"
@@ -42,11 +44,16 @@ const Navbar = () => {
             toggle ? "flex" : "hidden"
           } p-6 absolute top-20 right-0 mx-4 my-2 min-w-[8.75rem] rounded-xl`}
         >
-          <ul className=" list-none flex flex-col justify-end items-center flex-1 gap-4 bg-bgGreen rounded-lg py-6 z-40">
+          <ul className=" list-none flexEnd flex-col gap-4 bg-bgGreen rounded-lg py-6">
             {navLinks.map((item) => (
               <li
                 key={item.title}
-                className=" font-poppins font-medium cursor-pointer hover:text-primaryGreen text-base"
+                className={`font-poppins font-medium cursor-pointer hover:text-primaryGreen text-base ${
+                  active === item.title
+                    ? "text-primaryGreen"
+                    : "text-textNeutralBlack"
+                }`}
+                onClick={() => setActive(item.title)}
               >
                 <Link href={`/${item.linkTitle}`}>{item.title}</Link>
               </li>
@@ -55,7 +62,6 @@ const Navbar = () => {
         </div>
       </div>
     </section>
-    </Fade>
   );
 };
 
