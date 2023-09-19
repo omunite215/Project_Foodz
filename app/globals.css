@@ -138,11 +138,15 @@
   .margin-y {
     @apply sm:my-16 my-6;
   }
+  .component-title-text {
+    @apply font-alice text-textBlack xs:text-5xl text-[2rem] xs:tracking-normal tracking-wider font-normal text-center leading-normal capitalize;
+    font-feature-settings: "clig" off, "liga" off;
+  }
   .component-title-highlight-text {
     @apply text-primaryGreen;
   }
   .component-sub-title-text {
-    @apply font-poppins md:text-2xl xs:text-xl text-lg text-textNeutralBlack leading-normal font-normal text-center;
+    @apply font-poppins md:text-2xl xs:text-xl text-lg text-textNeutralBlack leading-normal font-normal text-center max-w-[48.125rem];
   }
   /* Home Page CSS */
   /* Home => Hero-Section starts */
@@ -159,7 +163,7 @@
     @apply font-alice md:text-7xl sm:text-[3.5rem] text-[2rem] sm:text-left text-center text-textBlack font-normal md:tracking-tight sm:tracking-wide tracking-wider leading-normal;
   }
   .hero-subtitle-text {
-    @apply font-poppins font-normal md:text-2xl sm:text-xl text-lg text-textNeutralBlack ml-2 mt-3 md:text-left text-center sm:w-fit w-full;
+    @apply font-poppins font-normal md:text-2xl sm:text-xl text-lg text-textNeutralBlack ml-2 mt-3 md:text-left text-center sm:w-3/4 w-full;
   }
   .hero-button-section{
     @apply flex md:justify-start justify-center items-center gap-6 sm:mt-9 mt-4;
@@ -177,45 +181,57 @@
     @apply font-poppins md:text-xl text-lg font-normal leading-normal;
   }
   /* Home => Hero-section Ends */
-  .component-title-text {
-    @apply font-alice text-textBlack xs:text-5xl text-[2rem] xs:tracking-normal tracking-wider font-normal text-center leading-normal capitalize;
-    font-feature-settings: "clig" off, "liga" off;
-  }
+ 
   /* Home => SpecialOffer-section Starts  */
 
-  .special-offer-card-img {
+  .special-offers-card-img {
     @apply md:w-[17.75rem] w-[12.5rem] md:h-[17.75rem] h-[12.5rem];
   }
-  .special-offer-card-title {
+  .special-offers-card-title {
     @apply font-alice md:text-[2rem] xs:text-2xl text-[1.75rem] font-normal text-textBlack tracking-wider leading-normal;
   }
-  .special-offer-card-rating {
+  .special-offers-card-cooking-time{
+    @apply font-poppins text-primaryGreen text-base leading-normal font-semibold;
+  }
+  .special-offers-card-rating {
     @apply font-poppins text-paraTextColor md:text-base text-[0.0875rem] leading-normal font-normal;
   }
-  .special-offer-card-price {
+  .special-offers-card-price {
     @apply font-alice text-primaryGreen leading-10 font-normal md:text-[2.5rem] text-[2rem] capitalize;
     font-feature-settings: "clig" off, "liga" off;
   }
-  .how-we-keep-card-img {
+  /* Home => SpecialOffer-section Ends */
+  /* Home => StarsChef-section Starts  */
+  .star-chef-link{
+    @apply font-poppins font-medium text-sm text-primaryGreen;
+  }
+  /* Home => StarsChef-section Ends  */
+  /* Home => Delicious-section Starts */
+  .delicious-card-img {
     @apply w-12 h-12;
   }
-  .how-we-keep-card-title {
+  .delicious-card-title-text {
     @apply font-alice text-textBlack md:text-[1.75rem] text-xl font-normal leading-normal md:-tracking-[0.00875rem] tracking-normal;
     font-feature-settings: "clig" off, "liga" off;
   }
-  .how-we-keep-card-sub-title-text {
-    @apply font-poppins text-center text-base leading-normal font-normal text-paraTextColor;
+  .delicious-card-sub-title-text {
+    @apply font-poppins text-center text-base leading-normal font-normal text-paraTextColor max-w-[19.5625rem] min-w-[17.6875rem];
   }
+  /* Home => Delicious-section Starts */
   .form-heading {
     @apply font-poppins xs:text-2xl text-lg text-formBlack leading-normal opacity-80 font-normal capitalize;
   }
   .form-subHeading {
     @apply font-poppins text-paraTextColor text-base;
   }
-  .form-title {
-    @apply font-poppins text-base leading-normal font-normal text-paraTextColor;
+  .form-label-text {
+    @apply font-poppins text-base font-normal text-paraTextColor;
   }
-  .form-input-select {
-    @apply px-1 py-[0.62rem] placeholder:font-poppins placeholder:text-textNeutralBlack placeholder:text-base placeholder:leading-normal placeholder:font-normal placeholder:opacity-80;
+  .form-label-box{
+    @apply flexStart flex-col gap-2;
   }
+  .form-input {
+    @apply w-full px-5 py-[0.62rem] placeholder:font-poppins text-paraTextColor placeholder:text-textNeutralBlack placeholder:opacity-80 border border-textNeutralBlack rounded-xl flex justify-between items-start flex-1;
+  }
+
 }

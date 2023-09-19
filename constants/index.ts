@@ -17,44 +17,55 @@ export const navLinks = [
     },
   ]
   
-  export const foodCardContent = [
+  export const SpecialOffersContent = [
       {
           title: "Gimbap",
-          imageSrc: "../../Gimbap.svg",
+          imageSrc: "../Home/specialoffers/gimbap.svg",
           price: 12.99,
           content: ["Aromatic", "Sweet", "Nutty Flavour"]
       },
       {
           title: "Korea BBQ",
-          imageSrc: "../koreabbq.svg",
+          imageSrc: "../../Home/specialoffers/koreabbq.svg",
           price: 21.99,
           content: ["Aromatic", "Spicy", "Honeyed Sugary"]
       },
       {
           title: "Kimchi",
-          imageSrc: "../kimchi.svg",
+          imageSrc: "../../Home/specialoffers/kimchi.svg",
           price: 6.99,
           content: ["Pocket Friendly", "Spicy", "Tangy Taste"]
       }
   ];
   
-  export const howWeKeepContent = [
+  export const DeliciousContent = [
       {
-          imageSrc: "../../featureOrder.svg",
+          imageSrc: "../../Home/Delicious/delivery.svg",
           title: "Receive The Order",
           description: "That help us know what delicious meal you will try, but I don’t write anything"
       },
       {
-          imageSrc: "../../featureMeal.svg",
+          imageSrc: "../../Home/Delicious/prepare.svg",
           title: "Prepare Your Meal",
           description: "That help us know what delicious meal you will try, but I don’t write anything"
       },
       {
-          imageSrc: "../../featureDelivery.svg",
+          imageSrc: "../../Home/Delicious/recieve.svg",
           title: "Delivery Your Meal",
           description: "That help us know what delicious meal you will try, but I don’t write anything"
       },
   ]
+
+  export const countryCodes = [
+    { name: 'United States', code: '+1' },
+    { name: 'Canada', code: '+1' },
+    { name: 'United Kingdom', code: '+44' },
+    { name: 'Australia', code: '+61' },
+    { name: 'India', code: '+91' },
+    { name: 'Germany', code: '+49' },
+    // Add more countries and their country codes as needed
+  ];
+  
   
   export const menuContent = [
       {

@@ -19,6 +19,10 @@ const config: Config = {
         neutralWhite: "#F4F5F6",
         neutralLineWhite: "#E6E8EC"
       },
+      boxShadow: {
+        'lg': '0px 10px 27px 0px rgba(53,53,53,0.05)',
+        'xl': '5px 9px 16px 0px rgba(0,0,0,0.04)'
+      },
       fontFamily: {
         poppins: ['Poppins', 'sans-serif'],
         alice: ['Alice', 'serif']
