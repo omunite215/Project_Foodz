@@ -7,7 +7,9 @@
 #checkbox {
   display: none;
 }
-
+textarea{
+  resize: none;
+}
 .toggle {
   position: relative;
   width: 40px;
@@ -227,11 +229,11 @@
   .form-label-text {
     @apply font-poppins text-base font-normal text-paraTextColor;
   }
-  .form-label-box{
+  .form-box{
     @apply flexStart flex-col gap-2;
   }
   .form-input {
-    @apply w-full px-5 py-[0.62rem] placeholder:font-poppins text-paraTextColor placeholder:text-textNeutralBlack placeholder:opacity-80 border border-textNeutralBlack rounded-xl flex justify-between items-start flex-1;
+    @apply w-full py-[0.625rem] px-[1.25rem] border border-textNeutralBlack focus:border-textBlack rounded-xl flex flex-1 items-start justify-between text-textBlack placeholder:font-poppins placeholder:text-textNeutralBlack placeholder:text-base placeholder:text-opacity-80;
   }
 
 }

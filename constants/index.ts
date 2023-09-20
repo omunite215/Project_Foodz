@@ -57,12 +57,12 @@ export const navLinks = [
   ]
 
   export const countryCodes = [
-    { name: 'United States', code: '+1' },
-    { name: 'Canada', code: '+1' },
-    { name: 'United Kingdom', code: '+44' },
-    { name: 'Australia', code: '+61' },
-    { name: 'India', code: '+91' },
-    { name: 'Germany', code: '+49' },
+    { name: 'U.S.A', code: '+1' },
+    { name: 'CN', code: '+1' },
+    { name: 'U.K', code: '+44' },
+    { name: 'AUS', code: '+61' },
+    { name: 'IND', code: '+91' },
+    { name: 'GER', code: '+49' },
     // Add more countries and their country codes as needed
   ];
   

@@ -14,7 +14,7 @@ const Now = () => {
           will reach you in 60 minutes.
         </p>
       </div>
-      <div className="flex flex-1 justify-between items-start md:flex-row flex-col w-full">
+      <div className="flex flex-1 justify-between items-center md:flex-row flex-col w-full">
         <Form />
         <Image
           src="../../Home/FormSection/deliveryBoy.svg"
