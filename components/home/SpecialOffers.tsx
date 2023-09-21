@@ -13,7 +13,7 @@ const SpecialOffers = () => {
           will reach you in 60 minutes.
         </p>
       </div>
-      <div className="flex w-full md:flex-row flex-col md:justify-center justify-between items-center sm:pb-20 pb-10 md:gap-[5.25rem] gap-3">
+      <div className="flexBetween w-full md:flex-row flex-col md:justify-center sm:pb-20 pb-10 md:gap-[5.25rem] gap-3">
         {SpecialOffersContent.map((item, index) => (
           <div key={item.title}>
             <SpecialOffersCard

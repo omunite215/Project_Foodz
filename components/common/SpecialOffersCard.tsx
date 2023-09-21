@@ -6,7 +6,7 @@ interface SpecialOfferCardProps {
   title: string;
   price: number;
   show: boolean;
-  content: string[];
+  content?: string[];
 }
 
 const SpecialOffersCard = ({
@@ -69,7 +69,7 @@ const SpecialOffersCard = ({
             show ? "flex" : "hidden"
           } flex-col font-poppins text-base text-paraTextColor list-disc font-normal`}
         >
-          {content.map((item) => (
+          {content?.map((item) => (
             <li key={item} className="ml-8">
               {item}
             </li>

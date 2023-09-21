@@ -138,7 +138,7 @@ textarea{
     @apply sm:mx-16 mx-6;
   }
   .margin-y {
-    @apply sm:my-16 my-6;
+    @apply sm:mt-20 mt-10 md:mb-8 sm:mb-10 mb-11;
   }
   .component-title-text {
     @apply font-alice text-textBlack xs:text-5xl text-[2rem] xs:tracking-normal tracking-wider font-normal text-center leading-normal capitalize;
@@ -234,6 +234,17 @@ textarea{
   }
   .form-input {
     @apply w-full py-[0.625rem] px-[1.25rem] border border-textNeutralBlack focus:border-textBlack rounded-xl flex flex-1 items-start justify-between text-textBlack placeholder:font-poppins placeholder:text-textNeutralBlack placeholder:text-base placeholder:text-opacity-80;
+  }
+
+  /* Menu Page */
+  .category-button{
+    @apply flexCenter min-w-[12.25rem] min-h-[3.875rem] gap-2 rounded-lg cursor-pointer transition-colors hover:bg-primaryGreen hover:text-white duration-[400ms];
+  }
+  .category-button-img{
+    @apply min-w-[2.0625rem] min-h-[2.0625rem] object-contain;
+  }
+  .category-button-text{
+    @apply font-poppins text-xl font-normal text-center;
   }
 
 }
