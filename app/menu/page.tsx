@@ -67,7 +67,7 @@ export default function Menu () {
           <p className="category-button-text">Thai Food</p>
         </button>
       </div>
-      <div className='grid sm:grid-cols-3 grid-cols-1 justify-between items-center sm:my-20 my-[3.75rem] sm:gap-y-20 gap-y-8 sm:px-32'>
+      <div className='grid sm:grid-cols-3 grid-cols-1 justify-center items-center sm:my-20 my-[3.75rem] sm:gap-y-20 gap-y-8 sm:px-32 px-10'>
         { active === "korean" &&
           koreanMenu.map((item) => (
             <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} />
