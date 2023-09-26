@@ -77,7 +77,7 @@ const SpecialOffersCard = ({
         </ul>
         <div className=" flexBetween w-full">
           <h1 className="special-offers-card-price">${price}</h1>
-          <Button />
+          <Button/>
         </div>
       </div>
     </div>

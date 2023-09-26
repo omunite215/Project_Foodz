@@ -3,7 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/common";
 
-interface ProductDetailProps {
+
+interface ProductPageProps {
   title: string;
   imgSrc: string;
   price: number;
@@ -11,13 +12,13 @@ interface ProductDetailProps {
   flavours: string[];
 }
 
-const ProductDetail = ({
+const ProductPage = ({
   title,
   imgSrc,
   price,
   description,
   flavours,
-}: ProductDetailProps) => {
+}: ProductPageProps) => {
   return (
     <section>
       <div className="w-full flexStart flex-col">
@@ -99,10 +100,10 @@ const ProductDetail = ({
             </article>
           </div>
         </div>
-        <Button />
+        <Button/>
       </div>
     </section>
   );
 };
 
-export default ProductDetail;
+export default ProductPage;

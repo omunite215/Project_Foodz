@@ -26,7 +26,7 @@ const Navbar = () => {
           </li>
         ))}
         <li>
-          <Button />
+          <Button/>
         </li>
       </ul>
       <div className="sm:hidden flexEnd">
