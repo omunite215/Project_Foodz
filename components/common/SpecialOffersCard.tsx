@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Image from "next/image";
 import { Button } from ".";
 
@@ -6,6 +7,7 @@ interface SpecialOfferCardProps {
   title: string;
   price: number;
   show: boolean;
+  linkTitle: string;
   content?: string[];
 }
 
@@ -13,6 +15,7 @@ const SpecialOffersCard = ({
   imageSrc,
   title,
   price,
+  linkTitle,
   show,
   content,
 }: SpecialOfferCardProps) => {
@@ -77,7 +80,9 @@ const SpecialOffersCard = ({
         </ul>
         <div className=" flexBetween w-full">
           <h1 className="special-offers-card-price">${price}</h1>
-          <Button/>
+          <a href={linkTitle}>
+            <Button />
+          </a>
         </div>
       </div>
     </div>

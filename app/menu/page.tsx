@@ -70,17 +70,17 @@ export default function Menu () {
       <div className='grid sm:grid-cols-3 grid-cols-1 justify-center items-center sm:my-20 my-[3.75rem] sm:gap-y-20 gap-y-8 sm:px-32 px-10'>
         { active === "korean" &&
           koreanMenu.map((item) => (
-            <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} />
+            <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} linkTitle={`/menu/korean/${item.id}`} />
           ))
         }
         { active === "vietnamese" &&
           VietnameseMenu.map((item) => (
-            <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} />
+            <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} linkTitle={`/menu/vietnamese/${item.id}`}  />
           ))
         }
         { active === "thai" &&
           ThaiMenu.map((item) => (
-            <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} />
+            <SpecialOffersCard title={item.title} imageSrc={item.imgSrc} price={item.price} show={false} key={item.title} linkTitle={`/menu/thai/${item.id}`}  />
           ))
         }
 
