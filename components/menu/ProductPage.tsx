@@ -3,10 +3,10 @@ import Link from "next/link";
 import { Button } from "@/components/common";
 
 interface ProductPageProps {
-  title: string;
-  imgSrc: string;
-  price: number;
-  description: string;
+  title?: string;
+  imgSrc?: string;
+  price?: number;
+  description?: string;
 }
 
 const flavors =  ["Sugar", "Gochujang", "Rice win vinegar", "Strawberry jam", "Soy sauce", "Garlic", "Ginger", "Butter"];
@@ -36,7 +36,7 @@ const ProductPage = ({
       </div>
       <div className="w-full flexCenter pt-4 pb-12 gap-[5.38rem]">
         <Image
-          src={imgSrc}
+          src={imgSrc ? imgSrc : '../../noimage.png'}
           alt="product-image"
           width={0}
           height={0}
