@@ -1,10 +1,8 @@
-import { useRouter } from "next/router"
 import ProductPage from "@/components/menu/ProductPage"
 import { koreanMenu } from "@/constants"
 
-const page = () => {
-  const router  = useRouter();
-  let desiredItem = router.query.productId;
+const page = ({params}: {params: { id: string}}) => {
+  let desiredItem = params.id;
   let specificObject = koreanMenu.find(obj => obj.id === desiredItem);
   return (
     <div>

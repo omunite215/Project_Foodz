@@ -1,11 +1,9 @@
-import { useRouter } from "next/router"
 import ProductPage from "@/components/menu/ProductPage"
-import { VietnameseMenu } from "@/constants"
+import { ThaiMenu } from "@/constants"
 
-const page = () => {
-  const router  = useRouter();
-  let desiredItem = router.query.productId;
-  let specificObject = VietnameseMenu.find(obj => obj.id === desiredItem);
+const page = ({params}: {params: { id: string}}) => {
+  let desiredItem = params.id;
+  let specificObject = ThaiMenu.find(obj => obj.id === desiredItem);
   return (
     <div>
       <ProductPage title={specificObject?.title} imgSrc={specificObject?.imgSrc} price={specificObject?.price} description={specificObject?.description} />
