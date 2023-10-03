@@ -20,19 +20,19 @@ export const navLinks = [
 export const SpecialOffersContent = [
   {
     title: "Gimbap",
-    imageSrc: "../Home/specialoffers/gimbap.svg",
+    imageSrc: "../Home/SpecialOffers/gimbap.svg",
     price: 12.99,
     content: ["Aromatic", "Sweet", "Nutty Flavour"],
   },
   {
     title: "Korea BBQ",
-    imageSrc: "../../Home/specialoffers/koreabbq.svg",
+    imageSrc: "../Home/SpecialOffers/koreabbq.svg",
     price: 21.99,
     content: ["Aromatic", "Spicy", "Honeyed Sugary"],
   },
   {
     title: "Kimchi",
-    imageSrc: "../../Home/specialoffers/kimchi.svg",
+    imageSrc: "../Home/SpecialOffers/kimchi.svg",
     price: 6.99,
     content: ["Pocket Friendly", "Spicy", "Tangy Taste"],
   },
@@ -40,19 +40,19 @@ export const SpecialOffersContent = [
 
 export const DeliciousContent = [
   {
-    imageSrc: "../../Home/Delicious/delivery.svg",
+    imageSrc: "../Home/Delicious/delivery.svg",
     title: "Receive The Order",
     description:
       "That help us know what delicious meal you will try, but I don’t write anything",
   },
   {
-    imageSrc: "../../Home/Delicious/prepare.svg",
+    imageSrc: "../Home/Delicious/prepare.svg",
     title: "Prepare Your Meal",
     description:
       "That help us know what delicious meal you will try, but I don’t write anything",
   },
   {
-    imageSrc: "../../Home/Delicious/recieve.svg",
+    imageSrc: "../Home/Delicious/recieve.svg",
     title: "Delivery Your Meal",
     description:
       "That help us know what delicious meal you will try, but I don’t write anything",
