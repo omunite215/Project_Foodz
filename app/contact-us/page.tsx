@@ -2,7 +2,9 @@ import React from 'react'
 
 const page = () => {
   return (
-    <div>page</div>
+    <div className='padding-x'>
+      <h1 className='hero-heading-text'>Contact Page</h1>
+    </div>
   )
 }
 

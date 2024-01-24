@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <main className=" bg-bgWhite w-full overflow-hidden">
-          <header className="sm:px-[4.5rem] xs:px-12 px-6 flexCenter">
+          <header className="sm:px-[4.5rem] xs:px-12 px-6 flexBetween">
             <nav className="xl:max-w-[1440px] w-full">
               <Navbar />
             </nav>

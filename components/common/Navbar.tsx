@@ -10,7 +10,16 @@ const Navbar = () => {
   const [active, setActive] = useState("Home");
   return (
     <section className="w-full py-6 flexBetween">
-      <Image src="../../Logo/logo.svg" width={140} height={40} alt="logo" priority={true}/>
+      <Link href="/">
+        <Image
+          src="../../Logo/logo.svg"
+          width={140}
+          height={40}
+          alt="logo"
+          priority={true}
+        />
+      </Link>
+
       <ul className=" list-none sm:flexEnd hidden gap-8">
         {navLinks.map((item) => (
           <li
@@ -26,7 +35,7 @@ const Navbar = () => {
           </li>
         ))}
         <li>
-          <Button/>
+          <Button />
         </li>
       </ul>
       <div className="sm:hidden flexEnd">
@@ -42,7 +51,7 @@ const Navbar = () => {
         <div
           className={`${
             toggle ? "flex" : "hidden"
-          } p-6 absolute top-20 right-0 mx-4 my-2 min-w-[8.75rem] rounded-xl`}
+          } p-6 absolute top-20 right-0 mx-4 my-2 min-w-[8.75rem] rounded-xl z-50`}
         >
           <ul className=" list-none flexEnd flex-col gap-4 bg-bgGreen rounded-lg py-6">
             {navLinks.map((item) => (

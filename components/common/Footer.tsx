@@ -7,13 +7,16 @@ const Footer = () => (
     <section className="flexCenter padding-x pt-[3.81rem] pb-[4.88rem] flex-col">
       <div className="flexCenter md:flex-row flex-col mb-8 w-full gap-14">
         <div className="flexCenter flex-col mr-10">
-          <Image
-            src="../../Logo/logo.svg"
-            alt="TX"
-            width={140}
-            height={40}
-            className="object-contain"
-          />
+          <Link href="/">
+            <Image
+              src="../../Logo/logo.svg"
+              alt="TX"
+              width={140}
+              height={40}
+              className="object-contain"
+            />
+          </Link>
+
           <p className="font-poppins text-textNeutralBlack font-normal text-[18px] leading-[30.8px] mt-4 max-w-[21rem] text-center">
             Explore your Taste with speacial food in the special place, that
             will make you happy. I try to write some thing without lorem isum.

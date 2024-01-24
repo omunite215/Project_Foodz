@@ -39,6 +39,7 @@ const Hero = () => {
             width={453}
             height={453}
             alt="udon"
+            priority
             className="rotate-90-cw lg:w-[453px] md:w-[353px] w-[202px] lg:h-[453px] md:h-[353px] h-[200px] md:block relative md:bottom-0 bottom-20 sm:mx-0 mx-3"
           />
           <Image

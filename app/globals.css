@@ -7,8 +7,49 @@
 #checkbox {
   display: none;
 }
-textarea{
+
+textarea {
   resize: none;
+}
+
+.loading-spinner {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 8px solid #d1914b;
+  box-sizing: border-box;
+  --c: no-repeat radial-gradient(farthest-side, #d64123 94%, #0000);
+  --b: no-repeat radial-gradient(farthest-side, #000 94%, #0000);
+  background: var(--c) 11px 15px, var(--b) 6px 15px, var(--c) 35px 23px,
+    var(--b) 29px 15px, var(--c) 11px 46px, var(--b) 11px 34px,
+    var(--c) 36px 0px, var(--b) 50px 31px, var(--c) 47px 43px,
+    var(--b) 31px 48px, #f6d353;
+  background-size: 15px 15px, 6px 6px;
+  animation: l4 3s infinite;
+}
+
+@keyframes l4 {
+  0% {
+    -webkit-mask: conic-gradient(#0000 0, #000 0);
+  }
+  16.67% {
+    -webkit-mask: conic-gradient(#0000 60deg, #000 0);
+  }
+  33.33% {
+    -webkit-mask: conic-gradient(#0000 120deg, #000 0);
+  }
+  50% {
+    -webkit-mask: conic-gradient(#0000 180deg, #000 0);
+  }
+  66.67% {
+    -webkit-mask: conic-gradient(#0000 240deg, #000 0);
+  }
+  83.33% {
+    -webkit-mask: conic-gradient(#0000 300deg, #000 0);
+  }
+  100% {
+    -webkit-mask: conic-gradient(#0000 360deg, #000 0);
+  }
 }
 .toggle {
   position: relative;
@@ -152,13 +193,13 @@ textarea{
   }
   /* Home Page CSS */
   /* Home => Hero-Section starts */
-  .hero-box{
+  .hero-box {
     @apply flex sm:flex-row flex-col overflow-hidden;
   }
-  .hero-text-wrapper{
+  .hero-text-wrapper {
     @apply flex flex-col justify-between items-start flex-1 md:gap-[9.88rem] gap-[5.12rem] xl:px-0 sm:px-16 px-[2.19rem];
   }
-  .hero-internal-text-wrapper{
+  .hero-internal-text-wrapper {
     @apply flex md:items-start items-center flex-col md:gap-0 gap-4;
   }
   .hero-heading-text {
@@ -167,13 +208,13 @@ textarea{
   .hero-subtitle-text {
     @apply font-poppins font-normal md:text-2xl sm:text-xl text-lg text-textNeutralBlack ml-2 mt-3 md:text-left text-center sm:w-3/4 w-full;
   }
-  .hero-button-section{
+  .hero-button-section {
     @apply flex md:justify-start justify-center items-center gap-6 sm:mt-9 mt-4;
   }
-  .hero-text-link{
+  .hero-text-link {
     @apply text-primaryGreen md:block hidden hover:text-green-700;
   }
-  .hero-stats-wrapper{
+  .hero-stats-wrapper {
     @apply md:flex justify-center md:items-start hidden gap-[3.75rem] font-poppins text-textNeutralBlack padding-x py-7 bg-neutralWhite rounded-2xl;
   }
   .hero-card-stat-text {
@@ -183,7 +224,7 @@ textarea{
     @apply font-poppins md:text-xl text-lg font-normal leading-normal;
   }
   /* Home => Hero-section Ends */
- 
+
   /* Home => SpecialOffer-section Starts  */
 
   .special-offers-card-img {
@@ -192,7 +233,7 @@ textarea{
   .special-offers-card-title {
     @apply font-alice md:text-[2rem] xs:text-2xl text-[1.75rem] font-normal text-textBlack tracking-wider leading-normal;
   }
-  .special-offers-card-cooking-time{
+  .special-offers-card-cooking-time {
     @apply font-poppins text-primaryGreen text-base leading-normal font-semibold;
   }
   .special-offers-card-rating {
@@ -204,7 +245,7 @@ textarea{
   }
   /* Home => SpecialOffer-section Ends */
   /* Home => StarsChef-section Starts  */
-  .star-chef-link{
+  .star-chef-link {
     @apply font-poppins font-medium text-sm text-primaryGreen;
   }
   /* Home => StarsChef-section Ends  */
@@ -229,7 +270,7 @@ textarea{
   .form-label-text {
     @apply font-poppins text-base font-normal text-paraTextColor;
   }
-  .form-box{
+  .form-box {
     @apply flexStart flex-col gap-2;
   }
   .form-input {
@@ -237,14 +278,13 @@ textarea{
   }
 
   /* Menu Page */
-  .category-button{
+  .category-button {
     @apply flexCenter min-w-[12.25rem] min-h-[3.875rem] gap-2 rounded-lg cursor-pointer transition-colors hover:bg-primaryGreen hover:text-white duration-[400ms];
   }
-  .category-button-img{
+  .category-button-img {
     @apply min-w-[2.0625rem] min-h-[2.0625rem] object-contain;
   }
-  .category-button-text{
+  .category-button-text {
     @apply font-poppins text-xl font-normal text-center;
   }
-
 }
