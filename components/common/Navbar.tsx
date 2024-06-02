@@ -9,7 +9,7 @@ const Navbar = () => {
   const [toggle, setToggle] = useState(false);
   const [active, setActive] = useState("Home");
   return (
-    <section className="w-full py-6 flexStart">
+    <section className="w-full py-6 flexBetween">
       <Link href="/">
         <Image
           src="../../Logo/logo.svg"
