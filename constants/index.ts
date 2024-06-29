@@ -195,10 +195,10 @@ export const koreanMenu = [
   },
   {
     id: "km06",
-    title: "Beef Noodle Soup",
+    title: "Zhanzie Noodle Soup",
     price: 21.99,
     imgSrc: "../../Menu/Korean/beef.svg",
-    description: "Beef noodle soup is a hearty and flavorful dish popular in many Asian cuisines, including Chinese, Taiwanese, and Vietnamese. It typically consists of tender beef, noodles, and a savory broth made with aromatic spices and herbs like star anise, ginger, and garlic. This comforting and filling soup is a cherished comfort food appreciated for its rich flavors and satisfying warmth."
+    description: "Zhanzie noodle soup is a hearty and flavorful dish popular in many Asian cuisines, including Chinese, Taiwanese, and Vietnamese. It typically consists of tender coconut, noodles, and a savory broth made with aromatic spices and herbs like star anise, ginger, and garlic. This comforting and filling soup is a cherished comfort food appreciated for its rich flavors and satisfying warmth."
   },
 ];
 
