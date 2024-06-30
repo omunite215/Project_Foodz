@@ -5,11 +5,11 @@ const BlogCard = () => {
 	return (
 		<div className="flexStart flex-col font-poppins">
 			<Image
-				src="/blog/blog1.png"
+				src="/Blog/blog1.png"
 				width={636}
 				height={318}
 				className=" object-contain"
-				priority
+				loading="eager"
 				alt="blog-img"
 			/>
 			<p className="text-xs text-textNeutralBlack font-medium mt-5 mb-3">
