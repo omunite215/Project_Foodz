@@ -100,7 +100,7 @@ const Form = () => {
         </div>
         <div className="form-box">
           <label htmlFor="note">Note for us</label>
-          <textarea name="note" className="form-input" cols={10} rows={5} placeholder="More spicy, more sauce, ..."></textarea>
+          <textarea name="note" className="form-input" cols={10} rows={5} placeholder="More spicy, more sauce, ..." />
 
         </div>
         <p className=" font-poppins text-textNeutralBlack text-opacity-80 text-base">You will pay&nbsp;<span className=" font-alice text-primaryGreen text-2xl">$0.00</span></p>
