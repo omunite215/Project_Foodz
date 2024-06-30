@@ -23,7 +23,7 @@ const SpecialOffers = () => {
 							price={item.price}
 							show={index === 1}
 							content={item.content}
-							linkTitle="/checkout"
+							linkTitle="#"
 						/>
 					</div>
 				))}

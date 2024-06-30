@@ -102,7 +102,7 @@ export const footerLinks = [
     links: [
       {
         name: "Help Centre",
-        link: "/contact",
+        link: "/contact-us",
       },
       {
         name: "Safety Information",
@@ -110,11 +110,11 @@ export const footerLinks = [
       },
       {
         name: "Cancellation Options",
-        link: "/contact",
+        link: "/contact-us",
       },
       {
         name: "Report Complaint",
-        link: "/contact",
+        link: "/contact-us",
       },
     ],
   },
@@ -136,11 +136,11 @@ export const footerLinks = [
     links: [
       {
         name: "Our Chef",
-        link: "/contact",
+        link: "/contact-us",
       },
       {
         name: "Careers",
-        link: "/contact",
+        link: "/contact-us",
       },
       {
         name: "Blog",
@@ -148,7 +148,7 @@ export const footerLinks = [
       },
       {
         name: "Contact",
-        link: "/contact",
+        link: "/contact-us",
       },
     ],
   },
