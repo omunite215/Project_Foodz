@@ -51,7 +51,7 @@ const SpecialOffersCard = ({
 						}
 					>
 						<Image
-							src="/icons/fire.svg"
+							src="/Icons/fire.svg"
 							width={28}
 							height={28}
 							alt="fire"
@@ -62,7 +62,7 @@ const SpecialOffersCard = ({
 				</div>
 				<div className="flex justify-start items-center gap-3">
 					<Image
-						src="/icons/stars.svg"
+						src="/Icons/stars.svg"
 						width={100}
 						height={100}
 						alt="stars"
