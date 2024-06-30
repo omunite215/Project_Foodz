@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import {fontFamily} from "tailwindcss/defaultTheme";
 
 const config: Config = {
   content: [
@@ -24,8 +25,8 @@ const config: Config = {
         'xl': '5px 9px 16px 0px rgba(0,0,0,0.04)'
       },
       fontFamily: {
-        poppins: ['Poppins', 'sans-serif'],
-        alice: ['Alice', 'serif']
+        poppins: ['var(--font-poppins)', ...fontFamily.sans],
+        alice: ['var(--font-alice)', ...fontFamily.sans]
       },
       tracking:{
         tight: '-0.0225rem',

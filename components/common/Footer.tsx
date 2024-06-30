@@ -9,8 +9,8 @@ const Footer = () => (
 				<div className="flexCenter flex-col mr-10">
 					<Link href="/">
 						<Image
-							src="../../Logo/logo.svg"
-							alt="TX"
+							src="/Logo/logo.svg"
+							alt="Food-Z"
 							width={140}
 							height={40}
 							className="object-contain"

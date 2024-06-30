@@ -1,16 +1,12 @@
 import Image from "next/image";
 
-interface DeliciousCardProps {
+type Props = {
 	imageSrc: string;
 	title: string;
 	description: string;
-}
+};
 
-const DeliciousCard = ({
-	imageSrc,
-	title,
-	description,
-}: DeliciousCardProps) => {
+const DeliciousCard = ({ imageSrc, title, description }: Props) => {
 	return (
 		<div
 			className={`flexCenter flex-col gap-6 max-w-[24.063rem] min-w-[18.5rem] px-6 py-7 rounded-xl ${
@@ -23,6 +19,7 @@ const DeliciousCard = ({
 					width={48}
 					height={48}
 					alt={title}
+					loading="eager"
 					className="delicious-card-img"
 				/>
 			</div>

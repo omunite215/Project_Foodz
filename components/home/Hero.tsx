@@ -35,7 +35,7 @@ const Hero = () => {
 			<div className="relative md:ml-4 ml-0 md:mt-0 mt-32">
 				<div className="flex md:gap-0 gap-5 sm:items-start items-center sm:justify-normal justify-center md:ml-0 ml-[25%]">
 					<Image
-						src="../../Home/Hero/udon.svg"
+						src="/Home/Hero/udon.svg"
 						width={453}
 						height={453}
 						alt="udon"
@@ -43,7 +43,7 @@ const Hero = () => {
 						className="rotate-90-cw lg:w-[453px] md:w-[353px] w-[202px] lg:h-[453px] md:h-[353px] h-[200px] md:block relative md:bottom-0 bottom-20 sm:mx-0 mx-3"
 					/>
 					<Image
-						src="../../Home/Hero/sugar.svg"
+						src="/Home/Hero/sugar.svg"
 						width={108}
 						height={105}
 						alt="sugar"
@@ -51,7 +51,7 @@ const Hero = () => {
 					/>
 				</div>
 				<Image
-					src="../../Home/Hero/chopstick.svg"
+					src="/Home/Hero/chopstick.svg"
 					width={391}
 					height={422}
 					className=" object-contain absolute sm:-bottom-[87px] -bottom-8 -z-0 overflow-clip sm:w-[391px] w-[166px] sm:h-[422px] h-[178px]"

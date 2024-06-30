@@ -14,7 +14,7 @@ const page = () => {
         <Searchbar />
       </section>
       <div className='flex items-start justify-start padding-x flex-col'>
-        <h1 className="component-sub-title-text mb-5">Recent Blog Post</h1>
+        <h1 className="component-sub-title-text mb-5">Recent Blog Posts</h1>
         <BlogCard/>
       </div>
     </>

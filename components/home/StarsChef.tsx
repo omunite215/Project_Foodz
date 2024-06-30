@@ -9,7 +9,7 @@ const StarsChef = () => {
     </h2>
     <div className="flexBetween md:flex-row flex-col w-full">
       <Image
-        src="../../Home/StarChef/starChef.svg"
+        src="/Home/StarChef/starChef.svg"
         width={451}
         height={396}
         alt="StarChef"
@@ -25,7 +25,7 @@ const StarsChef = () => {
             <h4>View All Restaurant &#8594;</h4>
           </Link>
         </div>
-        <ul className="flex flex-col md:text-lg text-base font-poppins gap-5 list-none text-paraTextColor">
+        <ul className="space-y-5 md:text-lg text-base font-poppins list-none text-paraTextColor">
           <li>
             Considered by many to be one of the best chefs in the world&#44;
             he&#39;s built a business empire over the years with 36
