@@ -6,7 +6,7 @@ const SpecialOffers = () => {
 		<section className="w-full flexCenter padding-x flex-col sm:gap-20 gap-[1.94rem]">
 			<div className="w-full flexCenter flex-col text-center sm:gap-3 gap-2">
 				<h1 className="component-title-text">
-					Today <span className="component-title-highlight-text">Special</span>{" "}
+					Today <span className="component-title-highlight-text">Special</span>&nbsp;
 					Offers
 				</h1>
 				<p className="component-sub-title-text">
