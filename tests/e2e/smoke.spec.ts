@@ -60,3 +60,20 @@ test('unknown dishes return 404', async ({ page }) => {
   const response = await page.goto('/menu/korean/does-not-exist');
   expect(response?.status()).toBe(404);
 });
+
+test('API and metadata responses get a policy that allows nothing', async ({ request }) => {
+  for (const path of ['/api/health', '/robots.txt', '/sitemap.xml']) {
+    const headers = (await request.get(path)).headers();
+    expect(headers['content-security-policy'], path).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    expect(headers['permissions-policy'], path).toContain('geolocation=()');
+  }
+});
+
+test('robots.txt keeps private areas out of search engines', async ({ request }) => {
+  const body = await (await request.get('/robots.txt')).text();
+  for (const path of ['/admin', '/partner', '/account', '/checkout', '/api/']) {
+    expect(body).toContain(`Disallow: ${path}`);
+  }
+});

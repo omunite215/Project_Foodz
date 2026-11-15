@@ -15,6 +15,13 @@ const securityHeaders = [
     : []),
 ];
 
+// Non-page responses never render HTML, so they get a policy that allows nothing.
+// Pages receive their nonce-based policy from proxy.ts.
+const lockedDownHeaders = [
+  { key: 'Content-Security-Policy', value: "default-src 'none'; frame-ancestors 'none'" },
+  { key: 'Permissions-Policy', value: 'geolocation=(), camera=(), microphone=()' },
+];
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
   poweredByHeader: false,
@@ -25,7 +32,12 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ['pino', 'pino-pretty'],
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      ...['/:prefix(api|_next/static|_next/image)/:path*', '/robots.txt', '/sitemap.xml'].map(
+        (source) => ({ source, headers: lockedDownHeaders }),
+      ),
+    ];
   },
   async redirects() {
     return [{ source: '/contact-us', destination: '/contact', permanent: true }];
