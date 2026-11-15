@@ -22,10 +22,14 @@ RUN npx prisma generate && npx next build
 # ---------------------------------------------------------------- migrations (one-shot job)
 FROM base AS migrate
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/server/db/generated ./server/db/generated
 COPY package.json prisma.config.ts ./
 COPY prisma ./prisma
+# The seed builds the menu from the original constants.
+COPY constants ./constants
 USER node
-CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+# Apply migrations, then seed (idempotent: existing rows are left alone).
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node node_modules/tsx/dist/cli.mjs prisma/seed.ts"]
 
 # ---------------------------------------------------------------- runtime
 FROM base AS runner

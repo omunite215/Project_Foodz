@@ -1,6 +1,6 @@
 # Local stack.
 #   docker compose up -d                      infrastructure only (run the app with `npm run dev`)
-#   docker compose --profile app up --build   infrastructure + migrations + production build of the app
+#   docker compose --profile app up --build   infrastructure + migrations + seed + production build of the app
 #   docker compose --profile payments up -d   also forward Stripe webhooks to the app
 #
 # Every port is bound to 127.0.0.1 so nothing is reachable from the local network.
@@ -93,7 +93,7 @@ services:
   jobs:
     <<: *hardening
     image: inngest/inngest:v1.52.0
-    command: inngest dev -u ${INNGEST_APP_URL:-http://host.docker.internal:3000/api/inngest} --no-discovery
+    command: inngest dev -u ${INNGEST_APP_URL:-http://host.docker.internal:3456/api/inngest} --no-discovery
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
@@ -107,6 +107,11 @@ services:
       target: migrate
     environment:
       DATABASE_MIGRATOR_URL: postgresql://foodz_migrator:${DB_MIGRATOR_PASSWORD}@db:5432/foodz
+      # The seed runs after the migrations; it reports a clear error if these are missing.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@foodz.example}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -133,7 +138,7 @@ services:
       - /tmp
       - /app/.next/cache
     ports:
-      - 127.0.0.1:${APP_HOST_PORT:-3000}:3000
+      - 127.0.0.1:${APP_HOST_PORT:-3456}:3000
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -144,7 +149,7 @@ services:
   stripe:
     profiles: [payments]
     image: stripe/stripe-cli:v1.55.10
-    command: listen --forward-to ${STRIPE_FORWARD_TO:-http://host.docker.internal:3000/api/webhooks/stripe} --api-key ${STRIPE_SECRET_KEY:-sk_test_missing}
+    command: listen --forward-to ${STRIPE_FORWARD_TO:-http://host.docker.internal:3456/api/webhooks/stripe} --api-key ${STRIPE_SECRET_KEY:-sk_test_missing}
     extra_hosts:
       - host.docker.internal:host-gateway
     networks: [internal]

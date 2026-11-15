@@ -69,6 +69,12 @@
       {
         "allow": ["**/*.css", "server-only", "dotenv/config"]
       }
+    ],
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": ["_count", "_sum", "_avg", "_min", "_max"]
+      }
     ]
   },
   "overrides": [
