@@ -11,7 +11,10 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "design:extract": "node scripts/figma/extract.mjs"
+    "design:extract": "node scripts/figma/extract.mjs",
+    "setup:env": "node scripts/setup-env.mjs",
+    "stack:up": "docker compose up -d",
+    "stack:down": "docker compose down"
   },
   "dependencies": {
     "next": "16.4.6",
