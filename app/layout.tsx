@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Alice, Poppins } from 'next/font/google';
+import { connection } from 'next/server';
 import { Footer, Navbar } from '@/components/common';
 
 const poppins = Poppins({
@@ -23,7 +24,10 @@ export const metadata: Metadata = {
   description: 'Korean, Thai and Vietnamese food, delivered hot.',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Every page renders per request so its scripts can carry the CSP nonce.
+  await connection();
+
   return (
     <html lang="en" className={`${poppins.variable} ${alice.variable}`}>
       <body className="bg-neutral-8 font-poppins text-neutral-2 antialiased">

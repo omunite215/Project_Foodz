@@ -1,0 +1,84 @@
+/**
+ * Content Security Policy. Scripts must carry the per-request nonce; `strict-dynamic` lets those
+ * scripts load their own dependencies. Every third-party origin the app talks to is listed here,
+ * and nowhere else.
+ */
+
+export interface CspOptions {
+  nonce: string;
+  isDev: boolean;
+  /** Only HTTPS deployments ask browsers to upgrade insecure requests. */
+  isHttps?: boolean;
+  /** Public bucket URL for uploaded images (R2 in production, RustFS locally). */
+  imageOrigins?: string[];
+  /** Realtime (Pusher/Soketi) socket origins. */
+  socketOrigins?: string[];
+  reportUri?: string;
+}
+
+const STRIPE = ['https://js.stripe.com', 'https://hooks.stripe.com'];
+const TURNSTILE = 'https://challenges.cloudflare.com';
+const MAP_TILES = 'https://tiles.openfreemap.org';
+const SENTRY = 'https://*.ingest.sentry.io';
+
+export function buildCsp(options: CspOptions): string {
+  const { nonce, isDev, imageOrigins = [], socketOrigins = [] } = options;
+
+  const directives: Record<string, string[]> = {
+    'default-src': ["'self'"],
+    'script-src': [
+      "'self'",
+      `'nonce-${nonce}'`,
+      "'strict-dynamic'",
+      ...(isDev ? ["'unsafe-eval'"] : []),
+    ],
+    // Components set inline style attributes (positioning, animation); scripts stay nonce-only.
+    'style-src': ["'self'", "'unsafe-inline'"],
+    'img-src': ["'self'", 'data:', 'blob:', MAP_TILES, ...imageOrigins],
+    'font-src': ["'self'"],
+    'connect-src': [
+      "'self'",
+      'https://api.stripe.com',
+      MAP_TILES,
+      TURNSTILE,
+      SENTRY,
+      ...socketOrigins,
+      ...(isDev ? ['ws:'] : []),
+    ],
+    'frame-src': [...STRIPE, TURNSTILE],
+    'worker-src': ["'self'", 'blob:'],
+    'manifest-src': ["'self'"],
+    'media-src': ["'self'"],
+    'object-src': ["'none'"],
+    'base-uri': ["'self'"],
+    'form-action': ["'self'"],
+    'frame-ancestors': ["'none'"],
+  };
+
+  const parts = Object.entries(directives).map(([name, values]) => `${name} ${values.join(' ')}`);
+  if (!isDev && options.isHttps) parts.push('upgrade-insecure-requests');
+  if (options.reportUri) parts.push(`report-uri ${options.reportUri}`);
+  return parts.join('; ');
+}
+
+/** Geolocation is only offered where it is needed: the partner app and checkout. */
+export function permissionsPolicy(pathname: string): string {
+  const needsLocation = pathname.startsWith('/partner') || pathname.startsWith('/checkout');
+  return [
+    `geolocation=(${needsLocation ? 'self' : ''})`,
+    'camera=()',
+    'microphone=()',
+    'usb=()',
+    'interest-cohort=()',
+    'payment=(self "https://js.stripe.com")',
+  ].join(', ');
+}
+
+export function originOf(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
