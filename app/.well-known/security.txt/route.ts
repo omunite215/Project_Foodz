@@ -2,7 +2,9 @@ import { connection } from 'next/server';
 
 // How to report a vulnerability (RFC 9116). Reports go through GitHub's private vulnerability
 // reporting, so they reach the maintainer without being public.
-const CONTACT = 'https://github.com/omunite215/Project_Foodz/security/advisories/new';
+const REPOSITORY = 'https://github.com/omunite215/Project_Foodz';
+const CONTACT = `${REPOSITORY}/security/advisories/new`;
+const POLICY = `${REPOSITORY}/security/policy`;
 const VALID_FOR_DAYS = 180;
 
 export async function GET() {
@@ -14,6 +16,7 @@ export async function GET() {
   const body = [
     `Contact: ${CONTACT}`,
     `Expires: ${expires.toISOString().replace(/\.\d{3}Z$/, 'Z')}`,
+    `Policy: ${POLICY}`,
     'Preferred-Languages: en',
     ...(site ? [`Canonical: ${site}/.well-known/security.txt`] : []),
     '',

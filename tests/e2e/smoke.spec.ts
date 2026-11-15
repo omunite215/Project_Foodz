@@ -85,6 +85,7 @@ test('security.txt says how to report a vulnerability and has not expired', asyn
 
   const body = await response.text();
   expect(body).toMatch(/^Contact: https:\/\/github\.com\/.+\/security\/advisories\/new$/m);
+  expect(body).toMatch(/^Policy: https:\/\/github\.com\/.+\/security\/policy$/m);
   expect(body).toMatch(/^Canonical: https?:\/\/.+\/\.well-known\/security\.txt$/m);
 
   // RFC 9116: Expires is required and should be less than a year away.
