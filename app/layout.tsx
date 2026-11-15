@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Alice, Poppins } from 'next/font/google';
 import { connection } from 'next/server';
 import { Footer, Navbar } from '@/components/common';
+import { cn } from '@/lib/utils';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -29,7 +30,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   await connection();
 
   return (
-    <html lang="en" className={`${poppins.variable} ${alice.variable}`}>
+    <html lang="en" className={cn(poppins.variable, alice.variable)}>
       <body className="bg-neutral-8 font-poppins text-neutral-2 antialiased">
         <main className="w-full overflow-hidden">
           <header className="flexStart px-6 xs:px-12 sm:px-[4.5rem]">
