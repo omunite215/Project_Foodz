@@ -2,7 +2,7 @@ import 'server-only';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
 import { rateLimited } from '@/server/errors';
 import { logger } from '@/server/logger';
-import { redis } from '@/server/redis';
+import { redis, waitUntilReady } from '@/server/redis';
 
 /** Requests allowed per window, keyed by caller (user id or IP). */
 const POLICIES = {
@@ -51,6 +51,7 @@ const FAIL_CLOSED: ReadonlySet<RateLimitPolicy> = new Set([
 /** Consumes one point; throws a 429 AppError when the caller is over the limit. */
 export async function enforceRateLimit(policy: RateLimitPolicy, key: string) {
   try {
+    await waitUntilReady();
     await limiterFor(policy).consume(key);
   } catch (error) {
     if (error instanceof RateLimiterRes) throw rateLimited();
