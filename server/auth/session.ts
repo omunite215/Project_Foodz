@@ -29,18 +29,19 @@ export async function requireUser(): Promise<UserActor> {
 }
 
 /**
- * Checks a permission for a signed-in user. Staff accounts must also have two-factor enabled,
- * and demo accounts may only read.
+ * Checks a permission for a signed-in user. Demo accounts may only read. Other staff accounts
+ * must have two-factor enabled; the shared demo admin is exempt because it can never write.
  */
 export async function requirePermission(permission: Permission, options: { write?: boolean } = {}) {
   const actor = await requireUser();
   if (!can(actor.role, permission)) throw forbidden();
 
-  if (isStaff(actor.role)) {
+  if (actor.isDemo) {
+    if (options.write !== false) throw forbidden();
+  } else if (isStaff(actor.role)) {
     const session = await getSession();
     if (!session?.user.twoFactorEnabled) throw forbidden();
   }
-  if (actor.isDemo && options.write !== false) throw forbidden();
   return actor;
 }
 
