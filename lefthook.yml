@@ -18,5 +18,7 @@ pre-commit:
 
 pre-push:
   jobs:
+    - name: clean-tree
+      run: node scripts/verify.mjs clean-tree
     - name: verify
       run: npm run verify

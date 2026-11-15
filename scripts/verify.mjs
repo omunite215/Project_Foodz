@@ -12,6 +12,8 @@ const npx = (...args) => ['npx', ...args];
 const docker = (...args) => ['docker', 'run', '--rm', '-v', `${root}:/src`, '-w', '/src', ...args];
 
 const STEPS = {
+  // What gets verified must be exactly what gets pushed.
+  'clean-tree': ['node', 'scripts/clean-tree.mjs'],
   lint: npx('oxlint', '--type-aware', '--deny-warnings'),
   format: npx('prettier', '--check', '.'),
   typecheck: npx('tsc', '--noEmit'),
