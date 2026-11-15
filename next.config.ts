@@ -34,9 +34,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },
-      ...['/:prefix(api|_next/static|_next/image)/:path*', '/robots.txt', '/sitemap.xml'].map(
-        (source) => ({ source, headers: lockedDownHeaders }),
-      ),
+      ...[
+        '/:prefix(api|_next/static|_next/image)/:path*',
+        '/robots.txt',
+        '/sitemap.xml',
+        '/.well-known/:path*',
+      ].map((source) => ({ source, headers: lockedDownHeaders })),
     ];
   },
   async redirects() {

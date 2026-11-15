@@ -62,7 +62,7 @@ test('unknown dishes return 404', async ({ page }) => {
 });
 
 test('API and metadata responses get a policy that allows nothing', async ({ request }) => {
-  for (const path of ['/api/health', '/robots.txt', '/sitemap.xml']) {
+  for (const path of ['/api/health', '/robots.txt', '/sitemap.xml', '/.well-known/security.txt']) {
     const headers = (await request.get(path)).headers();
     expect(headers['content-security-policy'], path).toBe(
       "default-src 'none'; frame-ancestors 'none'",
@@ -76,4 +76,19 @@ test('robots.txt keeps private areas out of search engines', async ({ request })
   for (const path of ['/admin', '/partner', '/account', '/checkout', '/api/']) {
     expect(body).toContain(`Disallow: ${path}`);
   }
+});
+
+test('security.txt says how to report a vulnerability and has not expired', async ({ request }) => {
+  const response = await request.get('/.well-known/security.txt');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('text/plain');
+
+  const body = await response.text();
+  expect(body).toMatch(/^Contact: https:\/\/github\.com\/.+\/security\/advisories\/new$/m);
+  expect(body).toMatch(/^Canonical: https?:\/\/.+\/\.well-known\/security\.txt$/m);
+
+  // RFC 9116: Expires is required and should be less than a year away.
+  const expires = Date.parse(/^Expires: (.+)$/m.exec(body)?.[1] ?? '');
+  expect(expires).toBeGreaterThan(Date.now());
+  expect(expires - Date.now()).toBeLessThan(365 * 24 * 60 * 60 * 1000);
 });
