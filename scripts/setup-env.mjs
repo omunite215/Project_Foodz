@@ -2,12 +2,7 @@
 // Creates .env from .env.example with random local development secrets.
 // Refuses to overwrite an existing .env.
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-
-if (existsSync('.env')) {
-  console.error('.env already exists; delete it first to regenerate.');
-  process.exit(1);
-}
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const secret = (bytes = 24) => randomBytes(bytes).toString('base64url');
 const values = {
@@ -43,5 +38,14 @@ const output = readFileSync('.env.example', 'utf8')
   })
   .join('\n');
 
-writeFileSync('.env', output, { mode: 0o600 });
+try {
+  // 'wx' creates the file only if it does not exist, in one atomic step.
+  writeFileSync('.env', output, { mode: 0o600, flag: 'wx' });
+} catch (error) {
+  if (error.code === 'EEXIST') {
+    console.error('.env already exists; delete it first to regenerate.');
+    process.exit(1);
+  }
+  throw error;
+}
 console.warn('Wrote .env with fresh local secrets.');
