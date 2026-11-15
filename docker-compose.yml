@@ -106,7 +106,7 @@ services:
       context: .
       target: migrate
     environment:
-      DATABASE_URL: postgresql://foodz_migrator:${DB_MIGRATOR_PASSWORD}@db:5432/foodz
+      DATABASE_MIGRATOR_URL: postgresql://foodz_migrator:${DB_MIGRATOR_PASSWORD}@db:5432/foodz
     depends_on:
       db:
         condition: service_healthy
@@ -133,7 +133,7 @@ services:
       - /tmp
       - /app/.next/cache
     ports:
-      - 127.0.0.1:3000:3000
+      - 127.0.0.1:${APP_HOST_PORT:-3000}:3000
     depends_on:
       migrate:
         condition: service_completed_successfully

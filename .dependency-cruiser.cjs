@@ -22,6 +22,13 @@ module.exports = {
       to: { path: '^server/modules/[^/]+/repo', pathNot: '^server/modules/$1/repo' },
     },
     {
+      name: 'repos-only-inside-modules',
+      comment: 'Outside the modules, code calls services; repositories stay internal.',
+      severity: 'error',
+      from: { path: '^server/', pathNot: ['^server/modules/', '\\.test\\.ts$'] },
+      to: { path: '^server/modules/[^/]+/repo' },
+    },
+    {
       name: 'database-client-only-in-repos',
       severity: 'error',
       from: {
