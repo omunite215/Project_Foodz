@@ -26,10 +26,7 @@
     "no-console": [
       "warn",
       {
-        "allow": [
-          "warn",
-          "error"
-        ]
+        "allow": ["warn", "error"]
       }
     ],
     "no-restricted-imports": [
@@ -51,10 +48,7 @@
         ],
         "patterns": [
           {
-            "group": [
-              "@/server/db/generated",
-              "@/server/db/generated/*"
-            ],
+            "group": ["@/server/db/generated", "@/server/db/generated/*"],
             "message": "Database access belongs in server/modules/*/repo.ts."
           }
         ]
@@ -73,11 +67,7 @@
     "import/no-unassigned-import": [
       "warn",
       {
-        "allow": [
-          "**/*.css",
-          "server-only",
-          "dotenv/config"
-        ]
+        "allow": ["**/*.css", "server-only", "dotenv/config"]
       }
     ]
   },
@@ -92,15 +82,12 @@
         "tests/**"
       ],
       "rules": {
-        "no-restricted-imports": "off"
+        "no-restricted-imports": "off",
+        "no-await-in-loop": "off"
       }
     },
     {
-      "files": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "tests/**"
-      ],
+      "files": ["**/*.test.ts", "**/*.test.tsx", "tests/**"],
       "rules": {
         "typescript/no-explicit-any": "off"
       }

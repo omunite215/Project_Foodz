@@ -1,19 +1,8 @@
 import 'server-only';
 import { bind, prisma } from './client';
-import type { Role } from '@/server/auth/roles';
+import type { Actor, DbContext } from './types';
 
-export type Actor =
-  | { kind: 'user'; userId: string; role: Role; isDemo: boolean }
-  | { kind: 'anonymous' }
-  | { kind: 'system'; reason: string };
-
-/**
- * An opaque handle that services pass to repositories. It carries an open transaction whose
- * Postgres session has `app.user_id` and `app.role` set, so row-level security applies.
- */
-export interface DbContext {
-  readonly actor: Actor;
-}
+export type { Actor, DbContext } from './types';
 
 function settingsFor(actor: Actor) {
   switch (actor.kind) {

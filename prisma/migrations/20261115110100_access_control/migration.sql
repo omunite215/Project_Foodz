@@ -67,6 +67,17 @@ CREATE OR REPLACE FUNCTION app_partner_id() RETURNS uuid
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
   AS $$ SELECT id FROM delivery_partners WHERE user_id = app_user_id() $$;
 
+CREATE OR REPLACE FUNCTION app_partner_delivers(target uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+  AS $$
+    SELECT EXISTS (
+      SELECT 1 FROM deliveries d
+      WHERE d.order_id = target
+        AND d.partner_id IS NOT NULL
+        AND d.partner_id = app_partner_id()
+    )
+  $$;
+
 CREATE OR REPLACE FUNCTION app_can_see_order(target uuid) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
   AS $$
@@ -86,21 +97,25 @@ CREATE OR REPLACE FUNCTION app_can_see_delivery(target uuid) RETURNS boolean
     SELECT EXISTS (SELECT 1 FROM deliveries d WHERE d.id = target AND app_can_see_order(d.order_id))
   $$;
 
-REVOKE ALL ON FUNCTION app_partner_id(), app_can_see_order(uuid), app_can_see_delivery(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_partner_id(), app_partner_delivers(uuid), app_can_see_order(uuid),
+  app_can_see_delivery(uuid) FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foodz_app') THEN
     GRANT EXECUTE ON FUNCTION app_user_id(), app_role(), app_is_support(), app_is_operations(),
-      app_partner_id(), app_can_see_order(uuid), app_can_see_delivery(uuid) TO foodz_app;
+      app_partner_id(), app_partner_delivers(uuid), app_can_see_order(uuid),
+      app_can_see_delivery(uuid) TO foodz_app;
   END IF;
 END
 $$;
 
 -- ---------------------------------------------------------------- row-level security
 
+-- Ownership is checked on the row itself (not through a subquery) so that INSERT ... RETURNING
+-- can see the row it just created.
 ALTER TABLE "orders" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY orders_access ON "orders"
-  USING (app_can_see_order(id))
+  USING (user_id = app_user_id() OR app_is_operations() OR app_partner_delivers(id))
   WITH CHECK (user_id = app_user_id() OR app_is_operations());
 
 ALTER TABLE "order_items" ENABLE ROW LEVEL SECURITY;

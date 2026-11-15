@@ -1,0 +1,11 @@
+node_modules/
+.next/
+server/db/generated/
+design/
+docs/
+coverage/
+playwright-report/
+test-results/
+public/
+prisma/migrations/
+package-lock.json

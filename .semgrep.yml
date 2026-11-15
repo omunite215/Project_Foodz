@@ -1,0 +1,63 @@
+rules:
+  - id: no-unsafe-raw-sql
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Raw SQL must use the tagged template form ($queryRaw`...` / $executeRaw`...`) so values are
+      parameterized. The *Unsafe variants allow SQL injection.
+    pattern-either:
+      - pattern: $DB.$queryRawUnsafe(...)
+      - pattern: $DB.$executeRawUnsafe(...)
+    paths:
+      exclude: ['tests/**', '**/*.test.ts']
+
+  - id: no-dangerous-html
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      dangerouslySetInnerHTML is only allowed in the sanitized rich-text renderer.
+    pattern: <$EL dangerouslySetInnerHTML={...} />
+    paths:
+      exclude: ['components/content/rich-text.tsx']
+
+  - id: no-eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: eval and new Function execute arbitrary code.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: no-public-secrets
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      NEXT_PUBLIC_ variables are shipped to every browser. Never put secrets in them.
+    pattern-regex: NEXT_PUBLIC_[A-Z0-9_]*(SECRET|PRIVATE|PASSWORD|TOKEN)[A-Z0-9_]*
+
+  - id: no-insecure-random-for-secrets
+    languages: [typescript]
+    severity: ERROR
+    message: Math.random() is predictable; use crypto.randomInt / crypto.randomUUID for tokens and codes.
+    pattern: Math.random()
+    paths:
+      include: ['server/**']
+
+  - id: no-tls-bypass
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Disabling certificate verification exposes traffic to interception.
+    pattern-either:
+      - pattern: '{..., rejectUnauthorized: false, ...}'
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
+  - id: no-open-redirect
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Redirect targets taken from the request must be checked with safeRedirectPath() first.
+    patterns:
+      - pattern-either:
+          - pattern: redirect($REQ.nextUrl.searchParams.get(...))
+          - pattern: redirect($PARAMS.get(...))
+          - pattern: NextResponse.redirect(new URL($REQ.nextUrl.searchParams.get(...), ...))
