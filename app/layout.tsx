@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Alice, Poppins } from 'next/font/google';
 import { connection } from 'next/server';
 import { Footer, Navbar } from '@/components/common';
+import { Providers } from '@/components/providers';
 import { cn } from '@/lib/utils';
 
 const poppins = Poppins({
@@ -32,19 +33,21 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en" className={cn(poppins.variable, alice.variable)}>
       <body className="bg-neutral-8 font-poppins text-neutral-2 antialiased">
-        <main className="w-full overflow-hidden">
-          <header className="flexStart px-6 xs:px-12 sm:px-[4.5rem]">
-            <nav className="w-full xl:max-w-[1440px]">
-              <Navbar />
-            </nav>
-          </header>
-          <section className="flexStart">
-            <section className="z-0 w-full xl:max-w-[1440px]">
-              {children}
-              <Footer />
+        <Providers>
+          <main className="w-full overflow-hidden">
+            <header className="flexStart px-6 xs:px-12 sm:px-[4.5rem]">
+              <nav className="w-full xl:max-w-[1440px]">
+                <Navbar />
+              </nav>
+            </header>
+            <section className="flexStart">
+              <section className="z-0 w-full xl:max-w-[1440px]">
+                {children}
+                <Footer />
+              </section>
             </section>
-          </section>
-        </main>
+          </main>
+        </Providers>
       </body>
     </html>
   );

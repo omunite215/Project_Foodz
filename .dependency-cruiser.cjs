@@ -50,6 +50,22 @@ module.exports = {
       to: { path: '^server/' },
     },
     {
+      name: 'tanstack-db-behind-data-hooks',
+      comment:
+        'TanStack DB is pre-1.0. UI code uses the hooks in lib/data, so the engine behind them ' +
+        'can be swapped for TanStack Query without touching components.',
+      severity: 'error',
+      from: { pathNot: ['^lib/data/', '^components/providers/index\\.tsx$'] },
+      to: { path: 'node_modules/@tanstack/(react-db|db|query-db-collection)/' },
+    },
+    {
+      name: 'devtools-only-in-dev-panel',
+      comment: 'Devtools are dev dependencies, loaded only by the development-only panel.',
+      severity: 'error',
+      from: { pathNot: '^components/providers/devtools\\.tsx$' },
+      to: { path: 'node_modules/@tanstack/[^/]*devtools[^/]*/' },
+    },
+    {
       name: 'no-test-code-in-app',
       severity: 'error',
       from: { pathNot: '(^tests/|\\.test\\.tsx?$|\\.spec\\.tsx?$|^vitest|^playwright)' },
@@ -58,7 +74,8 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(^\\.next/|^node_modules/|^server/db/generated/|^docs/|^design/)' },
+    // node_modules stays in the graph as leaves (see doNotFollow) so rules can name packages.
+    exclude: { path: '(^\\.next/|^server/db/generated/|^docs/|^design/)' },
     tsConfig: { fileName: 'tsconfig.json' },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {

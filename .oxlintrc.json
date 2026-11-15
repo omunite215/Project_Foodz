@@ -89,7 +89,8 @@
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "tests/**"],
       "rules": {
-        "typescript/no-explicit-any": "off"
+        "typescript/no-explicit-any": "off",
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ],
