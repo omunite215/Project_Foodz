@@ -1,0 +1,861 @@
+// Foodz data model.
+// Money is stored in integer cents. Times are UTC. Geography columns are managed with raw SQL
+// (PostGIS), so they appear here as Unsupported and are written through the data access layer.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../server/db/generated"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis, pg_trgm]
+}
+
+// ------------------------------------------------------------------ auth (Better Auth)
+
+model User {
+  id                   String    @id @db.Uuid
+  name                 String
+  email                String    @unique
+  emailVerified        Boolean   @default(false) @map("email_verified")
+  image                String?
+  phone                String?
+  role                 String    @default("customer")
+  banned               Boolean?  @default(false)
+  banReason            String?   @map("ban_reason")
+  banExpires           DateTime? @map("ban_expires")
+  twoFactorEnabled     Boolean?  @default(false) @map("two_factor_enabled")
+  termsAcceptedVersion Int?      @map("terms_accepted_version")
+  stripeCustomerId     String?   @unique @map("stripe_customer_id")
+  isDemo               Boolean   @default(false) @map("is_demo")
+  deletedAt            DateTime? @map("deleted_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  sessions        Session[]
+  accounts        Account[]
+  twoFactors      TwoFactor[]
+  addresses       Address[]
+  partner         DeliveryPartner?
+  favorites       Favorite[]
+  orders          Order[]
+  redemptions     CouponRedemption[]
+  reviews         Review[]
+  partnerRatings  PartnerRating[]
+  reportsFiled    PartnerReport[]    @relation("ReportReporter")
+  reportsResolved PartnerReport[]    @relation("ReportResolver")
+  refundRequests  RefundRequest[]    @relation("RefundRequester")
+  refundsDecided  RefundRequest[]    @relation("RefundDecider")
+  notifications   Notification[]
+  blogPosts       BlogPost[]
+  uploads         Upload[]
+  contentVersions ContentVersion[]
+
+  @@map("users")
+}
+
+model Session {
+  id             String   @id @db.Uuid
+  expiresAt      DateTime @map("expires_at")
+  token          String   @unique
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  impersonatedBy String?  @map("impersonated_by")
+  userId         String   @map("user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id") @db.Uuid
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+model TwoFactor {
+  id                      String    @id @db.Uuid
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  userId                  String    @map("user_id") @db.Uuid
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until")
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([secret])
+  @@map("two_factors")
+}
+
+// ------------------------------------------------------------------ customers
+
+model Address {
+  id        String                                 @id @default(uuid(7)) @db.Uuid
+  userId    String                                 @map("user_id") @db.Uuid
+  label     String
+  line1     String
+  line2     String?
+  city      String
+  notes     String?
+  lat       Float
+  lng       Float
+  location  Unsupported("geography(Point, 4326)")?
+  isDefault Boolean                                @default(false) @map("is_default")
+  createdAt DateTime                               @default(now()) @map("created_at")
+  user      User                                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([location], type: Gist)
+  @@map("addresses")
+}
+
+model Favorite {
+  userId     String   @map("user_id") @db.Uuid
+  menuItemId String   @map("menu_item_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@id([userId, menuItemId])
+  @@map("favorites")
+}
+
+// ------------------------------------------------------------------ menu
+
+enum Cuisine {
+  KOREAN
+  THAI
+  VIETNAMESE
+}
+
+model MenuItem {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  slug        String   @unique
+  title       String
+  description String
+  priceCents  Int      @map("price_cents")
+  cuisine     Cuisine
+  images      String[]
+  flavors     String[]
+  prepMinutes Int      @default(20) @map("prep_minutes")
+  isSpecial   Boolean  @default(false) @map("is_special")
+  isAvailable Boolean  @default(true) @map("is_available")
+  ratingAvg   Float    @default(0) @map("rating_avg")
+  ratingCount Int      @default(0) @map("rating_count")
+  soldCount   Int      @default(0) @map("sold_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  favorites  Favorite[]
+  orderItems OrderItem[]
+  reviews    Review[]
+  campaigns  Campaign[]
+
+  @@index([cuisine, isAvailable])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("menu_items")
+}
+
+// ------------------------------------------------------------------ orders
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PLACED
+  ACCEPTED
+  PREPARING
+  READY
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+model Order {
+  id                    String                                 @id @default(uuid(7)) @db.Uuid
+  number                String                                 @unique
+  userId                String                                 @map("user_id") @db.Uuid
+  status                OrderStatus                            @default(PENDING_PAYMENT)
+  paymentMethod         PaymentMethod                          @map("payment_method")
+  paymentStatus         PaymentStatus                          @default(UNPAID) @map("payment_status")
+  contactName           String                                 @map("contact_name")
+  contactPhone          String                                 @map("contact_phone")
+  addressText           String                                 @map("address_text")
+  addressLat            Float                                  @map("address_lat")
+  addressLng            Float                                  @map("address_lng")
+  location              Unsupported("geography(Point, 4326)")?
+  distanceKm            Float                                  @map("distance_km")
+  note                  String?
+  subtotalCents         Int                                    @map("subtotal_cents")
+  discountCents         Int                                    @default(0) @map("discount_cents")
+  deliveryFeeCents      Int                                    @map("delivery_fee_cents")
+  taxCents              Int                                    @map("tax_cents")
+  tipCents              Int                                    @default(0) @map("tip_cents")
+  totalCents            Int                                    @map("total_cents")
+  refundedCents         Int                                    @default(0) @map("refunded_cents")
+  couponId              String?                                @map("coupon_id") @db.Uuid
+  stripePaymentIntentId String?                                @unique @map("stripe_payment_intent_id")
+  expiresAt             DateTime?                              @map("expires_at")
+  placedAt              DateTime?                              @map("placed_at")
+  deliveredAt           DateTime?                              @map("delivered_at")
+  cancelledAt           DateTime?                              @map("cancelled_at")
+  cancelReason          String?                                @map("cancel_reason")
+  version               Int                                    @default(0)
+  createdAt             DateTime                               @default(now()) @map("created_at")
+  updatedAt             DateTime                               @updatedAt @map("updated_at")
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  coupon         Coupon?           @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+  events         OrderEvent[]
+  delivery       Delivery?
+  redemption     CouponRedemption?
+  reviews        Review[]
+  partnerRating  PartnerRating?
+  reports        PartnerReport[]
+  refundRequests RefundRequest[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@index([location], type: Gist)
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  menuItemId     String   @map("menu_item_id") @db.Uuid
+  title          String
+  unitPriceCents Int      @map("unit_price_cents")
+  quantity       Int
+  flavors        String[]
+  note           String?
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem       MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderEvent {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  orderId    String       @map("order_id") @db.Uuid
+  type       String
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus? @map("to_status")
+  actorId    String?      @map("actor_id") @db.Uuid
+  data       Json?
+  createdAt  DateTime     @default(now()) @map("created_at")
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
+}
+
+// ------------------------------------------------------------------ delivery partners
+
+enum PartnerStatus {
+  APPLIED
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum VehicleType {
+  BICYCLE
+  SCOOTER
+  MOTORBIKE
+  CAR
+}
+
+model DeliveryPartner {
+  id               String                                 @id @default(uuid(7)) @db.Uuid
+  userId           String                                 @unique @map("user_id") @db.Uuid
+  status           PartnerStatus                          @default(APPLIED)
+  vehicleType      VehicleType                            @map("vehicle_type")
+  vehiclePlate     String?                                @map("vehicle_plate")
+  licenseNumberEnc String?                                @map("license_number_enc")
+  idDocumentKey    String?                                @map("id_document_key")
+  photoKey         String?                                @map("photo_key")
+  isOnline         Boolean                                @default(false) @map("is_online")
+  lastLocation     Unsupported("geography(Point, 4326)")? @map("last_location")
+  lastSeenAt       DateTime?                              @map("last_seen_at")
+  ratingAvg        Float                                  @default(0) @map("rating_avg")
+  ratingCount      Int                                    @default(0) @map("rating_count")
+  reviewNote       String?                                @map("review_note")
+  approvedAt       DateTime?                              @map("approved_at")
+  createdAt        DateTime                               @default(now()) @map("created_at")
+  updatedAt        DateTime                               @updatedAt @map("updated_at")
+  user             User                                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries       Delivery[]
+  offers           DeliveryOffer[]
+  earnings         PartnerEarning[]
+  ratings          PartnerRating[]
+  reports          PartnerReport[]
+
+  @@index([status, isOnline])
+  @@index([lastLocation], type: Gist)
+  @@map("delivery_partners")
+}
+
+enum DeliveryStatus {
+  SEARCHING
+  ASSIGNED
+  AT_RESTAURANT
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+}
+
+model Delivery {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  orderId          String             @unique @map("order_id") @db.Uuid
+  partnerId        String?            @map("partner_id") @db.Uuid
+  status           DeliveryStatus     @default(SEARCHING)
+  otpHash          String             @map("otp_hash")
+  otpAttempts      Int                @default(0) @map("otp_attempts")
+  routeGeoJson     Json?              @map("route_geojson")
+  routeDistanceM   Int?               @map("route_distance_m")
+  routeDurationSec Int?               @map("route_duration_sec")
+  etaAt            DateTime?          @map("eta_at")
+  partnerFeeCents  Int                @default(0) @map("partner_fee_cents")
+  assignedAt       DateTime?          @map("assigned_at")
+  pickedUpAt       DateTime?          @map("picked_up_at")
+  deliveredAt      DateTime?          @map("delivered_at")
+  version          Int                @default(0)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  order            Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  partner          DeliveryPartner?   @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  offers           DeliveryOffer[]
+  locations        DeliveryLocation[]
+  earnings         PartnerEarning[]
+
+  @@index([partnerId, status])
+  @@map("deliveries")
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model DeliveryOffer {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  deliveryId  String          @map("delivery_id") @db.Uuid
+  partnerId   String          @map("partner_id") @db.Uuid
+  status      OfferStatus     @default(PENDING)
+  expiresAt   DateTime        @map("expires_at")
+  respondedAt DateTime?       @map("responded_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  delivery    Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryId, partnerId])
+  @@index([partnerId, status])
+  @@map("delivery_offers")
+}
+
+model DeliveryLocation {
+  id         BigInt                                 @id @default(autoincrement())
+  deliveryId String                                 @map("delivery_id") @db.Uuid
+  lat        Float
+  lng        Float
+  location   Unsupported("geography(Point, 4326)")?
+  heading    Float?
+  speedKmh   Float?                                 @map("speed_kmh")
+  recordedAt DateTime                               @default(now()) @map("recorded_at")
+  delivery   Delivery                               @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, recordedAt])
+  @@index([location], type: Gist)
+  @@map("delivery_locations")
+}
+
+enum EarningType {
+  DELIVERY_FEE
+  TIP
+  BONUS
+  ADJUSTMENT
+}
+
+model PartnerEarning {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  partnerId   String          @map("partner_id") @db.Uuid
+  deliveryId  String?         @map("delivery_id") @db.Uuid
+  type        EarningType
+  amountCents Int             @map("amount_cents")
+  note        String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  delivery    Delivery?       @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+
+  @@index([partnerId, createdAt])
+  @@map("partner_earnings")
+}
+
+// ------------------------------------------------------------------ promotions
+
+enum CouponType {
+  PERCENT
+  FIXED
+  FREE_DELIVERY
+}
+
+model Coupon {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  code             String     @unique
+  description      String?
+  type             CouponType
+  value            Int
+  minSubtotalCents Int        @default(0) @map("min_subtotal_cents")
+  maxDiscountCents Int?       @map("max_discount_cents")
+  usageLimit       Int?       @map("usage_limit")
+  perUserLimit     Int?       @map("per_user_limit")
+  usedCount        Int        @default(0) @map("used_count")
+  cuisines         Cuisine[]
+  ownerUserId      String?    @map("owner_user_id") @db.Uuid
+  isStoreCredit    Boolean    @default(false) @map("is_store_credit")
+  isActive         Boolean    @default(true) @map("is_active")
+  startsAt         DateTime   @default(now()) @map("starts_at")
+  endsAt           DateTime?  @map("ends_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  orders         Order[]
+  redemptions    CouponRedemption[]
+  campaigns      Campaign[]
+  refundRequests RefundRequest[]
+
+  @@map("coupons")
+}
+
+enum RedemptionStatus {
+  RESERVED
+  REDEEMED
+  RELEASED
+}
+
+model CouponRedemption {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  couponId      String           @map("coupon_id") @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  orderId       String           @unique @map("order_id") @db.Uuid
+  status        RedemptionStatus @default(RESERVED)
+  discountCents Int              @map("discount_cents")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  coupon        Coupon           @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order         Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId, status])
+  @@map("coupon_redemptions")
+}
+
+enum CampaignPlacement {
+  HOME_CAROUSEL
+  ANNOUNCEMENT_BAR
+  MENU_TOP
+}
+
+model Campaign {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  title     String
+  subtitle  String?
+  imageKey  String?           @map("image_key")
+  ctaLabel  String?           @map("cta_label")
+  ctaHref   String?           @map("cta_href")
+  placement CampaignPlacement
+  couponId  String?           @map("coupon_id") @db.Uuid
+  priority  Int               @default(0)
+  isActive  Boolean           @default(true) @map("is_active")
+  startsAt  DateTime          @map("starts_at")
+  endsAt    DateTime          @map("ends_at")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  coupon    Coupon?           @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  menuItems MenuItem[]
+
+  @@index([placement, isActive, startsAt, endsAt])
+  @@map("campaigns")
+}
+
+// ------------------------------------------------------------------ feedback
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+model Review {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  menuItemId String       @map("menu_item_id") @db.Uuid
+  orderId    String       @map("order_id") @db.Uuid
+  rating     Int
+  comment    String?
+  status     ReviewStatus @default(PUBLISHED)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItem   MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, menuItemId, orderId])
+  @@index([menuItemId, status, createdAt])
+  @@map("reviews")
+}
+
+model PartnerRating {
+  id        String          @id @default(uuid(7)) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  partnerId String          @map("partner_id") @db.Uuid
+  orderId   String          @unique @map("order_id") @db.Uuid
+  rating    Int
+  comment   String?
+  createdAt DateTime        @default(now()) @map("created_at")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partner   DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("partner_ratings")
+}
+
+// ------------------------------------------------------------------ trust & safety
+
+enum ReportCategory {
+  LATE
+  RUDE
+  UNSAFE_DRIVING
+  FOOD_TAMPERED
+  EXTRA_MONEY
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  UPHELD
+  DISMISSED
+}
+
+enum ReportAction {
+  NONE
+  WARNED
+  SUSPENDED
+  BANNED
+}
+
+model PartnerReport {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  reporterId   String          @map("reporter_id") @db.Uuid
+  partnerId    String          @map("partner_id") @db.Uuid
+  orderId      String          @map("order_id") @db.Uuid
+  category     ReportCategory
+  description  String
+  photoKeys    String[]        @map("photo_keys")
+  status       ReportStatus    @default(OPEN)
+  adminAction  ReportAction    @default(NONE) @map("admin_action")
+  adminNote    String?         @map("admin_note")
+  resolvedById String?         @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime?       @map("resolved_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  reporter     User            @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedBy   User?           @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  partner      DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterId, orderId])
+  @@index([partnerId, status, createdAt])
+  @@map("partner_reports")
+}
+
+enum RefundReason {
+  MISSING_ITEM
+  WRONG_ITEM
+  DAMAGED
+  COLD
+  LATE
+  OTHER
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PARTIAL
+  REJECTED
+  REFUNDED
+}
+
+model RefundRequest {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  orderId        String       @map("order_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  reason         RefundReason
+  description    String?
+  items          Json?
+  requestedCents Int          @map("requested_cents")
+  approvedCents  Int?         @map("approved_cents")
+  photoKeys      String[]     @map("photo_keys")
+  status         RefundStatus @default(REQUESTED)
+  decisionReason String?      @map("decision_reason")
+  decidedById    String?      @map("decided_by_id") @db.Uuid
+  decidedAt      DateTime?    @map("decided_at")
+  stripeRefundId String?      @unique @map("stripe_refund_id")
+  creditCouponId String?      @map("credit_coupon_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user           User         @relation("RefundRequester", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy      User?        @relation("RefundDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  creditCoupon   Coupon?      @relation(fields: [creditCouponId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([orderId])
+  @@map("refund_requests")
+}
+
+// ------------------------------------------------------------------ content
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model BlogPost {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  slug        String     @unique
+  title       String
+  excerpt     String
+  coverKey    String?    @map("cover_key")
+  content     Json
+  contentHtml String     @map("content_html")
+  status      PostStatus @default(DRAFT)
+  featured    Boolean    @default(false)
+  views       Int        @default(0)
+  authorId    String     @map("author_id") @db.Uuid
+  publishedAt DateTime?  @map("published_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  tags        Tag[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@map("blog_posts")
+}
+
+model Tag {
+  id    String     @id @default(uuid(7)) @db.Uuid
+  name  String     @unique
+  slug  String     @unique
+  color Int        @default(1)
+  posts BlogPost[]
+
+  @@map("tags")
+}
+
+enum MessageStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
+model ContactMessage {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  name      String
+  email     String
+  phone     String?
+  message   String
+  status    MessageStatus @default(NEW)
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("contact_messages")
+}
+
+model SiteSettings {
+  id                   Int                                    @id @default(1)
+  storeName            String                                 @map("store_name")
+  addressText          String                                 @map("address_text")
+  lat                  Float
+  lng                  Float
+  location             Unsupported("geography(Point, 4326)")?
+  timezone             String                                 @default("America/New_York")
+  deliveryRadiusKm     Float                                  @default(8) @map("delivery_radius_km")
+  baseDeliveryFeeCents Int                                    @default(199) @map("base_delivery_fee_cents")
+  perKmFeeCents        Int                                    @default(50) @map("per_km_fee_cents")
+  taxRateBps           Int                                    @default(625) @map("tax_rate_bps")
+  openingHours         Json                                   @map("opening_hours")
+  contactEmail         String                                 @map("contact_email")
+  contactPhone         String                                 @map("contact_phone")
+  socialLinks          Json                                   @default("{}") @map("social_links")
+  footerLinks          Json                                   @default("[]") @map("footer_links")
+  seo                  Json                                   @default("{}")
+  updatedById          String?                                @map("updated_by_id") @db.Uuid
+  updatedAt            DateTime                               @updatedAt @map("updated_at")
+
+  @@index([location], type: Gist)
+  @@map("site_settings")
+}
+
+model ContentPage {
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  slug               String           @unique
+  title              String
+  draft              Json?
+  publishedVersionId String?          @unique @map("published_version_id") @db.Uuid
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  publishedVersion   ContentVersion?  @relation("PublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+  versions           ContentVersion[] @relation("PageVersions")
+
+  @@map("content_pages")
+}
+
+model ContentVersion {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  pageId        String       @map("page_id") @db.Uuid
+  version       Int
+  title         String
+  content       Json
+  contentHtml   String       @map("content_html")
+  publishedById String       @map("published_by_id") @db.Uuid
+  publishedAt   DateTime     @default(now()) @map("published_at")
+  page          ContentPage  @relation("PageVersions", fields: [pageId], references: [id], onDelete: Cascade)
+  publishedBy   User         @relation(fields: [publishedById], references: [id], onDelete: Restrict)
+  publishedOf   ContentPage? @relation("PublishedVersion")
+
+  @@unique([pageId, version])
+  @@map("content_versions")
+}
+
+// ------------------------------------------------------------------ files
+
+enum UploadBucket {
+  PUBLIC
+  PRIVATE
+}
+
+enum UploadStatus {
+  PENDING
+  READY
+  REJECTED
+}
+
+enum UploadPurpose {
+  MENU_IMAGE
+  BANNER
+  BLOG_COVER
+  AVATAR
+  PARTNER_PHOTO
+  PARTNER_DOCUMENT
+  REFUND_PHOTO
+  REPORT_PHOTO
+}
+
+model Upload {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  key            String        @unique
+  bucket         UploadBucket
+  purpose        UploadPurpose
+  status         UploadStatus  @default(PENDING)
+  ownerId        String        @map("owner_id") @db.Uuid
+  contentType    String        @map("content_type")
+  sizeBytes      Int           @map("size_bytes")
+  width          Int?
+  height         Int?
+  rejectedReason String?       @map("rejected_reason")
+  processedAt    DateTime?     @map("processed_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  owner          User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, purpose])
+  @@map("uploads")
+}
+
+// ------------------------------------------------------------------ system
+
+model Notification {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @map("actor_id") @db.Uuid
+  actorRole  String?  @map("actor_role")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  data       Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model WebhookEvent {
+  id          String   @id
+  provider    String
+  type        String
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("webhook_events")
+}

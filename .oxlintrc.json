@@ -26,7 +26,10 @@
     "no-console": [
       "warn",
       {
-        "allow": ["warn", "error"]
+        "allow": [
+          "warn",
+          "error"
+        ]
       }
     ],
     "no-restricted-imports": [
@@ -40,7 +43,10 @@
         ],
         "patterns": [
           {
-            "group": ["@/server/db", "@/server/db/*"],
+            "group": [
+              "@/server/db",
+              "@/server/db/*"
+            ],
             "message": "Database access belongs in server/modules/*/repo.ts."
           }
         ]
@@ -59,19 +65,30 @@
     "import/no-unassigned-import": [
       "warn",
       {
-        "allow": ["**/*.css"]
+        "allow": [
+          "**/*.css"
+        ]
       }
     ]
   },
   "overrides": [
     {
-      "files": ["server/modules/*/repo.ts", "server/db/**", "prisma/**", "server/**/*.test.ts"],
+      "files": [
+        "server/modules/*/repo.ts",
+        "server/db/**",
+        "prisma/**",
+        "server/**/*.test.ts"
+      ],
       "rules": {
         "no-restricted-imports": "off"
       }
     },
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "tests/**"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "tests/**"
+      ],
       "rules": {
         "typescript/no-explicit-any": "off"
       }
@@ -84,6 +101,8 @@
     "playwright-report/**",
     "test-results/**",
     "storybook-static/**",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    "server/db/generated/**",
+    "prisma/migrations/**"
   ]
 }

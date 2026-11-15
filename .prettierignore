@@ -8,3 +8,5 @@ package-lock.json
 public
 docs
 design
+server/db/generated
+prisma/migrations
