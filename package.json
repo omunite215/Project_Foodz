@@ -10,7 +10,8 @@
     "lint:fix": "oxlint --type-aware --fix",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "design:extract": "node scripts/figma/extract.mjs"
   },
   "dependencies": {
     "next": "16.4.6",
@@ -23,9 +24,11 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "babel-plugin-react-compiler": "1.0.0",
+    "fflate": "0.8.3",
     "oxlint": "1.93.0",
     "oxlint-tsgolint": "7.0.2007",
     "prettier": "3.10.1",
+    "sharp": "0.35.5",
     "tailwindcss": "4.3.5",
     "typescript": "6.0.3"
   },
