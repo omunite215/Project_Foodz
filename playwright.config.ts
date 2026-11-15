@@ -28,7 +28,10 @@ export default defineConfig({
     : {
         command: `npx next start --port ${port}`,
         url: baseURL,
-        reuseExistingServer: !process.env.CI,
+        // Always start a fresh production server: reusing whatever already listens on the port
+        // (a forgotten `next dev`, say) would test different code from what is being pushed.
+        // To test a server that is already running, set E2E_BASE_URL instead.
+        reuseExistingServer: false,
         timeout: 120_000,
         env: {
           BETTER_AUTH_URL: baseURL,
