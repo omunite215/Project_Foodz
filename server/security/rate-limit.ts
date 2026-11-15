@@ -16,6 +16,7 @@ const POLICIES = {
   'delivery.otp': { points: 5, duration: 900 },
   'partner.location': { points: 1, duration: 2 },
   'realtime.auth': { points: 60, duration: 60 },
+  'upload.request': { points: 30, duration: 600 },
   search: { points: 60, duration: 60 },
   'action.default': { points: 60, duration: 60 },
 } as const;

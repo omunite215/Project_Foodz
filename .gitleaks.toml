@@ -13,5 +13,5 @@ regexes = [
   # Stripe's documented test card numbers in tests
   '''4242 ?4242 ?4242 ?4242''',
   # throwaway credentials for test containers
-  '''test-(superuser|migrator|app|readonly)''',
+  '''test-(superuser|migrator|app|readonly|storage)''',
 ]
