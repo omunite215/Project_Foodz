@@ -39,13 +39,21 @@
           {
             "name": "@prisma/client",
             "message": "Database access belongs in server/modules/*/repo.ts."
+          },
+          {
+            "name": "@prisma/adapter-pg",
+            "message": "Database access belongs in server/modules/*/repo.ts."
+          },
+          {
+            "name": "@/server/db/client",
+            "message": "Database access belongs in server/modules/*/repo.ts."
           }
         ],
         "patterns": [
           {
             "group": [
-              "@/server/db",
-              "@/server/db/*"
+              "@/server/db/generated",
+              "@/server/db/generated/*"
             ],
             "message": "Database access belongs in server/modules/*/repo.ts."
           }
@@ -66,7 +74,9 @@
       "warn",
       {
         "allow": [
-          "**/*.css"
+          "**/*.css",
+          "server-only",
+          "dotenv/config"
         ]
       }
     ]
@@ -77,7 +87,9 @@
         "server/modules/*/repo.ts",
         "server/db/**",
         "prisma/**",
-        "server/**/*.test.ts"
+        "server/auth/index.ts",
+        "**/*.test.ts",
+        "tests/**"
       ],
       "rules": {
         "no-restricted-imports": "off"
