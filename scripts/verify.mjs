@@ -15,7 +15,7 @@ const STEPS = {
   // What gets verified must be exactly what gets pushed.
   'clean-tree': ['node', 'scripts/clean-tree.mjs'],
   lint: npx('oxlint', '--type-aware', '--deny-warnings'),
-  format: npx('prettier', '--check', '.'),
+  format: ['node', 'scripts/format-check.mjs'],
   typecheck: npx('tsc', '--noEmit'),
   architecture: npx(
     'depcruise',
