@@ -16,7 +16,11 @@
     "verbatimModuleSyntax": false,
     "jsx": "react-jsx",
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
       "@/*": ["./*"]
     }
@@ -26,6 +30,7 @@
     "**/*.ts",
     "**/*.tsx",
     "**/*.mts",
+    ".storybook/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

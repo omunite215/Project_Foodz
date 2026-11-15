@@ -37,6 +37,7 @@ const STEPS = {
   unit: npx('vitest', 'run', '--project', 'unit'),
   integration: npx('vitest', 'run', '--project', 'integration'),
   build: npx('next', 'build'),
+  storybook: npx('storybook', 'build', '--quiet'),
   e2e: npx('playwright', 'test', '--project', 'smoke', '--project', 'smoke-mobile'),
 };
 
@@ -50,6 +51,7 @@ const DEFAULT = [
   'unit',
   'integration',
   'build',
+  'storybook',
   'e2e',
 ];
 const selected = process.argv.slice(2);

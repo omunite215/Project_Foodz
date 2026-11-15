@@ -27,7 +27,9 @@
     "test:coverage": "vitest run --coverage",
     "verify": "node scripts/verify.mjs",
     "e2e": "playwright test",
-    "semgrep": "node scripts/semgrep.mjs"
+    "semgrep": "node scripts/semgrep.mjs",
+    "storybook": "storybook dev --port 6006 --no-open",
+    "storybook:build": "storybook build --quiet"
   },
   "dependencies": {
     "@gsap/react": "2.1.2",
@@ -67,6 +69,9 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.65.1",
+    "@storybook/addon-a11y": "10.6.7",
+    "@storybook/addon-docs": "10.6.7",
+    "@storybook/nextjs-vite": "10.6.7",
     "@tailwindcss/postcss": "4.3.5",
     "@tanstack/react-devtools": "0.10.14",
     "@tanstack/react-form-devtools": "0.2.34",
@@ -93,10 +98,12 @@
     "prettier": "3.10.1",
     "prisma": "7.10.1",
     "sharp": "0.35.5",
+    "storybook": "10.6.7",
     "tailwindcss": "4.3.5",
     "testcontainers": "12.2.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
+    "vite": "8.3.8",
     "vitest": "5.1.0"
   },
   "engines": {

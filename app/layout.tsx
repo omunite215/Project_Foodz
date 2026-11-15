@@ -1,25 +1,10 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Alice, Poppins } from 'next/font/google';
 import { connection } from 'next/server';
 import { Footer, Navbar } from '@/components/common';
 import { Providers } from '@/components/providers';
-import { cn } from '@/lib/utils';
-
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins-src',
-  display: 'swap',
-});
-
-const alice = Alice({
-  subsets: ['latin'],
-  weight: ['400'],
-  variable: '--font-alice-src',
-  display: 'swap',
-});
+import { fontVariables } from '@/lib/fonts';
 
 export const metadata: Metadata = {
   title: 'Foodz',
@@ -31,7 +16,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   await connection();
 
   return (
-    <html lang="en" className={cn(poppins.variable, alice.variable)}>
+    <html lang="en" className={fontVariables}>
       <body className="bg-neutral-8 font-poppins text-neutral-2 antialiased">
         <Providers>
           <main className="w-full overflow-hidden">

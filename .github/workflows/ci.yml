@@ -45,6 +45,8 @@ jobs:
 
       - name: Build
         run: node scripts/verify.mjs build
+      - name: Storybook build
+        run: node scripts/verify.mjs storybook
       - run: npx playwright install --with-deps chromium
       - name: Browser tests
         run: node scripts/verify.mjs e2e
