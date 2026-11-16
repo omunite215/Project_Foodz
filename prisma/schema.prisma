@@ -29,7 +29,14 @@ model User {
   twoFactorEnabled     Boolean?  @default(false) @map("two_factor_enabled")
   termsAcceptedVersion Int?      @map("terms_accepted_version")
   stripeCustomerId     String?   @unique @map("stripe_customer_id")
+  /// A shared, read-only demo login. Set by the seed only (trigger users_guard_seed_flags).
   isDemo               Boolean   @default(false) @map("is_demo")
+  /// Sample data from the seed (local and demo deployments). Shown unmasked to demo logins like
+  /// demo accounts. Only the table owner (migrations, seed) can set or change it; the trigger
+  /// users_guard_seed_flags refuses every other role.
+  isSample             Boolean   @default(false) @map("is_sample")
+  /// Confirm-email links issued before this instant are refused (set when the email is changed).
+  emailLinksValidAfter DateTime? @map("email_links_valid_after")
   deletedAt            DateTime? @map("deleted_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
@@ -121,9 +128,18 @@ model TwoFactor {
 
 // ------------------------------------------------------------------ customers
 
+enum AddressKind {
+  HOME
+  WORK
+  OTHER
+}
+
+// One default per user and at most 10 per user are kept by the address service (under a
+// per-user lock). `location` is maintained by a trigger from lat/lng.
 model Address {
   id        String                                 @id @default(uuid(7)) @db.Uuid
   userId    String                                 @map("user_id") @db.Uuid
+  kind      AddressKind                            @default(OTHER)
   label     String
   line1     String
   line2     String?
