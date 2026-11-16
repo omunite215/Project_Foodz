@@ -21,6 +21,22 @@ export default defineConfig({
       testMatch: /smoke\.spec\.ts/,
       use: { ...devices['Pixel 7'] },
     },
+    // The storefront at the design's phone and desktop widths.
+    {
+      name: 'storefront-375',
+      testMatch: /storefront\/.*\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 375, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: 'storefront-1440',
+      testMatch: /storefront\/.*\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
   ],
   // Tests run against a production build, the same thing users get.
   webServer: process.env.E2E_BASE_URL

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-const PAGES = ['/', '/menu', '/blog', '/contact', '/menu/korean/km01'] as const;
+const PAGES = ['/', '/menu', '/blog', '/contact', '/menu/jajangmyeon'] as const;
 
 /** Collects console errors and CSP violations while a page loads. */
 function watchForProblems(page: Page) {
@@ -56,9 +56,21 @@ test('the old contact URL redirects permanently', async ({ request }) => {
   expect(response.headers().location).toBe('/contact');
 });
 
+test('old dish links redirect permanently to the dish page', async ({ request }) => {
+  const response = await request.get('/menu/korean/km01', { maxRedirects: 0 });
+  expect(response.status()).toBe(308);
+  expect(response.headers().location).toBe('/menu/jajangmyeon');
+});
+
 test('unknown dishes return 404', async ({ page }) => {
-  const response = await page.goto('/menu/korean/does-not-exist');
-  expect(response?.status()).toBe(404);
+  for (const path of [
+    '/menu/does-not-exist',
+    '/menu/korean/does-not-exist',
+    '/menu/jajangmyeon/anything',
+  ]) {
+    const response = await page.goto(path);
+    expect(response?.status(), path).toBe(404);
+  }
 });
 
 test('API and metadata responses get a policy that allows nothing', async ({ request }) => {
