@@ -19,7 +19,7 @@ test.describe('Dish page', () => {
     await expect(main.getByRole('heading', { name: 'Description' })).toBeVisible();
     // This dish's own flavors, not a fixed list.
     const flavors = main.getByRole('toolbar', { name: 'Extra flavor' }).getByRole('button');
-    await expect(flavors).toHaveText(['Gochujang', 'Strawberry jam', 'Soy sauce', 'Garlic']);
+    await expect(flavors).toHaveText(['Sesame oil', 'Spring onion', 'Toasted sesame', 'Soy sauce']);
     // One photo: no counter and nothing to swipe.
     await expect(main.getByText(/^1\/\d$/)).toHaveCount(0);
     await expect(main.getByRole('button', { name: /photo/i })).toHaveCount(0);
@@ -54,11 +54,11 @@ test.describe('Dish page', () => {
     await open(page, '/menu/yangnyeom-chicken');
     const main = page.locator('main');
 
-    const garlic = main.getByRole('button', { name: 'Garlic' });
-    await expect(garlic).toHaveAttribute('aria-pressed', 'false');
-    await garlic.click();
-    await expect(garlic).toHaveAttribute('aria-pressed', 'true');
-    const height = await garlic.evaluate((element) => element.getBoundingClientRect().height);
+    const springOnion = main.getByRole('button', { name: 'Spring onion' });
+    await expect(springOnion).toHaveAttribute('aria-pressed', 'false');
+    await springOnion.click();
+    await expect(springOnion).toHaveAttribute('aria-pressed', 'true');
+    const height = await springOnion.evaluate((element) => element.getBoundingClientRect().height);
     expect(height).toBeGreaterThanOrEqual(44);
 
     const note = main.getByLabel('Note for the kitchen');
@@ -73,7 +73,7 @@ test.describe('Dish page', () => {
     await expect(liveRegion(page)).toHaveText('Yangnyeom Chicken added to your cart.');
     await expect(page.locator('header').getByText('1 item in your cart')).toBeAttached();
     expect(await savedCart(page)).toMatchObject([
-      { quantity: 1, flavors: ['Garlic'], note: 'No sesame, please' },
+      { quantity: 1, flavors: ['Spring onion'], note: 'No sesame, please' },
     ]);
   });
 
@@ -81,7 +81,7 @@ test.describe('Dish page', () => {
     await open(page, '/menu/naengmyeon');
     const main = page.locator('main');
     await expect(main.getByText('Sold out today', { exact: true }).first()).toBeVisible();
-    await expect(main.getByRole('button', { name: /^Add to cart/ })).toBeDisabled();
+    await expect(main.getByRole('button', { name: 'Sold out' })).toBeDisabled();
     await expect(main.getByText('Sold out today. Try one of these instead.')).toBeVisible();
 
     const suggestions = main.getByRole('region', { name: 'More Korean dishes' });

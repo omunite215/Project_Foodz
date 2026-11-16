@@ -204,6 +204,8 @@ export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: Di
               <Check className="size-4" aria-hidden />
               Added
             </>
+          ) : soldOut ? (
+            'Sold out'
           ) : (
             <>Add to cart · {formatPrice(dish.priceCents)}</>
           )}

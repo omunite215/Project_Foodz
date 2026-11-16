@@ -175,14 +175,3 @@ export const ThaiMenu = [
       'Panang pork with rice is a delightful Thai dish. It features tender pork cooked in a rich and creamy Panang curry sauce, which includes ingredients like coconut milk, red curry paste, and kaffir lime leaves. Served with steamed rice, it offers a harmonious blend of spicy, sweet, and nutty flavors, making it a favorite in Thai cuisine.',
   },
 ];
-
-export const flavors = [
-  'Sugar',
-  'Gochujang',
-  'Rice win vinegar',
-  'Strawberry jam',
-  'Soy sauce',
-  'Garlic',
-  'Ginger',
-  'Butter',
-];

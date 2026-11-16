@@ -50,7 +50,7 @@ export const Featured: Story = {
     dish: koreanBbq,
     layout: 'featured',
     showOffer: true,
-    flavors: ['Sugar', 'Gochujang', 'Soy sauce', 'Garlic'],
+    flavors: ['Gochujang', 'Sesame oil', 'Garlic', 'Spring onion'],
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

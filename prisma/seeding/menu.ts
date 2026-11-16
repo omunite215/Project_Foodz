@@ -1,10 +1,4 @@
-import {
-  flavors as flavorOptions,
-  koreanMenu,
-  SpecialOffersContent,
-  ThaiMenu,
-  VietnameseMenu,
-} from '../../constants';
+import { koreanMenu, SpecialOffersContent, ThaiMenu, VietnameseMenu } from '../../constants';
 
 export type Cuisine = 'KOREAN' | 'THAI' | 'VIETNAMESE';
 
@@ -37,8 +31,15 @@ export const slugify = (value: string) =>
 
 const cents = (dollars: number) => Math.round(dollars * 100);
 
-// The constants list has a typo ("Rice win vinegar").
-const FLAVORS = flavorOptions.map((flavor) => flavor.replace('Rice win', 'Rice wine'));
+/**
+ * Optional seasonings a customer can ask for, by cuisine. (The original list offered strawberry
+ * jam and gochujang on every dish.)
+ */
+const FLAVORS: Record<Cuisine, string[]> = {
+  KOREAN: ['Gochujang', 'Sesame oil', 'Garlic', 'Spring onion', 'Toasted sesame', 'Soy sauce'],
+  THAI: ['Thai chili', 'Thai basil', 'Lime', 'Fish sauce', 'Crushed peanuts', 'Coriander'],
+  VIETNAMESE: ['Fresh herbs', 'Lime', 'Sliced chili', 'Nước chấm', 'Hoisin', 'Fried shallots'],
+};
 
 /** A stable number per dish, so demo ratings and counts look varied but never change. */
 function hash(value: string) {
@@ -47,10 +48,10 @@ function hash(value: string) {
   return h >>> 0;
 }
 
-function demoStats(slug: string) {
+function demoStats(slug: string, cuisine: Cuisine) {
   const h = hash(slug);
   return {
-    flavors: FLAVORS.filter((_, index) => (h >> index) & 1).slice(0, 4),
+    flavors: FLAVORS[cuisine].filter((_, index) => (h >> index) & 1).slice(0, 4),
     prepMinutes: 12 + (h % 4) * 4,
     ratingAvg: Math.round((4.2 + (h % 8) / 10) * 10) / 10,
     ratingCount: 40 + (h % 260),
@@ -166,7 +167,7 @@ function dish(content: DishContent, cuisine: Cuisine, isSpecial = false): SeedMe
     cuisine,
     isSpecial,
     isAvailable: !SOLD_OUT.has(slug),
-    ...demoStats(slug),
+    ...demoStats(slug, cuisine),
   };
 }
 
