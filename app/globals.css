@@ -119,6 +119,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -164,6 +165,8 @@
   --popover-foreground: #23262f;
   --primary: #03850a;
   --primary-foreground: #ffffff;
+  /* Hover keeps white text above AA (6.7:1); a faded #03850a would drop to 3.5:1. */
+  --primary-hover: #026b08;
   --secondary: #f4f5f6;
   --secondary-foreground: #23262f;
   --muted: #f4f5f6;
@@ -202,6 +205,7 @@
   --popover-foreground: #fcfcfd;
   --primary: #04b90b;
   --primary-foreground: #141416;
+  --primary-hover: #05d50d;
   --secondary: #353945;
   --secondary-foreground: #fcfcfd;
   --muted: #23262f;
