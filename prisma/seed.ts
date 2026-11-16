@@ -26,6 +26,8 @@ async function main() {
       adminEmail: env('SEED_ADMIN_EMAIL', { fallback: 'admin@foodz.example' }),
       adminPassword: env('SEED_ADMIN_PASSWORD', { minLength: 12 }),
       demoPassword: env('DEMO_PASSWORD', { minLength: 10 }),
+      // Local and demo deployments only; production leaves it unset.
+      sampleAccounts: ['true', '1'].includes(process.env.SEED_SAMPLE_ACCOUNTS ?? ''),
     });
 
     const created = Object.entries(result.created).filter(([, n]) => n > 0);

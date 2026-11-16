@@ -21,6 +21,11 @@ export interface SeedConfig {
   adminEmail: string;
   adminPassword: string;
   demoPassword: string;
+  /**
+   * Adds the sample customers below (local and demo deployments only, never production):
+   * an unconfirmed one, a suspended one and a second customer with an address.
+   */
+  sampleAccounts?: boolean;
   now?: Date;
 }
 
@@ -40,6 +45,35 @@ export const DEMO_ACCOUNTS = [
   { email: 'demo.customer@foodz.example', name: 'Dana Customer', role: 'customer' },
   { email: 'demo.partner@foodz.example', name: 'Riley Courier', role: 'partner' },
   { email: 'demo.admin@foodz.example', name: 'Demo Admin', role: 'admin' },
+] as const;
+
+/**
+ * Sample customers for trying the sign-in and address rules (Decision 15). They are ordinary
+ * accounts, not demo logins, so they behave like real customers; `isSample` shows them in full
+ * to the demo admin. Password: DEMO_PASSWORD.
+ */
+export const SAMPLE_ACCOUNTS = [
+  {
+    email: 'unconfirmed.customer@foodz.example',
+    name: 'Jordan Lee',
+    emailVerified: false,
+    banned: false,
+    banReason: null,
+  },
+  {
+    email: 'suspended.customer@foodz.example',
+    name: 'Sam Rivera',
+    emailVerified: true,
+    banned: true,
+    banReason: 'Repeated coupon abuse (test account)',
+  },
+  {
+    email: 'second.customer@foodz.example',
+    name: 'Priya Shah',
+    emailVerified: true,
+    banned: false,
+    banReason: null,
+  },
 ] as const;
 
 const TERMS_VERSION = 1;
@@ -156,6 +190,7 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
           data: {
             id: addressId,
             userId: demo.customer!,
+            kind: 'HOME',
             label: 'Home',
             line1: '12 Peterborough Street',
             line2: 'Apt 3',
@@ -167,6 +202,51 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         });
         await tx.$executeRaw`UPDATE addresses SET location = ST_SetSRID(ST_MakePoint(${home.lng}, ${home.lat}), 4326)::geography WHERE id = ${addressId}::uuid`;
         count('addresses', true);
+      }
+
+      // -------------------------------------------------------------- sample customers
+      if (config.sampleAccounts) {
+        const sample: Record<string, string> = {};
+        for (const account of SAMPLE_ACCOUNTS) {
+          const user = await upsertUser(tx, {
+            email: account.email,
+            name: account.name,
+            role: 'customer',
+            isDemo: false,
+            passwordHash: demoHash,
+            resetPassword: true,
+            // Each run puts them back in the state the stories test. Flagged as sample data, so
+            // demo logins see them in full like the demo accounts (U4).
+            state: {
+              emailVerified: account.emailVerified,
+              banned: account.banned,
+              banReason: account.banReason,
+              isSample: true,
+            },
+          });
+          sample[account.email] = user.id;
+          count('users', user.created);
+        }
+
+        const workId = seedId('second-customer-work');
+        const work = await tx.address.findUnique({ where: { id: workId }, select: { id: true } });
+        if (!work) {
+          await tx.address.create({
+            data: {
+              id: workId,
+              userId: sample['second.customer@foodz.example']!,
+              kind: 'WORK',
+              label: 'Work',
+              line1: '1 Faneuil Hall Square',
+              city: 'Boston, MA 02109',
+              notes: 'Front desk takes deliveries',
+              isDefault: true,
+              lat: 42.36,
+              lng: -71.0548,
+            },
+          });
+          count('addresses', true);
+        }
       }
 
       // -------------------------------------------------------------- site pages
@@ -301,17 +381,32 @@ async function upsertUser(
     passwordHash: string;
     /** Demo passwords follow the environment; a real admin's password is never reset. */
     resetPassword: boolean;
+    /** Sample accounts: the confirmation and suspension state to restore on every run. */
+    state?: {
+      emailVerified: boolean;
+      banned: boolean;
+      banReason: string | null;
+      isSample: boolean;
+    };
   },
 ) {
   const existing = await tx.user.findUnique({ where: { email: user.email }, select: { id: true } });
   const id = existing?.id ?? uuidv7();
 
+  const state = user.state ?? {
+    emailVerified: true,
+    banned: false,
+    banReason: null,
+    isSample: false,
+  };
   if (existing) {
     await tx.user.update({
       where: { id },
       data: user.isDemo
         ? { role: user.role, isDemo: true, banned: false, emailVerified: true }
-        : { emailVerified: true },
+        : user.state
+          ? { ...user.state, role: user.role }
+          : { emailVerified: true },
     });
   } else {
     await tx.user.create({
@@ -321,7 +416,10 @@ async function upsertUser(
         name: user.name,
         role: user.role,
         isDemo: user.isDemo,
-        emailVerified: true,
+        emailVerified: state.emailVerified,
+        banned: state.banned,
+        banReason: state.banReason,
+        isSample: state.isSample,
         termsAcceptedVersion: TERMS_VERSION,
       },
     });
