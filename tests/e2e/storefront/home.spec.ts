@@ -148,6 +148,24 @@ test.describe('Home', () => {
     await expect(footer.getByText('88 Harbor Street, Boston, MA 02210')).toBeVisible();
   });
 
+  test('after leaving and coming back, the taste picker shows what it holds (S6)', async ({
+    page,
+  }) => {
+    await open(page, '/');
+    const form = page
+      .locator('form')
+      .filter({ has: page.getByRole('heading', { name: "What's your taste?" }) });
+    await form.getByLabel(/^Dish 1/).selectOption({ label: 'Gimbap · $12.99' });
+    await expect(form.locator('output')).toHaveText('$12.99');
+
+    // A full page load away and Back: the browser must not refill fields the form no longer holds.
+    await page.goto('/blog');
+    await page.goBack();
+    await page.waitForLoadState('networkidle');
+    await expect(form.getByLabel(/^Dish 1/)).toHaveValue('');
+    await expect(form.locator('output')).toHaveText('$0.00');
+  });
+
   test('the taste picker adds the chosen dishes to the cart (S6)', async ({ page }) => {
     await open(page, '/');
     const form = page

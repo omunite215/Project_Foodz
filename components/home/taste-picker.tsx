@@ -160,7 +160,7 @@ export function TastePicker({
         count > 0 ? dishesAddedText(count) : null,
         soldOutText(soldOut),
         count > 0 && closedUntil
-          ? `We're closed now. Your cart will keep these until we open at ${momentText(closedUntil)}.`
+          ? `We're closed now. Your cart will keep ${count === 1 ? 'it' : 'them'} until we open at ${momentText(closedUntil)}.`
           : null,
       ].filter((part): part is string => Boolean(part));
       const text = parts.map((part) => (part.endsWith('.') ? part : `${part}.`)).join(' ');
@@ -190,10 +190,16 @@ export function TastePicker({
     <div className="lg:grid lg:grid-cols-[477fr_430fr] lg:items-center lg:gap-12 xl:grid-cols-[524fr_540fr] xl:gap-x-[105px] xl:px-24">
       <form
         noValidate
+        // The browser must not refill the fields on Back: they would show choices this form does
+        // not hold, and Add to cart would then say nothing was chosen.
+        autoComplete="off"
         aria-labelledby={`${idPrefix}-title`}
         className="mx-auto w-full max-w-[524px] lg:mx-0 lg:max-w-none"
         onSubmit={(event) => {
           event.preventDefault();
+          // A second click while the first add is still settling must not re-check the form,
+          // which has already been cleared, and report an error under the success message.
+          if (busyRef.current) return;
           void form.handleSubmit();
         }}
       >
@@ -283,7 +289,7 @@ export function TastePicker({
                               htmlFor={`${idPrefix}-quantity-${index}`}
                               className="text-body-4 font-normal text-neutral-2"
                             >
-                              How many<span className="sr-only">, dish {index + 1}</span>
+                              How many<span className="sr-only"> for dish {index + 1}</span>
                             </Label>
                             <NativeSelect
                               id={`${idPrefix}-quantity-${index}`}
