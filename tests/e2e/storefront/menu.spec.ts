@@ -110,26 +110,46 @@ test.describe('Menu', () => {
     await padThai.scrollIntoViewIfNeeded();
     await page.mouse.wheel(0, 150);
     await page.waitForTimeout(300);
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(200);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
 
+    // Playwright's click may scroll the link back into view first, so the position to come back
+    // to is the one at the moment of the click. Navigation stays client-side, so it survives.
+    const scrollAtNextClick = async () => {
+      await page.evaluate(() => {
+        document.addEventListener(
+          'click',
+          () => document.documentElement.setAttribute('data-test-scroll', String(window.scrollY)),
+          { capture: true, once: true },
+        );
+      });
+    };
+    const scrolledAtClick = async () =>
+      Number(await page.evaluate(() => document.documentElement.dataset.testScroll));
+
+    await scrollAtNextClick();
     await padThai.click();
     await expect(page).toHaveURL(/\/menu\/pad-thai$/);
+    const scrolled = await scrolledAtClick();
+    expect(scrolled).toBeGreaterThan(200);
     await page.goBack();
     await expect(page).toHaveURL(/\/menu\?cuisine=thai$/);
     await expect(page.getByRole('tab', tab('Thai'))).toHaveAttribute('aria-selected', 'true');
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled - 120);
 
     // The page's own "Go back" does the same.
+    await scrollAtNextClick();
     await page
       .getByRole('tabpanel')
       .getByRole('link', { name: /^Pad Thai,/ })
       .click();
     await expect(page).toHaveURL(/\/menu\/pad-thai$/);
+    const scrolledAgain = await scrolledAtClick();
     await page.getByRole('link', { name: 'Go back' }).click();
     await expect(page).toHaveURL(/\/menu\?cuisine=thai$/);
     await expect(page.getByRole('tab', tab('Thai'))).toHaveAttribute('aria-selected', 'true');
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled - 120);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(scrolledAgain - 120);
   });
 
   test('shows a skeleton with one label while a slow menu loads (S7.3)', async ({ page }) => {
