@@ -1,4 +1,3 @@
-import { footerLinks } from '../../constants';
 import { type Block, richText } from './rich-text';
 
 const day = 24 * 60 * 60 * 1000;
@@ -25,10 +24,18 @@ export const siteSettings = {
   contactEmail: 'hello@foodz.example',
   contactPhone: '+1 617 555 0142',
   socialLinks: {},
-  footerLinks: footerLinks.map((group) => ({
-    title: group.title,
-    links: group.links.map((link) => ({ label: link.name, href: link.link })),
-  })),
+  // Each label says where it goes, and nothing links to a page that does not exist yet.
+  footerLinks: [
+    {
+      title: 'Explore',
+      links: [
+        { label: 'Home', href: '/' },
+        { label: 'Menu', href: '/menu' },
+        { label: 'Blog', href: '/blog' },
+      ],
+    },
+    { title: 'Help', links: [{ label: 'Contact us', href: '/contact' }] },
+  ],
   seo: {
     title: 'Foodz: Korean, Thai and Vietnamese food, delivered',
     description:
@@ -215,7 +222,8 @@ export function campaigns(now: Date) {
       title: 'Korean BBQ weekend',
       subtitle: '$5 off Korean dishes over $25 with code KBBQ5',
       ctaLabel: 'Order now',
-      ctaHref: '/menu',
+      // Opens the menu on the Korean tab (see menuTabHref in server/modules/menu/urls.ts).
+      ctaHref: '/menu?cuisine=korean',
       placement: 'HOME_CAROUSEL' as const,
       couponCode: 'KBBQ5',
       priority: 10,
@@ -239,9 +247,10 @@ export function campaigns(now: Date) {
     {
       key: 'menu-specials',
       title: "Today's specials",
-      subtitle: 'Our cooks’ picks, at special prices',
-      ctaLabel: 'See specials',
-      ctaHref: '/menu',
+      subtitle: 'Our cooks’ picks for today',
+      // Shown at the top of the menu itself, so a link to the menu would go nowhere.
+      ctaLabel: null,
+      ctaHref: null,
       placement: 'MENU_TOP' as const,
       couponCode: null,
       priority: 1,
