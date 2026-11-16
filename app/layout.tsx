@@ -1,47 +1,39 @@
-import "./globals.css";
-import { Navbar, Footer } from "@/components/common";
-import type { Metadata } from "next";
-import { Poppins, Alice } from "next/font/google";
-
-const poppins = Poppins({
-	subsets: ["latin"],
-	weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
-	variable: "--font-poppins",
-});
-
-const alice = Alice({
-	subsets: ["latin"],
-	weight: ["400"],
-	variable: "--font-alice",
-});
+import './globals.css';
+import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
+import { connection } from 'next/server';
+import { Footer, Navbar } from '@/components/common';
+import { Providers } from '@/components/providers';
+import { fontVariables } from '@/lib/fonts';
 
 export const metadata: Metadata = {
-	title: "FoodZ",
-	description: "where food meets taste",
+  title: 'Foodz',
+  description: 'Korean, Thai and Vietnamese food, delivered hot.',
 };
 
-export default function RootLayout({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
-	return (
-		<html lang="en">
-			<body className={`${poppins.variable} ${alice.variable}`}>
-				<main className=" bg-bgWhite w-full overflow-hidden antialiased">
-					<header className="sm:px-[4.5rem] xs:px-12 px-6 flexStart">
-						<nav className="xl:max-w-[1440px] w-full">
-							<Navbar />
-						</nav>
-					</header>
-					<section className=" bg-bgWhite flexStart">
-						<section className=" xl:max-w-[1440px] w-full z-0">
-							{children}
-							<Footer />
-						</section>
-					</section>
-				</main>
-			</body>
-		</html>
-	);
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Every page renders per request so its scripts can carry the CSP nonce.
+  await connection();
+
+  return (
+    <html lang="en" className={fontVariables}>
+      <body className="bg-neutral-8 font-poppins text-neutral-2 antialiased">
+        <Providers>
+          <main className="w-full overflow-hidden">
+            <header className="flexStart px-6 xs:px-12 sm:px-[4.5rem]">
+              <nav className="w-full xl:max-w-[1440px]">
+                <Navbar />
+              </nav>
+            </header>
+            <section className="flexStart">
+              <section className="z-0 w-full xl:max-w-[1440px]">
+                {children}
+                <Footer />
+              </section>
+            </section>
+          </main>
+        </Providers>
+      </body>
+    </html>
+  );
 }

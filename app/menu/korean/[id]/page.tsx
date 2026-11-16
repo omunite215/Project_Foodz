@@ -1,21 +1,18 @@
-import ProductPage from "@/components/menu/ProductPage";
-import { koreanMenu } from "@/constants";
-import { redirect } from "next/navigation";
+import { notFound } from 'next/navigation';
+import ProductPage from '@/components/menu/ProductPage';
+import { koreanMenu } from '@/constants';
 
-const page = async ({ params }: { params: { id: string } }) => {
-	const desiredItem = params.id;
-	const specificObject = koreanMenu.find((obj) => obj.id === desiredItem);
-	if (!specificObject) redirect("/");
-	return (
-		<div>
-			<ProductPage
-				title={specificObject.title}
-				imgSrc={specificObject.imgSrc}
-				price={specificObject.price}
-				description={specificObject.description}
-			/>
-		</div>
-	);
-};
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const item = koreanMenu.find((entry) => entry.id === id);
+  if (!item) notFound();
 
-export default page;
+  return (
+    <ProductPage
+      title={item.title}
+      imgSrc={item.imgSrc}
+      price={item.price}
+      description={item.description}
+    />
+  );
+}

@@ -1,0 +1,171 @@
+# Local stack.
+#   docker compose up -d                      infrastructure only (run the app with `npm run dev`)
+#   docker compose --profile app up --build   infrastructure + migrations + seed + production build of the app
+#   docker compose --profile payments up -d   also forward Stripe webhooks to the app
+#
+# Every port is bound to 127.0.0.1 so nothing is reachable from the local network.
+
+name: foodz
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+services:
+  db:
+    <<: *hardening
+    image: postgis/postgis:17-3.5-alpine
+    environment:
+      POSTGRES_DB: foodz
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set in .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?set in .env}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?set in .env}
+      DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?set in .env}
+    ports:
+      - 127.0.0.1:${DB_HOST_PORT:-5433}:5432
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d foodz']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
+  redis:
+    <<: *hardening
+    image: valkey/valkey:9.0-alpine
+    command: [valkey-server, --requirepass, '${REDIS_PASSWORD:?set in .env}', --appendonly, 'yes']
+    ports:
+      - 127.0.0.1:${REDIS_HOST_PORT:-6380}:6379
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD-SHELL, 'valkey-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [internal]
+
+  storage:
+    <<: *hardening
+    image: rustfs/rustfs:1.0.4
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: 'true'
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?set in .env}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?set in .env}
+    ports:
+      - 127.0.0.1:9000:9000
+      - 127.0.0.1:9001:9001
+    volumes:
+      - storage-data:/data
+    networks: [internal]
+
+  mail:
+    <<: *hardening
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - 127.0.0.1:1025:1025
+      - 127.0.0.1:8025:8025
+    networks: [internal]
+
+  realtime:
+    <<: *hardening
+    image: quay.io/soketi/soketi:1.6-16-alpine
+    environment:
+      SOKETI_DEFAULT_APP_ID: ${PUSHER_APP_ID:?set in .env}
+      SOKETI_DEFAULT_APP_KEY: ${NEXT_PUBLIC_PUSHER_KEY:?set in .env}
+      SOKETI_DEFAULT_APP_SECRET: ${PUSHER_SECRET:?set in .env}
+      SOKETI_DEFAULT_APP_ENABLE_CLIENT_MESSAGES: 'false'
+    ports:
+      - 127.0.0.1:6001:6001
+    networks: [internal]
+
+  jobs:
+    <<: *hardening
+    image: inngest/inngest:v1.52.0
+    command: inngest dev -u ${INNGEST_APP_URL:-http://host.docker.internal:3456/api/inngest} --no-discovery
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 127.0.0.1:8288:8288
+    networks: [internal]
+
+  migrate:
+    profiles: [app]
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_MIGRATOR_URL: postgresql://foodz_migrator:${DB_MIGRATOR_PASSWORD}@db:5432/foodz
+      # The seed runs after the migrations; it reports a clear error if these are missing.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@foodz.example}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      # Bucket setup runs last.
+      S3_ENDPOINT: http://storage:9000
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PUBLIC_BUCKET: ${S3_PUBLIC_BUCKET:-foodz-public}
+      S3_PRIVATE_BUCKET: ${S3_PRIVATE_BUCKET:-foodz-private}
+    depends_on:
+      db:
+        condition: service_healthy
+      storage:
+        condition: service_started
+    networks: [internal]
+    restart: 'no'
+
+  app:
+    <<: *hardening
+    profiles: [app]
+    build:
+      context: .
+      target: runner
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://foodz_app:${DB_APP_PASSWORD}@db:5432/foodz
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      S3_ENDPOINT: http://storage:9000
+      SMTP_URL: smtp://mail:1025
+      PUSHER_HOST: realtime
+      INNGEST_BASE_URL: http://jobs:8288
+      INNGEST_DEV: '1'
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    ports:
+      - 127.0.0.1:${APP_HOST_PORT:-3456}:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks: [internal]
+
+  stripe:
+    profiles: [payments]
+    image: stripe/stripe-cli:v1.55.10
+    command: listen --forward-to ${STRIPE_FORWARD_TO:-http://host.docker.internal:3456/api/webhooks/stripe} --api-key ${STRIPE_SECRET_KEY:-sk_test_missing}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    networks: [internal]
+
+volumes:
+  db-data:
+  redis-data:
+  storage-data:
+
+networks:
+  internal:

@@ -1,0 +1,17 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders and publicly documented test keys"
+paths = [
+  '''package-lock\.json''',
+]
+regexes = [
+  '''change-me''',
+  # Cloudflare Turnstile's published always-pass test keys
+  '''1x0+AA''',
+  # Stripe's documented test card numbers in tests
+  '''4242 ?4242 ?4242 ?4242''',
+  # throwaway credentials for test containers
+  '''test-(superuser|migrator|app|readonly|storage)''',
+]

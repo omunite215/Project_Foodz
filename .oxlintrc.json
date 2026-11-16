@@ -1,0 +1,114 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "nextjs",
+    "jsx-a11y",
+    "import",
+    "promise",
+    "vitest"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "rules": {
+    "eqeqeq": "error",
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error"]
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@prisma/client",
+            "message": "Database access belongs in server/modules/*/repo.ts."
+          },
+          {
+            "name": "@prisma/adapter-pg",
+            "message": "Database access belongs in server/modules/*/repo.ts."
+          },
+          {
+            "name": "@/server/db/client",
+            "message": "Database access belongs in server/modules/*/repo.ts."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["@/server/db/generated", "@/server/db/generated/*"],
+            "message": "Database access belongs in server/modules/*/repo.ts."
+          }
+        ]
+      }
+    ],
+    "react/no-danger": "error",
+    "react/jsx-key": "error",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "react/react-in-jsx-scope": "off",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-explicit-any": "error",
+    "import/no-cycle": "error",
+    "import/no-unassigned-import": [
+      "warn",
+      {
+        "allow": ["**/*.css", "server-only", "dotenv/config"]
+      }
+    ],
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": ["_count", "_sum", "_avg", "_min", "_max"]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "server/modules/*/repo.ts",
+        "server/db/**",
+        "prisma/**",
+        "server/auth/index.ts",
+        "**/*.test.ts",
+        "tests/**"
+      ],
+      "rules": {
+        "no-restricted-imports": "off",
+        "no-await-in-loop": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "tests/**"],
+      "rules": {
+        "typescript/no-explicit-any": "off",
+        "typescript/no-unsafe-type-assertion": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    ".next/**",
+    "node_modules/**",
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    "storybook-static/**",
+    "next-env.d.ts",
+    "server/db/generated/**",
+    "prisma/migrations/**"
+  ]
+}

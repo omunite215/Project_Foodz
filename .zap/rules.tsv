@@ -1,0 +1,4 @@
+10049	IGNORE	(Non-storable content: dynamic, per-user pages are intentionally not cached)
+10055	IGNORE	(CSP style-src unsafe-inline: components set inline style attributes; scripts remain nonce-only)
+10109	IGNORE	(Modern web application: informational)
+90004	IGNORE	(COEP: require-corp would break Stripe payment iframes; COOP and frame-ancestors are set)
