@@ -108,7 +108,7 @@ export function MobileNav() {
                     aria-current={current ? 'page' : undefined}
                     onClick={close}
                     className={cn(
-                      'flex h-12 items-center border-l-4 border-transparent px-6 text-body-3 font-medium text-neutral-2 hover:bg-neutral-7',
+                      'flex h-12 items-center border-l-4 border-transparent px-6 text-body-3 font-medium text-neutral-2 hover:bg-neutral-7 focus-visible:-outline-offset-2',
                       current && 'border-brand-strong text-brand-strong',
                     )}
                   >

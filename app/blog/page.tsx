@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import BlogCard from '@/components/blog/BlogCard';
-import Searchbar from '@/components/blog/Searchbar';
 import { PageContainer } from '@/components/layout/page-container';
 
 export const metadata: Metadata = { title: 'Blog' };
@@ -14,7 +13,6 @@ export default function BlogPage() {
           Best cooks and best delivery people at your service. Hot food at your door in about 45
           minutes.
         </p>
-        <Searchbar />
       </section>
       <div className="mt-10 md:mt-15">
         <h2 className="mb-5 text-body-2 text-neutral-3 md:text-body-1">Recent blog posts</h2>
