@@ -65,6 +65,59 @@ describe('cart', () => {
     expect(cart.get(cartLineId(RAMEN, ['egg', 'spicy']))?.quantity).toBe(3);
   });
 
+  it('keeps the note for the kitchen with the line', () => {
+    const browser = fakeBrowser();
+    const { cart, actions } = browser.openTab();
+
+    actions.add({ menuItemId: RAMEN, flavors: ['spicy'], note: '  No onions, please  ' });
+
+    expect([...cart.values()]).toMatchObject([
+      { menuItemId: RAMEN, flavors: ['spicy'], quantity: 1, note: 'No onions, please' },
+    ]);
+    expect(browser.data.get('foodz.cart.v1')).toContain('No onions, please');
+    expect(
+      browser.openTab().cart.get(cartLineId(RAMEN, ['spicy'], 'No onions, please')),
+    ).toMatchObject({ note: 'No onions, please' });
+  });
+
+  it('never overwrites a note: a different note is a separate line', () => {
+    const { cart, actions } = fakeBrowser().openTab();
+
+    actions.add({ menuItemId: RAMEN, note: 'Extra sauce' });
+    actions.add({ menuItemId: RAMEN, note: 'Extra sauce', quantity: 2 });
+    actions.add({ menuItemId: RAMEN, note: 'No egg | no sauce' });
+    actions.add({ menuItemId: RAMEN });
+
+    expect(cart.size).toBe(3);
+    expect(cart.get(cartLineId(RAMEN, [], 'Extra sauce'))).toMatchObject({
+      note: 'Extra sauce',
+      quantity: 3,
+    });
+    expect(cart.get(cartLineId(RAMEN, [], 'No egg | no sauce'))?.note).toBe('No egg | no sauce');
+    expect(cart.get(cartLineId(RAMEN))?.note).toBeUndefined();
+  });
+
+  it('treats a blank note as no note', () => {
+    const { cart, actions } = fakeBrowser().openTab();
+
+    actions.add({ menuItemId: PHO, note: '   ' });
+    actions.add({ menuItemId: PHO });
+
+    expect(cart.size).toBe(1);
+    expect(cart.get(cartLineId(PHO))).toMatchObject({ quantity: 2 });
+    expect(cart.get(cartLineId(PHO))).not.toHaveProperty('note');
+  });
+
+  it('rejects a note over 200 characters instead of cutting it short', () => {
+    const { cart, actions } = fakeBrowser().openTab();
+
+    expect(() => actions.add({ menuItemId: PHO, note: 'x'.repeat(201) })).toThrow(
+      /validation failed/,
+    );
+    actions.add({ menuItemId: PHO, note: 'x'.repeat(200) });
+    expect(cart.size).toBe(1);
+  });
+
   it('caps quantities and removes a line set below one', () => {
     const { cart, actions } = fakeBrowser().openTab();
     const id = cartLineId(PHO);
