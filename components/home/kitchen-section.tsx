@@ -16,7 +16,7 @@ export function KitchenSection() {
           >
             Meet our kitchen
           </h2>
-          <div className="mt-8 md:mt-20 md:grid md:grid-cols-[351fr_468fr] md:items-center md:gap-x-8 lg:gap-x-[61px] xl:grid-cols-[501fr_614fr] xl:gap-x-24 min-[1440px]:gap-x-[181px]">
+          <div className="mt-8 md:mt-20 md:grid md:grid-cols-[351fr_468fr] md:items-center md:gap-x-8 lg:gap-x-[61px] xl:grid-cols-[501fr_614fr] xl:gap-x-24 min-[90rem]:gap-x-[181px]">
             <div data-reveal="slide" className="hidden md:block">
               <Image
                 src="/illustrations/cooking.svg"
@@ -28,13 +28,13 @@ export function KitchenSection() {
               />
             </div>
             <div>
-              <div className="md:flex md:items-center md:justify-between md:gap-6">
+              <div className="lg:flex lg:items-center lg:justify-between lg:gap-6">
                 <h3 className="font-heading text-title-3 text-brand-strong md:text-title-2 md:text-neutral-1">
                   Cooked to order in Boston
                 </h3>
                 <Link
                   href="/blog"
-                  className="mt-6 hidden h-11 shrink-0 items-center gap-3 text-button-2 font-medium whitespace-nowrap text-brand-strong underline-offset-4 hover:underline md:mt-0 md:inline-flex"
+                  className="mt-6 hidden h-11 shrink-0 items-center gap-3 text-button-2 font-medium whitespace-nowrap text-brand-strong underline-offset-4 hover:underline lg:mt-0 lg:inline-flex"
                 >
                   Read our kitchen blog
                   <ArrowRight className="size-[18px]" aria-hidden />
@@ -46,7 +46,7 @@ export function KitchenSection() {
               </p>
               <Link
                 href="/blog"
-                className="mt-6 inline-flex h-11 items-center gap-3 text-button-2 font-medium text-brand-strong underline-offset-4 hover:underline md:hidden"
+                className="mt-6 inline-flex h-11 items-center gap-3 text-button-2 font-medium text-brand-strong underline-offset-4 hover:underline lg:hidden"
               >
                 Read our kitchen blog
                 <ArrowRight className="size-[18px]" aria-hidden />

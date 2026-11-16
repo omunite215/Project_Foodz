@@ -82,7 +82,7 @@ export function SpecialOffersCards({
           className={cn(
             'hidden items-start gap-6 lg:grid',
             row.length === 3
-              ? 'lg:grid-cols-[285fr_310fr_285fr] xl:grid-cols-[1fr_1.32fr_1fr] xl:gap-x-12 min-[1440px]:gap-x-[84px]'
+              ? 'lg:grid-cols-[285fr_310fr_285fr] xl:grid-cols-[1fr_1.32fr_1fr] xl:gap-x-12 min-[90rem]:gap-x-[84px]'
               : 'lg:grid-cols-[repeat(auto-fit,minmax(0,340px))] lg:justify-center',
           )}
         >

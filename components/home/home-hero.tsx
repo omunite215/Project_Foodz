@@ -15,7 +15,7 @@ function FactsPanel({ status }: { status: Status }) {
   const value = 'block font-sans text-title-2 font-semibold text-neutral-2 xl:text-h4';
 
   return (
-    <div className="mt-8 grid grid-cols-2 gap-4 rounded-2xl bg-neutral-7 p-4 text-left md:mt-0 md:w-full md:max-w-[414px] md:gap-9 md:self-end xl:mt-40 xl:w-[576px] xl:max-w-none xl:gap-15 xl:px-14 xl:py-7">
+    <div className="mt-8 grid grid-cols-2 gap-4 rounded-2xl bg-neutral-7 p-4 text-left md:mt-10 md:w-full md:grid-cols-[auto_1fr] md:max-w-[414px] md:gap-9 md:self-end xl:mt-40 xl:w-[576px] xl:max-w-none xl:gap-15 xl:px-14 xl:py-7">
       <p>
         <span className={label}>Delivery from</span>{' '}
         <span className={value}>{formatPrice(status.delivery.baseFeeCents)}</span>
@@ -44,7 +44,7 @@ export function HomeHero({ status }: { status: Status | null }) {
           {status ? <StoreStatus status={status} className="mb-4 md:mb-6" /> : null}
           <h1
             id="hero-title"
-            className="font-heading text-h4 leading-none text-neutral-2 md:text-h3 lg:text-h1 min-[1440px]:text-hero"
+            className="font-heading text-h4 leading-none text-neutral-2 md:text-h3 lg:text-h1 min-[90rem]:text-hero"
           >
             You&apos;ve Got Questions.
             <br />
@@ -67,7 +67,7 @@ export function HomeHero({ status }: { status: Status | null }) {
           </div>
         </div>
 
-        <div className="relative mt-8 flex justify-center md:col-start-2 md:row-span-2 md:row-start-1 md:mt-16 md:items-start xl:mt-24 xl:mr-10">
+        <div className="relative mt-8 flex justify-center md:col-start-2 md:row-span-2 md:row-start-1 md:mt-16 md:items-start md:self-start xl:mt-24 xl:mr-10">
           {/* Phones: a dome behind the dish. */}
           <div
             aria-hidden

@@ -49,7 +49,7 @@ export function HeroBowl({ src, className }: { src: string; className?: string }
       data-hero-dish
       aria-hidden
       className={cn(
-        'relative aspect-square w-[202px] md:w-[260px] lg:w-[326px] xl:w-[480px] min-[1440px]:w-[553px]',
+        'relative aspect-square w-[202px] md:w-[260px] lg:w-[326px] xl:w-[480px] min-[90rem]:w-[553px]',
         className,
       )}
     >
