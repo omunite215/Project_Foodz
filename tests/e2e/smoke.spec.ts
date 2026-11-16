@@ -73,6 +73,21 @@ test('unknown dishes return 404', async ({ page }) => {
   }
 });
 
+test('a path that is not valid percent-encoding is refused with 400, headers intact', async ({
+  request,
+}) => {
+  for (const path of ['/menu/%ff', '/menu/%', '/menu/kimchi/%ff', '/blog/%ff']) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(400);
+    const headers = response.headers();
+    expect(headers['content-security-policy'], path).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    expect(headers['x-content-type-options'], path).toBe('nosniff');
+    expect(headers['x-frame-options'], path).toBe('DENY');
+  }
+});
+
 test('API and metadata responses get a policy that allows nothing', async ({ request }) => {
   for (const path of ['/api/health', '/robots.txt', '/sitemap.xml', '/.well-known/security.txt']) {
     const headers = (await request.get(path)).headers();
