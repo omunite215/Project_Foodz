@@ -62,6 +62,12 @@ test('old dish links redirect permanently to the dish page', async ({ request })
   expect(response.headers().location).toBe('/menu/jajangmyeon');
 });
 
+test('a cuisine typed as a path opens its tab', async ({ request }) => {
+  const response = await request.get('/menu/thai', { maxRedirects: 0 });
+  expect(response.status()).toBe(308);
+  expect(response.headers().location).toBe('/menu?cuisine=thai');
+});
+
 test('unknown dishes return 404', async ({ page }) => {
   for (const path of [
     '/menu/does-not-exist',

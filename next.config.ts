@@ -50,6 +50,12 @@ const nextConfig: NextConfig = {
       // Old dish pages move permanently to their new address. The temporary catch-all (unknown
       // old ids to /menu) is left out: an id that never existed shows the dish-not-found page.
       ...legacyMenuRedirects().filter((redirect) => redirect.permanent),
+      // A cuisine typed as a path opens its tab.
+      {
+        source: '/menu/:cuisine(korean|thai|vietnamese)',
+        destination: '/menu?cuisine=:cuisine',
+        permanent: true,
+      },
     ];
   },
 };

@@ -88,6 +88,29 @@ describe('scroll memory', () => {
     expect(scroll.scrollTo).not.toHaveBeenCalled();
   });
 
+  it('focuses the dish link that was followed, without scrolling to it', async () => {
+    const scroll = stubScrolling();
+    document.body.innerHTML =
+      '<a href="/menu/pad-thai">Pad Thai special</a><a href="/menu/green-curry">Green Curry</a><a href="/menu/pad-thai">Pad Thai</a>';
+    const unmountFirst = mountMenu();
+    scroll.scrollBy(2700);
+    await flushFrames();
+    const [, , padThai] = document.querySelectorAll('a');
+    padThai?.addEventListener('click', (event) => event.preventDefault());
+    padThai?.click();
+    unmountFirst();
+
+    window.history.pushState(null, '', '/menu/pad-thai');
+    window.history.back();
+    await vi.waitFor(() => expect(window.location.pathname).toBe('/menu'));
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+
+    mountMenu();
+    expect(document.activeElement).toBe(document.querySelectorAll('a')[2]);
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    document.body.innerHTML = '';
+  });
+
   it('does not restore when the menu is opened from a link', async () => {
     const scroll = stubScrolling();
     const unmountFirst = mountMenu();

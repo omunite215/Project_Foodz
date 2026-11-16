@@ -135,6 +135,10 @@ test.describe('Menu', () => {
     await expect(page).toHaveURL(/\/menu\?cuisine=thai$/);
     await expect(page.getByRole('tab', tab('Thai'))).toHaveAttribute('aria-selected', 'true');
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrolled - 120);
+    // Keyboard users continue from the dish they opened, not from the top of the page.
+    await expect(
+      page.getByRole('tabpanel').getByRole('link', { name: /^Pad Thai,/ }),
+    ).toBeFocused();
 
     // The page's own "Go back" does the same.
     await scrollAtNextClick();
