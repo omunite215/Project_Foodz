@@ -54,6 +54,16 @@ test.describe('Menu', () => {
     await expect(page.getByRole('tab', tab('Korean'))).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('the selected tab keeps its white label under the pointer (S8.9)', async ({ page }) => {
+    await open(page, '/menu?cuisine=thai');
+    const thai = page.getByRole('tab', tab('Thai'));
+    await thai.hover();
+    // White on the brand green (4.8:1); the hover colour of other tabs would drop to about 3:1.
+    await expect
+      .poll(() => thai.evaluate((element) => getComputedStyle(element).color))
+      .toBe('rgb(255, 255, 255)');
+  });
+
   test('tabs work from the keyboard as one Tab stop (S8.5)', async ({ page }) => {
     await open(page, '/menu');
     const korean = page.getByRole('tab', tab('Korean'));

@@ -116,7 +116,7 @@ export function CuisineTabs({ dishes, counts, value: selected, onValueChange }: 
             <TabsTrigger
               key={cuisine}
               value={cuisine}
-              className="relative z-10 h-14 min-w-0 flex-1 flex-col gap-1 rounded-lg border-0 px-1 text-neutral-3 transition-colors duration-150 not-data-active:hover:text-neutral-1 data-active:bg-transparent data-active:text-white data-active:shadow-none md:h-[62px] md:w-[196px] md:flex-none md:flex-row md:gap-2"
+              className="relative z-10 h-14 min-w-0 flex-1 flex-col gap-1 rounded-lg border-0 px-1 text-neutral-3 transition-colors duration-150 not-data-active:hover:text-neutral-1 data-active:bg-transparent data-active:text-white data-active:hover:text-white data-active:shadow-none md:h-[62px] md:w-[196px] md:flex-none md:flex-row md:gap-2"
             >
               <span className="sr-only">{cuisineTabLabel(cuisine, counts[cuisine])}</span>
               <span
