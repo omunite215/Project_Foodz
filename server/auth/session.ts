@@ -2,7 +2,7 @@ import 'server-only';
 import { headers } from 'next/headers';
 import { cache } from 'react';
 import type { Actor } from '@/server/db/context';
-import { forbidden, unauthenticated } from '@/server/errors';
+import { demoReadOnly, forbidden, twoFactorRequired, unauthenticated } from '@/server/errors';
 import { auth } from './index';
 import { can, isRole, isStaff, type Permission } from './roles';
 
@@ -37,10 +37,10 @@ export async function requirePermission(permission: Permission, options: { write
   if (!can(actor.role, permission)) throw forbidden();
 
   if (actor.isDemo) {
-    if (options.write !== false) throw forbidden();
+    if (options.write !== false) throw demoReadOnly();
   } else if (isStaff(actor.role)) {
     const session = await getSession();
-    if (!session?.user.twoFactorEnabled) throw forbidden();
+    if (!session?.user.twoFactorEnabled) throw twoFactorRequired();
   }
   return actor;
 }

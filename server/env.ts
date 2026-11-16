@@ -35,6 +35,7 @@ export const env = createEnv({
 
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
+    TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
 

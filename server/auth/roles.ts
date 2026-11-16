@@ -39,27 +39,41 @@ export const statements = {
   analytics: ['read'],
   audit: ['read'],
   staff: ['assign-role'],
+  // Self-service on one's own account and address book.
+  account: ['update-own', 'export-own', 'delete-own'],
+  address: ['manage-own'],
 } as const;
 
 export const ac = createAccessControl(statements);
 
+/** Everyone manages their own profile and addresses. Staff accounts are removed by an admin. */
+const selfService = { account: ['update-own', 'export-own'], address: ['manage-own'] } as const;
+const selfServiceWithDelete = {
+  account: ['update-own', 'export-own', 'delete-own'],
+  address: ['manage-own'],
+} as const;
+
 const customer = ac.newRole({
+  ...selfServiceWithDelete,
   order: ['create', 'read-own', 'cancel'],
   partner: ['apply'],
   review: ['create'],
 });
 
 const partner = ac.newRole({
+  ...selfServiceWithDelete,
   order: ['create', 'read-own', 'cancel'],
   partner: ['apply', 'deliver'],
   review: ['create'],
 });
 
 const kitchen = ac.newRole({
+  ...selfService,
   order: ['read-any', 'update-status'],
 });
 
 const support = ac.newRole({
+  ...selfService,
   order: ['read-any', 'cancel', 'refund'],
   partner: ['review-application', 'suspend'],
   delivery: ['track-any'],
@@ -69,6 +83,7 @@ const support = ac.newRole({
 });
 
 const contentEditor = ac.newRole({
+  ...selfService,
   menu: ['create', 'update'],
   campaign: ['create', 'update', 'delete'],
   blog: ['create', 'update', 'publish', 'delete'],
@@ -77,6 +92,7 @@ const contentEditor = ac.newRole({
 
 // Admins get Better Auth's user management, except impersonation.
 const admin = ac.newRole({
+  ...selfService,
   user: ['create', 'list', 'set-role', 'ban', 'delete', 'set-password', 'get', 'update'],
   session: ['list', 'revoke', 'delete'],
   order: ['read-any', 'update-status', 'cancel', 'refund'],
