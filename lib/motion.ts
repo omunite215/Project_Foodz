@@ -97,3 +97,8 @@ export function useMotion(
     { scope, dependencies },
   );
 }
+
+/** For one-off tweens started by an event (a click, a copy): true when the user asked for less motion. */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia(MOTION_QUERIES.reduced).matches;
+}
