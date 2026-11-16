@@ -1,24 +1,7 @@
-import type { Route } from 'next';
-
-export const navLinks: { title: string; href: Route }[] = [
-  {
-    title: 'Home',
-    href: '/',
-  },
-  {
-    title: 'Menu',
-    href: '/menu',
-  },
-  {
-    title: 'Blog',
-    href: '/blog',
-  },
-  {
-    title: 'Contact',
-    href: '/contact',
-  },
-];
-
+/*
+ * The original menu data. The database seed (prisma/seeding/menu.ts) reads it and applies its
+ * corrections; the storefront itself reads the menu from the database.
+ */
 export const SpecialOffersContent = [
   {
     title: 'Gimbap',
@@ -37,119 +20,6 @@ export const SpecialOffersContent = [
     imageSrc: '/Home/SpecialOffers/kimchi.svg',
     price: 6.99,
     content: ['Pocket Friendly', 'Spicy', 'Tangy Taste'],
-  },
-];
-
-export const DeliciousContent = [
-  {
-    imageSrc: '/Home/Delicious/delivery.svg',
-    title: 'Receive The Order',
-    description: 'That help us know what delicious meal you will try, but I don’t write anything',
-  },
-  {
-    imageSrc: '/Home/Delicious/prepare.svg',
-    title: 'Prepare Your Meal',
-    description: 'That help us know what delicious meal you will try, but I don’t write anything',
-  },
-  {
-    imageSrc: '/Home/Delicious/recieve.svg',
-    title: 'Delivery Your Meal',
-    description: 'That help us know what delicious meal you will try, but I don’t write anything',
-  },
-];
-
-export const countryCodes = [
-  { name: 'U.S.A', code: '+1' },
-  { name: 'CN', code: '+1' },
-  { name: 'U.K', code: '+44' },
-  { name: 'AUS', code: '+61' },
-  { name: 'IND', code: '+91' },
-  { name: 'GER', code: '+49' },
-  // Add more countries and their country codes as needed
-];
-
-export const menuContent = [
-  {
-    title: 'Jajangmyeon',
-    price: 21.99,
-  },
-  {
-    title: 'Gimbap',
-    price: 21.99,
-  },
-  {
-    title: 'Kimchi',
-    price: 21.99,
-  },
-  {
-    title: 'Kimchi Jjigae',
-    price: 21.99,
-  },
-  {
-    title: 'Yangnyeom Chicken',
-    price: 21.99,
-  },
-  {
-    title: 'Beef Noodle Soup',
-    price: 21.99,
-  },
-];
-
-export const footerLinks: { title: string; links: { name: string; link: Route }[] }[] = [
-  {
-    title: 'Support',
-    links: [
-      {
-        name: 'Help Centre',
-        link: '/contact',
-      },
-      {
-        name: 'Safety Information',
-        link: '/blog',
-      },
-      {
-        name: 'Cancellation Options',
-        link: '/contact',
-      },
-      {
-        name: 'Report Complaint',
-        link: '/contact',
-      },
-    ],
-  },
-  {
-    title: 'Community',
-    links: [
-      {
-        name: 'Customer Review',
-        link: '/blog',
-      },
-      {
-        name: 'Newsletter',
-        link: '/blog',
-      },
-    ],
-  },
-  {
-    title: 'About',
-    links: [
-      {
-        name: 'Our Chef',
-        link: '/contact',
-      },
-      {
-        name: 'Careers',
-        link: '/contact',
-      },
-      {
-        name: 'Blog',
-        link: '/blog',
-      },
-      {
-        name: 'Contact',
-        link: '/contact',
-      },
-    ],
   },
 ];
 
