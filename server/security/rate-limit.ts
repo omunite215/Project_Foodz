@@ -11,6 +11,8 @@ const POLICIES = {
   'auth.password-reset': { points: 3, duration: 900 },
   'auth.default': { points: 30, duration: 60 },
   'coupon.check': { points: 10, duration: 60 },
+  // Price and availability re-checks before adding to the cart; about one per add.
+  'menu.check': { points: 60, duration: 60 },
   'contact.submit': { points: 3, duration: 600 },
   'support.create': { points: 5, duration: 3600 },
   'delivery.otp': { points: 5, duration: 900 },

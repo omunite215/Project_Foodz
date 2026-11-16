@@ -53,7 +53,15 @@ async function whileSoldOut(slug: string, check: () => Promise<void>) {
 
 async function addCoupon(
   code: string,
-  data: { endsAt?: Date; usageLimit?: number; usedCount?: number },
+  data: {
+    endsAt?: Date;
+    usageLimit?: number;
+    usedCount?: number;
+    startsAt?: Date;
+    isActive?: boolean;
+    isStoreCredit?: boolean;
+    ownerUserId?: string;
+  },
 ) {
   added.couponCodes.push(code);
   await migrator.coupon.create({
@@ -292,11 +300,20 @@ describe('campaigns', () => {
       await addCoupon('TEST-LIVE', {});
       await addCoupon('TEST-EXPIRED', { endsAt: new Date('2030-12-31T00:00:00Z') });
       await addCoupon('TEST-USED-UP', { usageLimit: 1, usedCount: 1 });
+      // Codes that belong to one customer or cannot be used yet must never be advertised.
+      await addCoupon('TEST-PERSONAL', { ownerUserId: uuid() });
+      await addCoupon('TEST-CREDIT', { isStoreCredit: true });
+      await addCoupon('TEST-COUPON-OFF', { isActive: false });
+      await addCoupon('TEST-NOT-YET', { startsAt: new Date('2031-01-05T00:00:00Z') });
       await addCampaign('Window');
       await addCampaign('Switched off', { isActive: false });
       await addCampaign('Live coupon', { couponCode: 'TEST-LIVE' });
       await addCampaign('Expired coupon', { couponCode: 'TEST-EXPIRED' });
       await addCampaign('Used-up coupon', { couponCode: 'TEST-USED-UP' });
+      await addCampaign('Personal coupon', { couponCode: 'TEST-PERSONAL' });
+      await addCampaign('Store credit', { couponCode: 'TEST-CREDIT' });
+      await addCampaign('Coupon switched off', { couponCode: 'TEST-COUPON-OFF' });
+      await addCampaign('Coupon not started', { couponCode: 'TEST-NOT-YET' });
       await addCampaign('Off-site link', { ctaHref: 'https://evil.example/' });
     });
 
@@ -313,6 +330,25 @@ describe('campaigns', () => {
       expect(titles).not.toContain('Switched off');
       expect(titles).not.toContain('Expired coupon');
       expect(titles).not.toContain('Used-up coupon');
+    });
+
+    it('never advertises a personal code, store credit, or a code that is off or not started', async () => {
+      const campaigns = await listActiveCampaigns('HOME_CAROUSEL', during);
+      const titles = campaigns.map((campaign) => campaign.title);
+      for (const title of [
+        'Personal coupon',
+        'Store credit',
+        'Coupon switched off',
+        'Coupon not started',
+      ]) {
+        expect(titles).not.toContain(title);
+      }
+      const codes = campaigns.map((campaign) => campaign.coupon?.code);
+      for (const code of ['TEST-PERSONAL', 'TEST-CREDIT', 'TEST-COUPON-OFF', 'TEST-NOT-YET']) {
+        expect(codes).not.toContain(code);
+      }
+      // The dish page's offer badge never points at them either.
+      expect((await getDishBySlug('pad-thai', during))?.offer?.title).toBe('Live coupon');
     });
 
     it('drops a button that would leave the site', async () => {
