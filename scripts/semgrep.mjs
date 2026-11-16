@@ -13,6 +13,9 @@ const TARGETS = [
   'scripts',
   'tests',
   'proxy.ts',
+  'next.config.ts',
+  'prisma/seed.ts',
+  'prisma/seeding',
   '.semgrep.yml',
 ];
 
