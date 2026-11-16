@@ -4,6 +4,20 @@ import { buildCsp, originOf, permissionsPolicy } from '@/server/security/csp';
 // Runs before every page request. Authorization is NOT decided here (that happens in the
 // data access layer); this only attaches per-request security headers and a request id.
 export function proxy(request: NextRequest) {
+  // Next answers a path it cannot percent-decode ("/menu/%ff") with a bare 500 and none of the
+  // security headers, so such requests are refused here first.
+  if (!isDecodable(request.nextUrl.pathname)) {
+    return new NextResponse('Bad Request', {
+      status: 400,
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+        'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+        'permissions-policy': permissionsPolicy('/'),
+      },
+    });
+  }
+
   const nonce = btoa(crypto.randomUUID());
   const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
   const isDev = process.env.NODE_ENV === 'development';
@@ -33,6 +47,15 @@ export function proxy(request: NextRequest) {
   response.headers.set('permissions-policy', permissionsPolicy(request.nextUrl.pathname));
   response.headers.set('x-request-id', requestId);
   return response;
+}
+
+function isDecodable(pathname: string) {
+  try {
+    decodeURIComponent(pathname);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const config = {

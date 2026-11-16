@@ -30,7 +30,7 @@ export interface SeedResult {
   created: Record<string, number>;
 }
 
-type Tx = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
+export type Tx = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
 
 // Fixed ids for seeded rows that have no natural unique key, so a second run finds them.
 const NAMESPACE = '8c1d7a52-5b1e-4f0e-9a37-2f4b9d0c6e11';
@@ -118,16 +118,8 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         count('users', user.created);
       }
 
-      // -------------------------------------------------------------- store
-      const settings = await tx.siteSettings.findUnique({ where: { id: 1 }, select: { id: true } });
-      if (!settings) {
-        await tx.siteSettings.create({ data: { id: 1, ...siteSettings, updatedById: admin.id } });
-        await tx.$executeRaw`UPDATE site_settings SET location = ST_SetSRID(ST_MakePoint(${siteSettings.lng}, ${siteSettings.lat}), 4326)::geography WHERE id = 1`;
-        count('siteSettings', true);
-      }
-
-      const menu = await tx.menuItem.createMany({ data: menuItems, skipDuplicates: true });
-      created.menuItems = menu.count;
+      // -------------------------------------------------------------- store, menu, promotions
+      Object.assign(created, await seedCatalog(tx, { now, updatedById: admin.id }));
 
       // -------------------------------------------------------------- demo partner and customer
       const partner = await tx.deliveryPartner.findUnique({
@@ -206,32 +198,6 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         count('contentPages', true);
       }
 
-      // -------------------------------------------------------------- promotions
-      for (const coupon of coupons(now)) {
-        const existing = await tx.coupon.findUnique({
-          where: { code: coupon.code },
-          select: { id: true },
-        });
-        if (existing) continue;
-        await tx.coupon.create({ data: coupon });
-        count('coupons', true);
-      }
-
-      for (const { key, couponCode, menuSlugs, ...campaign } of campaigns(now)) {
-        const id = seedId(`campaign:${key}`);
-        const existing = await tx.campaign.findUnique({ where: { id }, select: { id: true } });
-        if (existing) continue;
-        await tx.campaign.create({
-          data: {
-            id,
-            ...campaign,
-            coupon: couponCode ? { connect: { code: couponCode } } : undefined,
-            menuItems: { connect: menuSlugs.map((slug) => ({ slug })) },
-          },
-        });
-        count('campaigns', true);
-      }
-
       // -------------------------------------------------------------- blog
       for (const tag of tags) {
         const existing = await tx.tag.findUnique({
@@ -271,6 +237,58 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
     },
     { timeout: 60_000 },
   );
+}
+
+/**
+ * What the storefront shows: store settings, the menu, coupons and campaigns. Like the rest of
+ * the seed it only adds rows that are missing. Tests use it on its own.
+ */
+export async function seedCatalog(tx: Tx, options: { now: Date; updatedById?: string }) {
+  let siteSettingsCreated = 0;
+  const settings = await tx.siteSettings.findUnique({ where: { id: 1 }, select: { id: true } });
+  if (!settings) {
+    await tx.siteSettings.create({
+      data: { id: 1, ...siteSettings, updatedById: options.updatedById },
+    });
+    await tx.$executeRaw`UPDATE site_settings SET location = ST_SetSRID(ST_MakePoint(${siteSettings.lng}, ${siteSettings.lat}), 4326)::geography WHERE id = 1`;
+    siteSettingsCreated = 1;
+  }
+
+  const menu = await tx.menuItem.createMany({ data: menuItems, skipDuplicates: true });
+
+  let couponsCreated = 0;
+  for (const coupon of coupons(options.now)) {
+    const existing = await tx.coupon.findUnique({
+      where: { code: coupon.code },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await tx.coupon.create({ data: coupon });
+    couponsCreated += 1;
+  }
+
+  let campaignsCreated = 0;
+  for (const { key, couponCode, menuSlugs, ...campaign } of campaigns(options.now)) {
+    const id = seedId(`campaign:${key}`);
+    const existing = await tx.campaign.findUnique({ where: { id }, select: { id: true } });
+    if (existing) continue;
+    await tx.campaign.create({
+      data: {
+        id,
+        ...campaign,
+        coupon: couponCode ? { connect: { code: couponCode } } : undefined,
+        menuItems: { connect: menuSlugs.map((slug) => ({ slug })) },
+      },
+    });
+    campaignsCreated += 1;
+  }
+
+  return {
+    siteSettings: siteSettingsCreated,
+    menuItems: menu.count,
+    coupons: couponsCreated,
+    campaigns: campaignsCreated,
+  };
 }
 
 async function upsertUser(

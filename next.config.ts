@@ -1,4 +1,6 @@
 import type { NextConfig } from 'next';
+// Relative import: path aliases do not resolve in next.config.
+import { legacyMenuRedirects } from './server/modules/menu/urls';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -43,7 +45,18 @@ const nextConfig: NextConfig = {
     ];
   },
   async redirects() {
-    return [{ source: '/contact-us', destination: '/contact', permanent: true }];
+    return [
+      { source: '/contact-us', destination: '/contact', permanent: true },
+      // Old dish pages move permanently to their new address. The temporary catch-all (unknown
+      // old ids to /menu) is left out: an id that never existed shows the dish-not-found page.
+      ...legacyMenuRedirects().filter((redirect) => redirect.permanent),
+      // A cuisine typed as a path opens its tab.
+      {
+        source: '/menu/:cuisine(korean|thai|vietnamese)',
+        destination: '/menu?cuisine=:cuisine',
+        permanent: true,
+      },
+    ];
   },
 };
 

@@ -16,7 +16,9 @@ const STEPS = {
   'clean-tree': ['node', 'scripts/clean-tree.mjs'],
   lint: npx('oxlint', '--type-aware', '--deny-warnings'),
   format: ['node', 'scripts/format-check.mjs'],
-  typecheck: npx('tsc', '--noEmit'),
+  // Route types are regenerated first: types left in .next by an earlier build still point at
+  // routes that have since moved, and tsc would fail on them.
+  typecheck: [...npx('next', 'typegen'), '&&', ...npx('tsc', '--noEmit')],
   architecture: npx(
     'depcruise',
     ...['app', 'components', 'lib', 'server', 'proxy.ts'].filter((p) => existsSync(p)),
@@ -38,7 +40,14 @@ const STEPS = {
   integration: npx('vitest', 'run', '--project', 'integration'),
   build: npx('next', 'build'),
   storybook: npx('storybook', 'build', '--quiet'),
-  e2e: npx('playwright', 'test', '--project', 'smoke', '--project', 'smoke-mobile'),
+  e2e: npx(
+    'playwright',
+    'test',
+    ...['smoke', 'smoke-mobile', 'storefront-375', 'storefront-1440'].flatMap((project) => [
+      '--project',
+      project,
+    ]),
+  ),
 };
 
 const DEFAULT = [

@@ -48,6 +48,13 @@ jobs:
       - name: Storybook build
         run: node scripts/verify.mjs storybook
       - run: npx playwright install --with-deps chromium
+      # The storefront pages read the menu, so the browser tests need a seeded database.
+      # The seed prints the admin's one-time setup secret; it stays out of the log.
+      - name: Start the database and seed it
+        run: |
+          docker compose up -d --wait db redis
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts > /dev/null
       - name: Browser tests
         run: node scripts/verify.mjs e2e
 

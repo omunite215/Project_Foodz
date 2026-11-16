@@ -40,6 +40,9 @@
   --color-tag-8: #3304b9;
   --color-tag-8-bg: #f2effd;
 
+  /* Illustration only: the chopstick rest in the home hero. */
+  --color-chopstick-rest: #f7e89d;
+
   /* type scale — Alice for display, Poppins for text */
   --text-hero: 4.5rem;
   --text-hero--line-height: 1;
@@ -86,6 +89,17 @@
   --shadow-soft: 0 4px 48px 0 rgb(0 0 0 / 0.02);
   --shadow-card: 0 3px 9px 0 rgb(1 5 20 / 0.05);
   --shadow-raised: 0 10px 27px 0 rgb(53 53 53 / 0.05);
+
+  /* Skeleton pulse: opacity 1 to .55, 600 ms each way. Static under reduced motion. */
+  --animate-skeleton: skeleton 600ms ease-in-out infinite alternate;
+  @keyframes skeleton {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.55;
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,6 +119,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -150,6 +165,8 @@
   --popover-foreground: #23262f;
   --primary: #03850a;
   --primary-foreground: #ffffff;
+  /* Hover keeps white text above AA (6.7:1); a faded #03850a would drop to 3.5:1. */
+  --primary-hover: #026b08;
   --secondary: #f4f5f6;
   --secondary-foreground: #23262f;
   --muted: #f4f5f6;
@@ -188,6 +205,7 @@
   --popover-foreground: #fcfcfd;
   --primary: #04b90b;
   --primary-foreground: #141416;
+  --primary-hover: #05d50d;
   --secondary: #353945;
   --secondary-foreground: #fcfcfd;
   --muted: #23262f;
@@ -211,10 +229,15 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html {
     @apply font-sans;
+  }
+  /* One solid focus ring everywhere (3:1 or better on every surface); components may restyle it. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
   }
   body {
     @apply bg-background text-foreground;
@@ -225,289 +248,5 @@
   }
   textarea {
     resize: none;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Temporary: pre-redesign aliases and breakpoints.                    */
-/* Delete this block once every page uses the tokens above.            */
-/* ------------------------------------------------------------------ */
-@theme {
-  --breakpoint-xs: 30rem;
-  --breakpoint-ss: 38.75rem;
-  --breakpoint-sm: 48rem;
-  --breakpoint-md: 64rem;
-  --breakpoint-lg: 75rem;
-  --breakpoint-xl: 106.25rem;
-
-  --color-bgWhite: #fcfcfd;
-  --color-primaryGreen: #04b90b;
-  --color-textBlack: #23262f;
-  --color-formBlack: #141416;
-  --color-textNeutralBlack: #777e90;
-  --color-paraTextColor: #353945;
-  --color-bgGreen: #ddf3d8;
-  --color-neutralWhite: #f4f5f6;
-  --color-neutralLineWhite: #e6e8ec;
-}
-
-@utility boxWidth {
-  @apply xl:max-w-[1280px] w-full;
-}
-
-@utility flexCenter {
-  @apply flex justify-center items-center;
-}
-
-@utility flexStart {
-  @apply flex justify-center items-start;
-}
-
-@utility flexBetween {
-  @apply flex justify-between items-center;
-}
-
-@utility flexEnd {
-  @apply flex flex-1 justify-end items-center;
-}
-
-@utility padding-x {
-  @apply sm:px-16 px-6;
-}
-
-@utility padding-y {
-  @apply sm:py-28 py-6;
-}
-
-@utility padding {
-  @apply sm:px-16 px-6 sm:py-12 py-4;
-}
-
-@utility margin-x {
-  @apply sm:mx-16 mx-6;
-}
-
-@utility margin-y {
-  @apply sm:mt-20 mt-10 md:mb-8 sm:mb-10 mb-11;
-}
-
-@utility component-title-text {
-  @apply font-alice text-textBlack xs:text-5xl text-[2rem] xs:tracking-normal tracking-wider font-normal text-center leading-normal capitalize;
-  font-feature-settings:
-    'clig' off,
-    'liga' off;
-}
-
-@utility component-title-highlight-text {
-  @apply text-primaryGreen;
-}
-
-@utility component-sub-title-text {
-  @apply font-poppins md:text-2xl xs:text-xl text-lg text-textNeutralBlack leading-normal font-normal text-center max-w-192.5;
-}
-
-@utility hero-box {
-  @apply flex sm:flex-row flex-col overflow-hidden;
-}
-
-@utility hero-text-wrapper {
-  @apply flex flex-col justify-between items-start flex-1 md:gap-[9.88rem] gap-[5.12rem] xl:px-0 sm:px-16 px-[2.19rem];
-}
-
-@utility hero-internal-text-wrapper {
-  @apply flex md:items-start items-center flex-col md:gap-0 gap-4;
-}
-
-@utility hero-heading-text {
-  @apply font-alice md:text-7xl sm:text-[3.5rem] text-[2rem] sm:text-left text-center text-textBlack font-normal md:tracking-tight sm:tracking-wide tracking-wider leading-normal;
-}
-
-@utility hero-subtitle-text {
-  @apply font-poppins font-normal md:text-2xl sm:text-xl text-lg text-textNeutralBlack ml-2 mt-3 md:text-left text-center sm:w-3/4 w-full;
-}
-
-@utility hero-button-section {
-  @apply flex md:justify-start justify-center items-center gap-6 sm:mt-9 mt-4;
-}
-
-@utility hero-text-link {
-  @apply text-primaryGreen md:block hidden hover:text-green-700;
-}
-
-@utility hero-stats-wrapper {
-  @apply md:flex justify-center md:items-start hidden gap-15 font-poppins text-textNeutralBlack padding-x py-7 bg-neutralWhite rounded-2xl;
-}
-
-@utility hero-card-stat-text {
-  @apply font-poppins md:text-[2rem] text-2xl leading-normal text-textNeutralBlack font-semibold;
-}
-
-@utility hero-card-title-text {
-  @apply font-poppins md:text-xl text-lg font-normal leading-normal;
-}
-
-@utility special-offers-card-img {
-  @apply md:w-71 w-50 md:h-71 h-50 object-contain;
-}
-
-@utility special-offers-card-title {
-  @apply font-alice md:text-[2rem] xs:text-2xl text-[1.75rem] font-normal text-textBlack tracking-wider leading-normal;
-}
-
-@utility special-offers-card-cooking-time {
-  @apply font-poppins text-primaryGreen text-base leading-normal font-semibold;
-}
-
-@utility special-offers-card-rating {
-  @apply font-poppins text-paraTextColor md:text-base text-[0.0875rem] leading-normal font-normal;
-}
-
-@utility special-offers-card-price {
-  @apply font-alice text-primaryGreen leading-10 font-normal md:text-[2.5rem] text-[2rem] capitalize;
-  font-feature-settings:
-    'clig' off,
-    'liga' off;
-}
-
-@utility star-chef-link {
-  @apply font-poppins font-medium text-sm text-primaryGreen;
-}
-
-@utility delicious-card-img {
-  @apply w-12 h-12 object-contain;
-}
-
-@utility delicious-card-title-text {
-  @apply font-alice text-textBlack md:text-[1.75rem] text-xl font-normal leading-normal md:tracking-[-0.00875rem] tracking-normal;
-  font-feature-settings:
-    'clig' off,
-    'liga' off;
-}
-
-@utility delicious-card-sub-title-text {
-  @apply font-poppins text-center text-base leading-normal font-normal text-paraTextColor max-w-78.25 min-w-70.75;
-}
-
-@utility form-heading {
-  @apply font-poppins xs:text-2xl text-lg text-formBlack leading-normal opacity-80 font-normal capitalize;
-}
-
-@utility form-subHeading {
-  @apply font-poppins text-paraTextColor text-base;
-}
-
-@utility form-label-text {
-  @apply font-poppins text-base font-normal text-paraTextColor;
-}
-
-@utility form-box {
-  @apply flexStart flex-col gap-2;
-}
-
-@utility form-input {
-  @apply w-full py-2.5 px-5 border border-textNeutralBlack focus:border-textBlack rounded-xl flex flex-1 items-start justify-between text-textBlack placeholder:font-poppins placeholder:text-textNeutralBlack/80 placeholder:text-base;
-}
-
-@utility category-button {
-  @apply flexCenter min-w-49 min-h-15.5 gap-2 rounded-lg cursor-pointer transition-colors hover:bg-primaryGreen hover:text-white duration-400;
-}
-
-@utility category-button-img {
-  @apply min-w-8.25 min-h-8.25 object-contain;
-}
-
-@utility category-button-text {
-  @apply font-poppins text-xl font-normal text-center;
-}
-
-@layer components {
-  #checkbox {
-    display: none;
-  }
-
-  .toggle {
-    position: relative;
-    width: 40px;
-    height: 40px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 10px;
-    transition-duration: 0.5s;
-  }
-
-  .bars {
-    width: 100%;
-    height: 4px;
-    background-color: #777e90;
-    border-radius: 4px;
-  }
-
-  #checkbox:checked + .toggle .bars {
-    position: absolute;
-    transition-duration: 0.5s;
-  }
-
-  #checkbox:checked + .toggle #bar2 {
-    transform: scaleX(0);
-    transition-duration: 0.1s;
-  }
-
-  #checkbox:checked + .toggle #bar1 {
-    width: 100%;
-    transform: rotate(45deg);
-    transition-duration: 0.5s;
-  }
-
-  #checkbox:checked + .toggle #bar3 {
-    width: 100%;
-    transform: rotate(-45deg);
-    transition-duration: 0.5s;
-  }
-
-  #checkbox:checked + .toggle {
-    transition-duration: 0.5s;
-    transform: rotate(180deg);
-  }
-
-  .rotate-90-cw {
-    animation: rotate-90-cw 15s linear infinite;
-  }
-
-  #hero-circle-background {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: -1;
-    width: 100%;
-    height: 100%;
-    background-color: #ddf3d8;
-    border-radius: 100% 100% 100% 100% / 100% 100% 0 0;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 0 100px;
-    transform: scaleX(-1);
-    overflow: hidden;
-  }
-
-  @media (min-width: 768px) {
-    #hero-circle-background {
-      right: 0;
-      bottom: auto;
-      border-radius: 0 100% 100% 0 / 100% 100% 0 0;
-      padding: 0 50px;
-    }
-  }
-}
-
-@keyframes rotate-90-cw {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(359deg);
   }
 }

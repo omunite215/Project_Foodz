@@ -8,6 +8,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
+  // Locally the default (half the cores) starts so many browsers that a dev machine running the
+  // Docker stack runs out of memory. E2E_WORKERS overrides it.
+  workers: process.env.CI ? undefined : Number(process.env.E2E_WORKERS ?? 4),
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,
@@ -20,6 +23,22 @@ export default defineConfig({
       name: 'smoke-mobile',
       testMatch: /smoke\.spec\.ts/,
       use: { ...devices['Pixel 7'] },
+    },
+    // The storefront at the design's phone and desktop widths.
+    {
+      name: 'storefront-375',
+      testMatch: /storefront\/.*\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 375, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: 'storefront-1440',
+      testMatch: /storefront\/.*\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
   ],
   // Tests run against a production build, the same thing users get.

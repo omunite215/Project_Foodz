@@ -3,29 +3,30 @@ import Badge from './Badge';
 
 const BlogCard = () => {
   return (
-    <div className="flexStart flex-col font-poppins">
+    <article className="flex max-w-[636px] flex-col items-start">
       <Image
         src="/Blog/blog1.png"
         width={636}
         height={318}
-        className=" object-contain"
-        loading="eager"
-        alt="blog-img"
+        className="h-auto w-full rounded-2xl object-contain"
+        alt=""
       />
-      <p className="text-xs text-textNeutralBlack font-medium mt-5 mb-3">&#x2022; Jun 20, 2022</p>
-      <h1 className=" text-2xl font-medium text-paraTextColor my-3">
+      <p className="mt-5 mb-3 text-caption font-medium text-muted-foreground">
+        <time dateTime="2022-06-20">Jun 20, 2022</time>
+      </p>
+      <h3 className="my-3 text-title-2 font-medium text-neutral-3">
         Healthy Food Choices for Your Family
-      </h1>
-      <p className=" text-sm text-textNeutralBlack w-2/3 mb-8">
+      </h3>
+      <p className="mb-8 text-body-5 text-muted-foreground md:w-2/3">
         How can you ensure that your child is well nourished? Here are some tips to keep in mind
         when planning and preparing meals for your family.
       </p>
-      <div className="flexStart gap-4">
+      <div className="flex flex-wrap gap-4">
         <Badge type="Food" />
         <Badge type="Healthy" />
         <Badge type="Family" />
       </div>
-    </div>
+    </article>
   );
 };
 

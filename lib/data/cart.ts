@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 /*
  * The cart lives in the browser: saved in localStorage and kept in sync across tabs. It holds
- * only what the customer picked (item, flavors, quantity), never prices. Totals always come
+ * only what the customer picked (item, flavors, quantity, a note for the kitchen), never prices. Totals always come
  * from the server.
  *
  * Components use the hooks at the bottom of this file and never TanStack DB directly, so the
@@ -20,13 +20,14 @@ import { z } from 'zod';
  */
 
 export const MAX_LINE_QUANTITY = 20;
+export const MAX_NOTE_LENGTH = 200;
 
 export const cartLineSchema = z.object({
   id: z.string().min(1),
   menuItemId: z.uuid(),
   flavors: z.array(z.string().min(1).max(40)).max(5),
   quantity: z.int().min(1).max(MAX_LINE_QUANTITY),
-  note: z.string().max(200).optional(),
+  note: z.string().min(1).max(MAX_NOTE_LENGTH).optional(),
 });
 
 export type CartLine = z.infer<typeof cartLineSchema>;
@@ -35,11 +36,24 @@ export interface NewCartLine {
   menuItemId: string;
   flavors?: readonly string[];
   quantity?: number;
+  /** For the kitchen, up to 200 characters. Blank notes are not kept. */
+  note?: string;
 }
 
-/** The same dish with the same flavors is one line. */
-export function cartLineId(menuItemId: string, flavors: readonly string[] = []) {
-  return [menuItemId, ...flavors.toSorted()].join('|');
+/** Surrounding spaces are dropped; an empty note is no note. */
+export function cleanNote(note: string | undefined): string | undefined {
+  const trimmed = note?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/**
+ * The same dish with the same flavors and the same note is one line. A different note makes a
+ * separate line, so adding the dish again never overwrites what was asked of the kitchen.
+ */
+export function cartLineId(menuItemId: string, flavors: readonly string[] = [], note?: string) {
+  const id = [menuItemId, ...flavors.toSorted()].join('|');
+  const kept = cleanNote(note);
+  return kept ? `${id}#${encodeURIComponent(kept)}` : id;
 }
 
 const clampQuantity = (quantity: number) =>
@@ -89,8 +103,9 @@ export function cartActions(client: DbClient) {
   const cart = client.collection(cartCollection);
 
   return {
-    add({ menuItemId, flavors = [], quantity = 1 }: NewCartLine) {
-      const id = cartLineId(menuItemId, flavors);
+    add({ menuItemId, flavors = [], quantity = 1, note }: NewCartLine) {
+      const kept = cleanNote(note);
+      const id = cartLineId(menuItemId, flavors, kept);
       if (cart.has(id)) {
         cart.update(id, (line) => {
           line.quantity = clampQuantity(line.quantity + quantity);
@@ -101,6 +116,7 @@ export function cartActions(client: DbClient) {
           menuItemId,
           flavors: flavors.toSorted(),
           quantity: clampQuantity(quantity),
+          ...(kept ? { note: kept } : {}),
         });
       }
     },
