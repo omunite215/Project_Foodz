@@ -22,11 +22,24 @@ const TOLERANCE_PX = 48;
 let poppedTo: string | null = null;
 
 const currentAddress = () => `${window.location.pathname}${window.location.search}`;
+const addressOf = (url: string) => {
+  const { pathname, search } = new URL(url);
+  return `${pathname}${search}`;
+};
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('popstate', () => {
-    poppedTo = currentAddress();
-  });
+  // The router renders the previous page inside its own popstate listener, before a popstate
+  // listener added here would run. The Navigation API's navigate event comes first, so use it
+  // where it exists; elsewhere the hook also checks again once popstate has been handled.
+  if ('navigation' in window && window.navigation) {
+    window.navigation.addEventListener('navigate', (event) => {
+      if (event.navigationType === 'traverse') poppedTo = addressOf(event.destination.url);
+    });
+  } else {
+    window.addEventListener('popstate', () => {
+      poppedTo = currentAddress();
+    });
+  }
 }
 
 function read(address: string): number | null {
@@ -93,7 +106,8 @@ function writeFollowed(address: string, link: FollowedLink) {
 export function useScrollMemory(pathname: string) {
   useLayoutEffect(() => {
     const address = currentAddress();
-    if (poppedTo === address) {
+    const restoreIfReturning = () => {
+      if (poppedTo !== address) return false;
       poppedTo = null;
       const saved = read(address);
       if (saved !== null && Math.abs(window.scrollY - saved) > TOLERANCE_PX) {
@@ -104,7 +118,10 @@ export function useScrollMemory(pathname: string) {
         const links = linksTo(followed.href);
         (links[followed.index] ?? links[0])?.focus({ preventScroll: true });
       }
-    }
+      return true;
+    };
+    // Without the Navigation API, popstate may not have been seen yet: look again after it.
+    const retry = restoreIfReturning() ? undefined : window.setTimeout(restoreIfReturning, 0);
 
     const remember = (event: MouseEvent) => {
       if (window.location.pathname !== pathname || !(event.target instanceof Element)) return;
@@ -130,6 +147,7 @@ export function useScrollMemory(pathname: string) {
       window.removeEventListener('scroll', save);
       document.removeEventListener('click', remember, true);
       window.cancelAnimationFrame(frame);
+      window.clearTimeout(retry);
     };
   }, [pathname]);
 }
