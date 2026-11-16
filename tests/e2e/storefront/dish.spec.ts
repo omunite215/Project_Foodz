@@ -96,7 +96,14 @@ test.describe('Dish page', () => {
   });
 
   test('an unknown dish answers 404 inside the normal page (S4.4)', async ({ page }) => {
-    for (const path of ['/menu/does-not-exist', '/menu/%00', `/menu/${'a'.repeat(300)}`]) {
+    for (const path of [
+      '/menu/does-not-exist',
+      '/menu/%00',
+      `/menu/${'a'.repeat(300)}`,
+      // Below an unknown dish, and below a real one.
+      '/menu/korean/does-not-exist',
+      '/menu/jajangmyeon/anything',
+    ]) {
       const response = await open(page, path);
       expect(response?.status(), path).toBe(404);
       await expect(page).toHaveTitle('Dish not found | Foodz');

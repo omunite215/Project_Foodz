@@ -20,9 +20,8 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const dish = await loadDish((await params).slug);
-  return dish
-    ? { title: dish.title, description: dish.description }
-    : { title: 'Dish not found', robots: { index: false } };
+  // An unknown dish never reaches this page: the layout answers 404 and sets that page's title.
+  return dish ? { title: dish.title, description: dish.description } : {};
 }
 
 export default async function DishPage({ params }: Props) {
