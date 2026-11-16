@@ -31,6 +31,15 @@ function createClient() {
     // Default checksums add query parameters that browsers, R2 and RustFS do not handle.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
+    // Without these a stalled storage server hangs the request indefinitely. A timed-out call is
+    // retried on a new connection, then fails. throwOnRequestTimeout is needed: without it the SDK
+    // only logs a warning and keeps waiting.
+    requestHandler: {
+      connectionTimeout: 3_000,
+      requestTimeout: 10_000,
+      throwOnRequestTimeout: true,
+    },
+    maxAttempts: 3,
   });
 }
 
