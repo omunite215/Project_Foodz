@@ -8,6 +8,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
+  // Locally the default (half the cores) starts so many browsers that a dev machine running the
+  // Docker stack runs out of memory. E2E_WORKERS overrides it.
+  workers: process.env.CI ? undefined : Number(process.env.E2E_WORKERS ?? 4),
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,
