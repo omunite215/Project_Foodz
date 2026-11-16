@@ -46,7 +46,7 @@ export function MenuSkeleton() {
           ))}
         </div>
       </div>
-      <ul className="mt-12 grid gap-8 md:mt-20 md:grid-cols-2 md:gap-x-6 md:gap-y-20 lg:grid-cols-3 lg:gap-x-8 xl:mx-auto xl:max-w-[1168px] xl:gap-x-[74px] xl:gap-y-20">
+      <ul className="mt-12 grid gap-8 sm:grid-cols-2 sm:gap-x-6 md:mt-20 md:gap-y-20 lg:grid-cols-3 lg:gap-x-8 xl:mx-auto xl:max-w-[1168px] xl:gap-x-[74px] xl:gap-y-20">
         {Array.from({ length: 6 }, (_, index) => (
           <li key={index} className={index >= 2 ? 'hidden md:block' : undefined}>
             <DishCardSkeleton />

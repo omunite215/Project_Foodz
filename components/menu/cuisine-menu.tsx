@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CUISINE_LABELS, cuisineTabLabel } from '@/lib/format';
 import { useMotion } from '@/lib/motion';
+import { useScrollMemory } from '@/lib/scroll-memory';
 
 const isCuisine = (value: string): value is Cuisine =>
   CUISINES.some((cuisine) => cuisine === value);
@@ -47,7 +48,7 @@ function DishGrid({ dishes, cuisine }: { dishes: Dish[]; cuisine: Cuisine }) {
   return (
     <ul
       ref={ref}
-      className="grid gap-8 md:grid-cols-2 md:gap-x-6 md:gap-y-20 lg:grid-cols-3 lg:gap-x-8 xl:mx-auto xl:max-w-[1168px] xl:gap-x-[74px] xl:gap-y-20"
+      className="grid gap-8 sm:grid-cols-2 sm:gap-x-6 md:gap-y-20 lg:grid-cols-3 lg:gap-x-8 xl:mx-auto xl:max-w-[1168px] xl:gap-x-[74px] xl:gap-y-20"
     >
       {dishes.map((dish, index) => (
         <li key={dish.id} className="h-full">
@@ -170,5 +171,7 @@ export function CuisineTabs({ dishes, counts, value: selected, onValueChange }: 
  */
 export function CuisineMenu({ dishes, counts }: { dishes: Dish[]; counts: CuisineCounts }) {
   const selected = parseCuisineParam(useSearchParams().get('cuisine'));
+  // Back from a dish returns to the same place in the list, even when the menu renders late.
+  useScrollMemory('/menu');
   return <CuisineTabs dishes={dishes} counts={counts} value={selected} onValueChange={showTab} />;
 }
