@@ -48,14 +48,19 @@ jobs:
       - name: Storybook build
         run: node scripts/verify.mjs storybook
       - run: npx playwright install --with-deps chromium
-      # The storefront pages read the menu, so the browser tests need a seeded database.
-      # The seed prints the admin's one-time setup secret; it stays out of the log.
-      - name: Start the database and seed it
+      # The storefront pages read the menu, so the browser tests need a seeded database. The
+      # account tests also need the sample accounts (SEED_SAMPLE_ACCOUNTS=true in .env.example),
+      # the email path (the Inngest dev server hands jobs to the app, which sends to Mailpit),
+      # and the seeded admin's authenticator secret, which the seed prints once: it goes to a file
+      # in the runner's temp folder, never the log.
+      - name: Start the stack and seed it
         run: |
-          docker compose up -d --wait db redis
+          docker compose up -d --wait db redis mail jobs
           npx prisma migrate deploy
-          npx tsx prisma/seed.ts > /dev/null
+          npx tsx prisma/seed.ts > "$RUNNER_TEMP/seed-output.txt"
       - name: Browser tests
+        env:
+          E2E_SEED_OUTPUT: ${{ runner.temp }}/seed-output.txt
         run: node scripts/verify.mjs e2e
 
       - if: failure()

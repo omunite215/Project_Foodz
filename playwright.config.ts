@@ -40,6 +40,25 @@ export default defineConfig({
       testMatch: /storefront\/.*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
+    // Sign-in and account pages (F2). They create accounts and wait for emails, so each test
+    // gets more time than a storefront page needs.
+    {
+      name: 'account-375',
+      testMatch: /account\/.*\.spec\.ts/,
+      timeout: 90_000,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 375, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: 'account-1440',
+      testMatch: /account\/.*\.spec\.ts/,
+      timeout: 90_000,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
   ],
   // Tests run against a production build, the same thing users get.
   webServer: process.env.E2E_BASE_URL
