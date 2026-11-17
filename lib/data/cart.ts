@@ -8,6 +8,7 @@ import {
   useDbClient,
   useLiveQuery,
 } from '@tanstack/react-db';
+import { useEffect, useRef } from 'react';
 import { z } from 'zod';
 
 /*
@@ -158,4 +159,80 @@ export function useCart() {
 
 export function useCartActions(): CartActions {
   return cartActions(useDbClient());
+}
+
+// ------------------------------------------------------------------ cart and sessions (S5.10)
+
+/*
+ * A cart filled or kept while signed in belongs to that session on this device: when the session
+ * ends (signed out here or elsewhere, a reset, deletion, suspension, 7 idle days) the cart is
+ * emptied the next time the site loads. A guest cart is never touched. The session is
+ * identified by an opaque key from the server, never by its token.
+ */
+
+export const CART_SESSION_STORAGE_KEY = 'foodz.cart.session';
+
+export interface CartSessionCheck {
+  /** The cart was kept for a session that has ended: empty it and say so. */
+  emptyCart: boolean;
+  /** The session the cart belongs to from now on (null: a guest cart). */
+  owner: string | null;
+}
+
+export function cartSessionCheck(
+  saved: string | null,
+  current: string | null,
+  hasItems: boolean,
+): CartSessionCheck {
+  return { emptyCart: saved !== null && saved !== current && hasItems, owner: current };
+}
+
+function readCartOwner(): string | null {
+  try {
+    return window.localStorage.getItem(CART_SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeCartOwner(owner: string | null) {
+  try {
+    if (owner) window.localStorage.setItem(CART_SESSION_STORAGE_KEY, owner);
+    else window.localStorage.removeItem(CART_SESSION_STORAGE_KEY);
+  } catch {
+    // Storage blocked: the cart is simply not tied to the session.
+  }
+}
+
+/**
+ * Ties the cart to the signed-in session. Calls `onEmptied` once when a cart kept for a session
+ * that has since ended was emptied.
+ */
+export function useCartSession(sessionKey: string | null, onEmptied: () => void) {
+  const { isReady, itemCount } = useCart();
+  const actions = useCartActions();
+  const latest = useRef({ itemCount, actions, onEmptied });
+  useEffect(() => {
+    latest.current = { itemCount, actions, onEmptied };
+  });
+
+  useEffect(() => {
+    if (!isReady) return;
+    const { itemCount: count, actions: cart, onEmptied: emptied } = latest.current;
+    const check = cartSessionCheck(readCartOwner(), sessionKey, count > 0);
+    writeCartOwner(check.owner);
+    if (check.emptyCart) {
+      cart.clear();
+      emptied();
+    }
+  }, [isReady, sessionKey]);
+}
+
+/** Signing out on purpose: the cart on this device is emptied (every tab follows). */
+export function useEndCartSession() {
+  const actions = useCartActions();
+  return () => {
+    writeCartOwner(null);
+    actions.clear();
+  };
 }
