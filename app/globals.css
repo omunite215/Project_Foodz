@@ -127,6 +127,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -174,6 +175,8 @@
   --accent: #d3f9d5;
   --accent-foreground: #141416;
   --destructive: #d12b4f;
+  /* Solid danger button hover; white text stays at 7.1:1. */
+  --destructive-hover: #a8203d;
   --border: #e6e8ec;
   /* form control outlines need 3:1 against the page */
   --input: #777e90;

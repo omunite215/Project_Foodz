@@ -73,7 +73,7 @@
     "no-underscore-dangle": [
       "warn",
       {
-        "allow": ["_count", "_sum", "_avg", "_min", "_max"]
+        "allow": ["_count", "_sum", "_avg", "_min", "_max", "_errors"]
       }
     ]
   },
