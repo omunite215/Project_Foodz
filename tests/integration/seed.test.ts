@@ -9,6 +9,7 @@ import { PrismaClient } from '@/server/db/generated/client';
 import {
   DEMO_ACCOUNTS,
   SAMPLE_ACCOUNTS,
+  sampleAccountsRefusal,
   type SeedResult,
   seedDatabase,
 } from '../../prisma/seeding';
@@ -20,7 +21,7 @@ const config = {
   adminEmail: 'Owner@Foodz.Example',
   adminPassword: 'correct horse battery staple',
   demoPassword: 'demo-password-1',
-  sampleAccounts: true,
+  samplePassword: 'sample-password-1',
 };
 
 let migrator: PrismaClient;
@@ -32,7 +33,11 @@ beforeAll(async () => {
     adapter: new PrismaPg({ connectionString: inject('migratorUrl') }),
   });
   first = await seedDatabase(migrator, config);
-  second = await seedDatabase(migrator, { ...config, demoPassword: 'demo-password-2' });
+  second = await seedDatabase(migrator, {
+    ...config,
+    demoPassword: 'demo-password-2',
+    samplePassword: 'sample-password-2',
+  });
 }, 120_000);
 
 afterAll(async () => {
@@ -166,7 +171,7 @@ describe('seed', () => {
   });
 });
 
-describe('sample customers (local and demo only)', () => {
+describe('sample customers (local and CI only)', () => {
   it('adds an unconfirmed, a suspended and a second customer, none of them demo logins', async () => {
     const users = await migrator.user.findMany({
       where: { email: { in: SAMPLE_ACCOUNTS.map((account) => account.email) } },
@@ -210,8 +215,42 @@ describe('sample customers (local and demo only)', () => {
         role: 'customer',
       },
     ]);
+  });
+
+  it('gives them their own password, reset on every run, never the shared demo password', async () => {
+    for (const { email } of SAMPLE_ACCOUNTS) {
+      const { password } = await credentialOf(email);
+      expect(await verifyPassword({ hash: password!, password: 'sample-password-2' })).toBe(true);
+      expect(await verifyPassword({ hash: password!, password: 'demo-password-2' })).toBe(false);
+    }
+  });
+
+  it('are refused for any database that is not local or CI', () => {
+    const local = 'postgresql://foodz_migrator:x@127.0.0.1:5433/foodz';
+    expect(sampleAccountsRefusal(local, {})).toBeNull();
+    expect(sampleAccountsRefusal('postgresql://u:x@localhost:5432/foodz', {})).toBeNull();
+    expect(sampleAccountsRefusal('postgresql://u:x@db:5432/foodz', {})).toBeNull();
+    expect(
+      sampleAccountsRefusal('postgresql://u:x@postgres:5432/foodz', { CI: 'true' }),
+    ).toBeNull();
+
+    const hosted = 'postgresql://u:x@ep-demo-123.us-east-2.aws.neon.tech/foodz';
+    expect(sampleAccountsRefusal(hosted, {})).toMatch(/not a local or CI database/);
+    expect(sampleAccountsRefusal(local, { VERCEL_ENV: 'preview' })).toMatch(/Vercel/);
+    expect(sampleAccountsRefusal(local, { VERCEL_ENV: 'production', CI: '1' })).toMatch(/Vercel/);
+    expect(sampleAccountsRefusal('not a url', {})).toMatch(/could not be read/);
+  });
+
+  it('are left out when no sample password is given', async () => {
+    const before = await migrator.user.count({ where: { isSample: true } });
+    await seedDatabase(migrator, {
+      ...config,
+      demoPassword: 'demo-password-2',
+      samplePassword: undefined,
+    });
+    expect(await migrator.user.count({ where: { isSample: true } })).toBe(before);
     const { password } = await credentialOf('second.customer@foodz.example');
-    expect(await verifyPassword({ hash: password!, password: 'demo-password-2' })).toBe(true);
+    expect(await verifyPassword({ hash: password!, password: 'sample-password-2' })).toBe(true);
   });
 
   it('gives the second customer a Work address inside the area, and the demo Home its kind', async () => {

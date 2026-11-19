@@ -19,6 +19,8 @@ import { setWelcomeNotice } from '@/server/modules/account/notices';
 import { emailKey, takeAttempt } from '@/server/security/rate-limit';
 import { checkTurnstile, turnstileError } from '@/server/security/turnstile';
 import {
+  CAPTCHA_ACTIONS,
+  type CaptchaAction,
   changeEmailInput,
   changePasswordInput,
   requestPasswordResetInput,
@@ -85,16 +87,16 @@ function inputError(error: unknown, passwordField: string): AppError | undefined
 
 function unexpected(error: unknown, flow: string): never {
   if (error instanceof AppError) throw error;
-  logger.error({ err: error, flow, code: codeOf(error) }, 'auth flow failed');
+  logger.error({ err: error, flow, errorCode: codeOf(error) }, 'auth flow failed');
   throw error;
 }
 
 async function requireTurnstile(
   token: string | undefined,
-  ip: string,
+  check: { ip: string; action: CaptchaAction },
   refund: () => Promise<unknown>,
 ) {
-  const result = await checkTurnstile(token, ip);
+  const result = await checkTurnstile(token, check);
   if (result === 'passed') return;
   await refund();
   throw turnstileError(result);
@@ -120,7 +122,11 @@ export async function signIn(input: unknown, request: FlowRequest): Promise<Sign
   const refund = () => Promise.all([byNetwork.refund(), byEmail.refund()]);
 
   if (byEmail.consumed > 1 || byNetwork.consumed > 3) {
-    await requireTurnstile(captchaToken, request.ip, refund);
+    await requireTurnstile(
+      captchaToken,
+      { ip: request.ip, action: CAPTCHA_ACTIONS.signIn },
+      refund,
+    );
   }
 
   const returnPath = safeRedirectPath(callbackUrl);
@@ -228,7 +234,9 @@ export async function verifyTwoFactor(input: unknown, request: FlowRequest) {
 export async function signUp(input: unknown, request: FlowRequest): Promise<SignUpResult> {
   const { name, email, password, captchaToken, callbackUrl } = signUpInput.parse(input);
   const attempt = await takeAttempt('auth.sign-up', `ip:${request.ip}`);
-  await requireTurnstile(captchaToken, request.ip, () => attempt.refund());
+  await requireTurnstile(captchaToken, { ip: request.ip, action: CAPTCHA_ACTIONS.signUp }, () =>
+    attempt.refund(),
+  );
 
   const redirectTo = safeRedirectPath(callbackUrl);
   try {
@@ -261,7 +269,7 @@ export async function requestPasswordReset(input: unknown, request: FlowRequest)
       throw error;
     },
   );
-  await requireTurnstile(captchaToken, request.ip, () =>
+  await requireTurnstile(captchaToken, { ip: request.ip, action: CAPTCHA_ACTIONS.reset }, () =>
     Promise.all([byNetwork.refund(), byEmail.refund()]),
   );
 

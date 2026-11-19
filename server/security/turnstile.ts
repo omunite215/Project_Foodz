@@ -1,26 +1,54 @@
 import 'server-only';
 import { z } from 'zod';
+import { UNKNOWN_CLIENT } from '@/server/client-ip';
 import { AppError, invalidInput } from '@/server/errors';
 
 const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TIMEOUT_MS = 5000;
-const verifyResponse = z.object({ success: z.boolean() });
+const verifyResponse = z.object({
+  success: z.boolean(),
+  hostname: z.string().max(253).optional(),
+  action: z.string().max(64).optional(),
+});
+
+/**
+ * Cloudflare's published test secrets (always pass, always fail, already spent). Their answers
+ * carry a fixed hostname, example.com, and no action, so neither can be compared.
+ */
+const TEST_SECRET = /^[123]x0{31}AA$/;
 
 export type TurnstileResult = 'passed' | 'missing' | 'failed' | 'unavailable';
+
+export interface TurnstileCheck {
+  /** The client address, passed on to Cloudflare when known. */
+  ip?: string;
+  /** The widget's `action`; a token solved for another form fails. */
+  action?: string;
+}
+
+/** The host the widget must have been solved on: this site's. */
+function siteHostname() {
+  try {
+    return process.env.NEXT_PUBLIC_SITE_URL
+      ? new URL(process.env.NEXT_PUBLIC_SITE_URL).hostname
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Checks a Cloudflare Turnstile token. Never throws. */
 export async function checkTurnstile(
   token: string | undefined,
-  ip?: string,
+  { ip, action }: TurnstileCheck = {},
   fetchImpl: typeof fetch = fetch,
 ): Promise<TurnstileResult> {
   if (!token) return 'missing';
-  const body = new URLSearchParams({
-    secret: process.env.TURNSTILE_SECRET_KEY ?? '',
-    response: token,
-  });
-  if (ip && ip !== 'unknown') body.set('remoteip', ip);
+  const secret = process.env.TURNSTILE_SECRET_KEY ?? '';
+  const body = new URLSearchParams({ secret, response: token });
+  if (ip && ip !== UNKNOWN_CLIENT) body.set('remoteip', ip);
 
+  let answer: z.infer<typeof verifyResponse>;
   try {
     const response = await fetchImpl(VERIFY_URL, {
       method: 'POST',
@@ -31,10 +59,17 @@ export async function checkTurnstile(
     if (!response.ok) return 'unavailable';
     const result = verifyResponse.safeParse(await response.json());
     if (!result.success) return 'unavailable';
-    return result.data.success ? 'passed' : 'failed';
+    answer = result.data;
   } catch {
     return 'unavailable';
   }
+
+  if (!answer.success) return 'failed';
+  if (TEST_SECRET.test(secret)) return 'passed';
+  const hostname = siteHostname();
+  if (hostname && answer.hostname !== hostname) return 'failed';
+  if (action && answer.action !== action) return 'failed';
+  return 'passed';
 }
 
 const FAILURES = {
@@ -54,8 +89,8 @@ export function turnstileError(result: Exclude<TurnstileResult, 'passed'>): AppE
 }
 
 /** Verifies a token for public forms (contact, partner application); throws when it fails. */
-export async function verifyTurnstile(token: string | undefined, ip?: string) {
-  const result = await checkTurnstile(token, ip);
+export async function verifyTurnstile(token: string | undefined, check: TurnstileCheck = {}) {
+  const result = await checkTurnstile(token, check);
   if (result === 'missing') throw invalidInput('Please complete the verification.');
   if (result !== 'passed') throw turnstileError(result);
 }

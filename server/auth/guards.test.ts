@@ -52,7 +52,6 @@ describe('auth admin endpoints', () => {
 
 describe('endpoints open over HTTP', () => {
   it.each([
-    ['GET', '/api/auth/get-session'],
     ['GET', '/api/auth/verify-email'],
     ['GET', '/api/auth/reset-password/abc123'],
     ['GET', '/api/auth/callback/google'],
@@ -86,8 +85,10 @@ describe('endpoints open over HTTP', () => {
     ['POST', '/api/auth/revoke-other-sessions'],
     // Two-factor enrolment arrives in F11.
     ['POST', '/api/auth/two-factor/enable'],
-    // Wrong method on an open endpoint.
+    // The session (with its token) is read on the server only.
+    ['GET', '/api/auth/get-session'],
     ['POST', '/api/auth/get-session'],
+    // Wrong method on an open endpoint.
     ['GET', '/api/auth/sign-out'],
     ['GET', '/api/auth/nothing-here'],
   ])('refuse %s %s for everyone', (method, pathname) => {
@@ -98,7 +99,7 @@ describe('endpoints open over HTTP', () => {
 });
 
 describe('demo accounts', () => {
-  it('may sign out and read their session, never other sessions or linked accounts', () => {
+  it('may sign out, never read other sessions or linked accounts', () => {
     expect(
       authRequestDecision({ method: 'POST', pathname: '/api/auth/sign-out', user: demo }),
     ).toBe('allow');

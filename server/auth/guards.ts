@@ -4,11 +4,13 @@
  * Sign-in, sign-up, password reset, email confirmation requests, email and password changes
  * and the two-factor step go through Server Actions (server/modules/auth), which add rate
  * limits, Turnstile and audit. Over HTTP only what the browser itself must reach stays open:
- * the session read, sign-out, Google sign-in and its callback, and the links in emails.
+ * sign-out, Google sign-in and its callback, and the links in emails. The session is read on the
+ * server (server/auth/session.ts); the library's session endpoint would hand the session token,
+ * IP address and ban reason to page scripts, so it is closed.
  *
  * - Admin endpoints need a real staff account with two-factor on; the demo admin is read-only.
- * - Demo accounts are shared by everyone trying the site, so they may only read their session,
- *   follow links and sign out.
+ * - Demo accounts are shared by everyone trying the site, so they may only follow links and sign
+ *   out.
  */
 
 export type AuthDecision = 'allow' | 'not-found' | 'forbidden' | 'demo-read-only';
@@ -21,7 +23,6 @@ interface Endpoint {
 }
 
 const ENDPOINTS: readonly Endpoint[] = [
-  { methods: ['GET'], path: /^\/get-session$/, demo: true },
   { methods: ['GET'], path: /^\/ok$/, demo: true },
   { methods: ['GET'], path: /^\/error$/, demo: true },
   { methods: ['GET'], path: /^\/verify-email$/, demo: true },

@@ -52,7 +52,7 @@ export const auth = betterAuth({
     async sendResetPassword({ user, url }) {
       // Demo inboxes are shared; deleted accounts have none (S3.13, S6.5).
       if (!receivesAccountEmail(user)) return;
-      await queueAccountEmail({ kind: 'reset-password', to: user.email, name: user.name, url });
+      await queueAccountEmail({ kind: 'reset-password', to: user.email, url });
     },
     async onPasswordReset({ user }) {
       await passwordWasReset(user);
@@ -61,12 +61,13 @@ export const auth = betterAuth({
 
   emailVerification: {
     sendOnSignUp: true,
-    // A confirm link opened in another browser signs that browser in (S3.2).
+    // A confirm link opened in a signed-out browser signs it in (S3.2). A browser signed in to
+    // another account stays as it is (hooks.ts).
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60 * 24,
     async sendVerificationEmail({ user, url }) {
       if (!receivesAccountEmail(user)) return;
-      await queueAccountEmail({ kind: 'verify-email', to: user.email, name: user.name, url });
+      await queueAccountEmail({ kind: 'verify-email', to: user.email, url });
     },
   },
 

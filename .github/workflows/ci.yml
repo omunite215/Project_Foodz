@@ -51,8 +51,8 @@ jobs:
       # The storefront pages read the menu, so the browser tests need a seeded database. The
       # account tests also need the sample accounts (SEED_SAMPLE_ACCOUNTS=true in .env.example),
       # the email path (the Inngest dev server hands jobs to the app, which sends to Mailpit),
-      # and the seeded admin's authenticator secret, which the seed prints once: it goes to a file
-      # in the runner's temp folder, never the log.
+      # and two values the seed prints: the seeded admin's authenticator secret and the sample
+      # accounts' password. The output goes to a file in the runner's temp folder, never the log.
       - name: Start the stack and seed it
         run: |
           docker compose up -d --wait db redis mail jobs
@@ -61,6 +61,8 @@ jobs:
       - name: Browser tests
         env:
           E2E_SEED_OUTPUT: ${{ runner.temp }}/seed-output.txt
+          # Test-only: the app takes each test's own X-Forwarded-For as its address.
+          CLIENT_IP_FROM_HEADER: '1'
         run: node scripts/verify.mjs e2e
 
       - if: failure()
@@ -94,6 +96,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: node scripts/setup-env.mjs
       - name: Start the full stack
+        env:
+          # The scan needs no sample accounts, and their password would land in the job's logs.
+          SEED_SAMPLE_ACCOUNTS: 'false'
         run: |
           docker compose --profile app up -d --build
           for i in $(seq 1 60); do

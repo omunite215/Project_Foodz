@@ -20,3 +20,6 @@ process.env.BETTER_AUTH_URL = 'http://localhost:3456';
 process.env.NEXT_PUBLIC_SITE_URL ??= 'http://localhost:3456';
 process.env.FIELD_ENCRYPTION_KEY = randomBytes(32).toString('base64');
 process.env.TURNSTILE_SECRET_KEY = 'test-turnstile-secret';
+
+// Each test browser has its own address (support/browser.ts sends it as X-Forwarded-For).
+process.env.CLIENT_IP_FROM_HEADER = '1';

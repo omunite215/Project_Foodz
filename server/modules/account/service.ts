@@ -273,7 +273,7 @@ export async function deleteAccount(
     }
     if (!(await verifyPassword({ hash, password }))) {
       throw invalidInput('Check the highlighted fields.', {
-        password: ["Your password isn't right."],
+        password: ["That password isn't right. Try again."],
       });
     }
   }
@@ -289,7 +289,11 @@ export async function deleteAccount(
     if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
     await anonymizeAccount(ctx, actor.userId, now);
     await audit(ctx, { action: 'account.deleted', targetType: 'user', targetId: actor.userId });
-    return { email: profile.email, name: profile.name };
+    return {
+      email: profile.email,
+      // Greeted by name only when the address was confirmed (the name may be a stranger's).
+      name: profile.emailVerified ? profile.name : undefined,
+    };
   });
 
   // Addressed before the details were erased; sent once the deletion is committed.

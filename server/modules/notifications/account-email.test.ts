@@ -18,13 +18,18 @@ process.env.LOG_LEVEL = 'silent';
 process.env.FIELD_ENCRYPTION_KEY = randomBytes(32).toString('base64');
 process.env.NEXT_PUBLIC_SITE_URL = 'https://foodz.example';
 
-const { deliverAccountEmail, queueAccountEmail, renderAccountEmail, unsealAccountEmail } =
-  await import('./account-email');
+const {
+  deliverAccountEmail,
+  queueAccountEmail,
+  renderAccountEmail,
+  sealAccountEmail,
+  unsealAccountEmail,
+} = await import('./account-email');
+type AccountEmail = import('./account-email').AccountEmail;
 
 const confirm = {
   kind: 'verify-email' as const,
   to: 'maya@example.com',
-  name: 'Maya <b>Lopez</b>',
   url: 'https://foodz.example/api/auth/verify-email?token=abc&callbackURL=%2Fverify-email',
 };
 
@@ -67,18 +72,52 @@ describe('account emails', () => {
 
   it('writes the confirm email with the expiry, a button, the plain link and a text part', () => {
     const email = renderAccountEmail(confirm);
-    expect(email.text).toContain('The link works for 24 hours.');
+    expect(email.text).toContain(
+      'Confirm this address so you can place your first order. The link works for 24 hours.',
+    );
     expect(email.text).toContain(confirm.url);
     expect(email.html).toContain('>Confirm email</a>');
-    // The name is escaped, never markup.
-    expect(email.html).not.toContain('<b>Lopez');
-    expect(email.html).toContain('Hi Maya,');
     expect(email.html.toLowerCase()).not.toContain('click here');
+  });
+
+  it('never carries the name typed at sign-up to an unconfirmed address', () => {
+    const name = 'https://evil.example/claim-your-refund';
+    // A name on a confirm or reset request is dropped by the schema itself.
+    const sealedConfirm = unsealAccountEmail(
+      sealAccountEmail({ ...confirm, name } as unknown as AccountEmail),
+    );
+    expect(sealedConfirm).toEqual(confirm);
+    for (const message of [
+      confirm,
+      { kind: 'reset-password' as const, to: 'a@b.co', url: 'https://foodz.example/r' },
+      { kind: 'password-changed' as const, to: 'a@b.co' },
+      { kind: 'account-deleted' as const, to: 'a@b.co' },
+    ]) {
+      const email = renderAccountEmail(message);
+      expect(email.text).not.toContain('evil.example');
+      expect(email.text).not.toMatch(/\bHi\b/);
+    }
+    expect(renderAccountEmail({ kind: 'password-changed', to: 'a@b.co' }).text).toContain(
+      'The password for your Foodz account was just changed.',
+    );
+  });
+
+  it('greets a confirmed owner by first name, escaped', () => {
+    const email = renderAccountEmail({
+      kind: 'password-changed',
+      to: 'a@b.co',
+      name: 'Maya <b>Lopez</b>',
+    });
+    expect(email.html).toContain('Hi Maya,');
+    expect(email.html).not.toContain('<b>Lopez');
+    expect(
+      renderAccountEmail({ kind: 'account-deleted', to: 'a@b.co', name: 'Maya Lopez' }).text,
+    ).toContain('Hi Maya, your Foodz account and its personal details have been deleted.');
   });
 
   it.each([
     [
-      { kind: 'reset-password', to: 'a@b.co', name: 'A', url: 'https://foodz.example/r' },
+      { kind: 'reset-password', to: 'a@b.co', url: 'https://foodz.example/r' },
       'Reset your Foodz password',
       '30 minutes',
     ],

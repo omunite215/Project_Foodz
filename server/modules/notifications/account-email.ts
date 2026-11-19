@@ -17,12 +17,16 @@ import { decryptField, encryptField } from '@/server/security/field-encryption';
 
 const ENCRYPTION_CONTEXT = 'jobs:account-email';
 
+/*
+ * The account's name is typed by whoever signed up, who may not own the address. It appears only
+ * in emails to a confirmed address; confirm and reset emails never carry it (S6 review).
+ */
 export const accountEmailSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('verify-email'), to: z.email(), name: z.string(), url: z.url() }),
-  z.object({ kind: z.literal('reset-password'), to: z.email(), name: z.string(), url: z.url() }),
-  z.object({ kind: z.literal('password-changed'), to: z.email(), name: z.string() }),
+  z.object({ kind: z.literal('verify-email'), to: z.email(), url: z.url() }),
+  z.object({ kind: z.literal('reset-password'), to: z.email(), url: z.url() }),
+  z.object({ kind: z.literal('password-changed'), to: z.email(), name: z.string().optional() }),
   z.object({ kind: z.literal('account-exists'), to: z.email() }),
-  z.object({ kind: z.literal('account-deleted'), to: z.email(), name: z.string() }),
+  z.object({ kind: z.literal('account-deleted'), to: z.email(), name: z.string().optional() }),
 ]);
 
 export type AccountEmail = z.infer<typeof accountEmailSchema>;
@@ -31,6 +35,12 @@ const siteUrl = (path: string) =>
   new URL(path, process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3456').toString();
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || 'there';
+
+/** "Hi Maya, the password…" for a confirmed address, otherwise "The password…". */
+const greet = (name: string | undefined, sentence: string) =>
+  name
+    ? `Hi ${firstName(name)}, ${sentence}`
+    : sentence.charAt(0).toUpperCase() + sentence.slice(1);
 
 /** The finished email for each kind. Exported for tests and previews. */
 export function renderAccountEmail(message: AccountEmail): Email {
@@ -41,7 +51,8 @@ export function renderAccountEmail(message: AccountEmail): Email {
         subject: 'Confirm your email for Foodz',
         ...actionEmail({
           heading: 'Confirm your email',
-          message: `Hi ${firstName(message.name)}, confirm this address so you can place your first order. The link works for 24 hours.`,
+          message:
+            'Confirm this address so you can place your first order. The link works for 24 hours.',
           action: 'Confirm email',
           url: message.url,
           footer: ["If you didn't create a Foodz account, you can ignore this email."],
@@ -66,7 +77,10 @@ export function renderAccountEmail(message: AccountEmail): Email {
         subject: 'Your Foodz password was changed',
         ...actionEmail({
           heading: 'Your password was changed',
-          message: `Hi ${firstName(message.name)}, the password for your Foodz account was just changed. If this wasn't you, reset it now and contact us.`,
+          message: greet(
+            message.name,
+            "the password for your Foodz account was just changed. If this wasn't you, reset it now and contact us.",
+          ),
           action: 'Reset your password',
           url: siteUrl('/forgot-password'),
           footer: [`Contact us: ${siteUrl('/contact')}`],
@@ -95,7 +109,10 @@ export function renderAccountEmail(message: AccountEmail): Email {
         subject: 'Your Foodz account has been deleted',
         ...noticeEmail({
           heading: 'Your account has been deleted',
-          message: `Hi ${firstName(message.name)}, your Foodz account and its personal details have been deleted. Past orders are kept without your name or contact details, for our accounting records.`,
+          message: greet(
+            message.name,
+            'your Foodz account and its personal details have been deleted. Past orders are kept without your name or contact details, for our accounting records.',
+          ),
           footer: [`If you didn't do this, contact us: ${siteUrl('/contact')}`],
         }),
       };

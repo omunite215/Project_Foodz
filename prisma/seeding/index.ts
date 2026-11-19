@@ -22,10 +22,11 @@ export interface SeedConfig {
   adminPassword: string;
   demoPassword: string;
   /**
-   * Adds the sample customers below (local and demo deployments only, never production):
-   * an unconfirmed one, a suspended one and a second customer with an address.
+   * Adds the sample customers below with this password: an unconfirmed one, a suspended one and
+   * a second customer with an address. Local and CI databases only (see `sampleAccountsRefusal`);
+   * never the shared demo password, since they are ordinary, writable accounts.
    */
-  sampleAccounts?: boolean;
+  samplePassword?: string;
   now?: Date;
 }
 
@@ -50,7 +51,7 @@ export const DEMO_ACCOUNTS = [
 /**
  * Sample customers for trying the sign-in and address rules (Decision 15). They are ordinary
  * accounts, not demo logins, so they behave like real customers; `isSample` shows them in full
- * to the demo admin. Password: DEMO_PASSWORD.
+ * to the demo admin. Their password is random per seed run and printed by the seed.
  */
 export const SAMPLE_ACCOUNTS = [
   {
@@ -78,6 +79,31 @@ export const SAMPLE_ACCOUNTS = [
 
 const TERMS_VERSION = 1;
 
+/** Database hosts of a developer machine, the compose network and CI. */
+const LOCAL_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', 'db']);
+
+/**
+ * Why the sample customers may not be seeded into this database, or null when they may. They
+ * are writable accounts with a password printed in the seed output, so a shared deployment such
+ * as the public demo must never have them: only a local or CI database qualifies.
+ */
+export function sampleAccountsRefusal(
+  databaseUrl: string,
+  env: Record<string, string | undefined>,
+): string | null {
+  if (env.VERCEL_ENV) return 'sample accounts are never seeded on a Vercel deployment';
+  if (env.CI) return null;
+  let host: string;
+  try {
+    host = new URL(databaseUrl).hostname;
+  } catch {
+    return 'the database URL could not be read';
+  }
+  return LOCAL_DATABASE_HOSTS.has(host)
+    ? null
+    : `the database at ${host} is not a local or CI database`;
+}
+
 export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Promise<SeedResult> {
   const now = config.now ?? new Date();
 
@@ -89,9 +115,10 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
     emailAndPassword: { enabled: true },
   });
   const authContext = await auth.$context;
-  const [adminHash, demoHash] = await Promise.all([
+  const [adminHash, demoHash, sampleHash] = await Promise.all([
     authContext.password.hash(config.adminPassword),
     authContext.password.hash(config.demoPassword),
+    config.samplePassword ? authContext.password.hash(config.samplePassword) : null,
   ]);
   const encrypt = (data: string) => symmetricEncrypt({ key: authContext.secretConfig, data });
 
@@ -205,7 +232,7 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
       }
 
       // -------------------------------------------------------------- sample customers
-      if (config.sampleAccounts) {
+      if (sampleHash) {
         const sample: Record<string, string> = {};
         for (const account of SAMPLE_ACCOUNTS) {
           const user = await upsertUser(tx, {
@@ -213,7 +240,7 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
             name: account.name,
             role: 'customer',
             isDemo: false,
-            passwordHash: demoHash,
+            passwordHash: sampleHash,
             resetPassword: true,
             // Each run puts them back in the state the stories test. Flagged as sample data, so
             // demo logins see them in full like the demo accounts (U4).

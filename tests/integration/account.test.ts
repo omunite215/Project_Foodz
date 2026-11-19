@@ -418,7 +418,7 @@ describe('deleting the account (S6.4 to S6.7)', () => {
       (await account.deleteAccountAction({ password: 'not my password' }))?.serverError,
     ).toMatchObject({
       code: 'INVALID_INPUT',
-      fieldErrors: { password: ["Your password isn't right."] },
+      fieldErrors: { password: ["That password isn't right. Try again."] },
     });
     expect((await account.deleteAccountAction({ password: PASSWORD }))?.data).toEqual({
       deleted: true,

@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { distanceMeters } from './map-geometry';
 
 /*
  * Every call to an outside map service goes through this file. Hosts are fixed here (never taken
@@ -12,6 +13,17 @@ export const PHOTON_URL = 'https://photon.komoot.io/api/';
 
 const SEARCH_TIMEOUT_MS = 4000;
 const USER_AGENT = 'foodz-address-search/1.0';
+
+/**
+ * Suggestions come from around the kitchen only: Greater Boston, well past the delivery radius
+ * so a place just outside it still gets its "we don't deliver there yet" answer (S4.6).
+ */
+export const SEARCH_RADIUS_KM = 40;
+const KM_PER_DEGREE = 111.32;
+
+/** The same address is often several map objects (building, entrance, street segments). */
+const SAME_HOUSE_M = 300;
+const SAME_STREET_M = 2000;
 
 export const latitudeSchema = z.number().finite().min(-90).max(90);
 export const longitudeSchema = z.number().finite().min(-180).max(180);
@@ -123,12 +135,30 @@ function cityLine(p: z.infer<typeof photonFeature>['properties']) {
   return [place, region].filter(Boolean).join(', ');
 }
 
-/** Turns a Photon response into US suggestions; anything malformed is skipped. */
-export function parsePhotonResponse(body: unknown, limit = 5): PlaceSuggestion[] {
+const comparable = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Street line plus town, ignoring the state and ZIP that some map objects lack. */
+const sameAddressKey = (line1: string, p: z.infer<typeof photonFeature>['properties']) =>
+  `${comparable(line1)}|${comparable(p.city ?? p.town ?? p.village ?? p.district ?? '')}`;
+
+export interface ParseOptions {
+  /** The store: results further than SEARCH_RADIUS_KM from it are dropped. */
+  near?: LatLng;
+  limit?: number;
+}
+
+/**
+ * Turns a Photon response into US suggestions near the store. Anything malformed is skipped, and
+ * results for the same address close together are shown once, keeping the fuller city line.
+ */
+export function parsePhotonResponse(
+  body: unknown,
+  { near, limit = 5 }: ParseOptions = {},
+): PlaceSuggestion[] {
   const parsed = photonResponse.safeParse(body);
   if (!parsed.success) return [];
 
-  const suggestions: PlaceSuggestion[] = [];
+  const kept: { key: string; suggestion: PlaceSuggestion }[] = [];
   const seen = new Set<string>();
   for (const raw of parsed.data.features) {
     const feature = photonFeature.safeParse(raw);
@@ -143,13 +173,15 @@ export function parsePhotonResponse(body: unknown, limit = 5): PlaceSuggestion[]
     const city = cityLine(p);
     if (!city) continue;
 
+    const [lng, lat] = geometry.coordinates;
+    if (near && distanceMeters(near, { lat, lng }) > SEARCH_RADIUS_KM * 1000) continue;
+
     const id =
       p.osm_type && p.osm_id !== undefined ? `${p.osm_type}${p.osm_id}` : `${line1}|${city}`;
     if (seen.has(id)) continue;
     seen.add(id);
 
-    const [lng, lat] = geometry.coordinates;
-    suggestions.push({
+    const suggestion: PlaceSuggestion = {
       id,
       line1,
       city,
@@ -157,10 +189,30 @@ export function parsePhotonResponse(body: unknown, limit = 5): PlaceSuggestion[]
       hasHouseNumber,
       lat,
       lng,
-    });
-    if (suggestions.length >= limit) break;
+    };
+    const key = sameAddressKey(line1, p);
+    const sameWithin = hasHouseNumber ? SAME_HOUSE_M : SAME_STREET_M;
+    const twin = kept.find(
+      (entry) =>
+        entry.key === key &&
+        entry.suggestion.hasHouseNumber === hasHouseNumber &&
+        distanceMeters(entry.suggestion, suggestion) <= sameWithin,
+    );
+    if (twin) {
+      if (suggestion.city.length > twin.suggestion.city.length) twin.suggestion = suggestion;
+      continue;
+    }
+    if (kept.length >= limit) break;
+    kept.push({ key, suggestion });
   }
-  return suggestions;
+  return kept.map((entry) => entry.suggestion);
+}
+
+/** Photon's `bbox` (west, south, east, north) around a point. */
+function boundingBox({ lat, lng }: LatLng, km: number) {
+  const dLat = km / KM_PER_DEGREE;
+  const dLng = km / (KM_PER_DEGREE * Math.cos((lat * Math.PI) / 180));
+  return [lng - dLng, lat - dLat, lng + dLng, lat + dLat].map((n) => n.toFixed(4)).join(',');
 }
 
 /** The search URL: fixed host, query and numeric bias only. */
@@ -172,14 +224,15 @@ export function photonSearchUrl(query: string, near: LatLng) {
   url.searchParams.set('limit', '15');
   url.searchParams.set('lat', lat.toFixed(5));
   url.searchParams.set('lon', lng.toFixed(5));
+  url.searchParams.set('bbox', boundingBox({ lat, lng }, SEARCH_RADIUS_KM));
   url.searchParams.append('layer', 'house');
   url.searchParams.append('layer', 'street');
   return url;
 }
 
 /**
- * Address suggestions for a typed query, nearest to `near` first, US only. Throws
- * GeoUnavailableError when the service fails or takes longer than 4 seconds.
+ * Address suggestions for a typed query, US only, within SEARCH_RADIUS_KM of `near` and biased
+ * towards it. Throws GeoUnavailableError when the service fails or takes longer than 4 seconds.
  */
 export async function searchPlaces(
   query: string,
@@ -199,5 +252,5 @@ export async function searchPlaces(
   } catch (error) {
     throw new GeoUnavailableError(error);
   }
-  return parsePhotonResponse(body);
+  return parsePhotonResponse(body, { near });
 }

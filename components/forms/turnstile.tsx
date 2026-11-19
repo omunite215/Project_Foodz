@@ -1,6 +1,7 @@
 'use client';
 
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { CaptchaAction } from '@/server/modules/auth/schema';
 import { announce } from '@/lib/announce';
 
 /*
@@ -19,6 +20,7 @@ export const CHECK_FAILED_TEXT =
 
 interface TurnstileOptions {
   sitekey: string;
+  action: CaptchaAction;
   appearance: 'interaction-only';
   execution: 'execute';
   size: 'flexible' | 'compact';
@@ -77,9 +79,15 @@ export interface TurnstileHandle {
 
 export function Turnstile({
   ref,
+  action,
   onChallenge,
 }: {
   ref?: Ref<TurnstileHandle>;
+  /**
+   * Which form the check is for. Cloudflare signs it into the token and the server compares it,
+   * so a token solved on one form can't be spent on another.
+   */
+  action: CaptchaAction;
   /** A puzzle is showing (the submit button then reads "Checking…"). */
   onChallenge?: (showing: boolean) => void;
 }) {
@@ -134,6 +142,7 @@ export function Turnstile({
             widgetRef.current =
               api.render(container, {
                 sitekey,
+                action,
                 appearance: 'interaction-only',
                 execution: 'execute',
                 size: window.innerWidth < 360 ? 'compact' : 'flexible',

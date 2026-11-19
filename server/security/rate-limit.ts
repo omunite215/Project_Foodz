@@ -101,8 +101,6 @@ const POLICIES = {
     message: 'Too many wrong codes. Try again in {wait}.',
     unavailableMessage: SIGN_IN_UNAVAILABLE,
   },
-  // The header's session check; generous and never shared with sign-in.
-  'auth.session': { points: 300, duration: 60 },
   'auth.default': { points: 60, duration: 60 },
   // "Someone tried to sign up with your email": at most one per address per hour.
   'email.account-exists': { points: 1, duration: 3600 },

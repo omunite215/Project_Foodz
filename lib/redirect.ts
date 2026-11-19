@@ -53,7 +53,11 @@ export function safeRedirectPath(raw: unknown, fallback = '/'): string {
   if (url.origin !== BASE || isAuthOrApi(url.pathname) || isAuthOrApi(decoded.split(/[?#]/)[0]!)) {
     return fallback;
   }
-  return `${url.pathname}${url.search}${url.hash}`;
+  // Dot segments are resolved by the parser, so "/.//evil.com" and "/a/..//evil.com" only turn
+  // into a host-relative "//evil.com" here, after the checks on the raw input.
+  const result = `${url.pathname}${url.search}${url.hash}`;
+  if (result.startsWith('//') || result.startsWith('/\\')) return fallback;
+  return result;
 }
 
 function withReturnPath(page: string, returnPath: unknown) {

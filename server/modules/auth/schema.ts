@@ -28,6 +28,17 @@ const currentPasswordSchema = z
 /** The Turnstile token from the widget, when one was shown. */
 const captchaToken = z.string().max(4096).optional();
 
+/**
+ * The `action` each form's Turnstile widget is rendered with. The server compares it, so a token
+ * solved on one form cannot be spent on another.
+ */
+export const CAPTCHA_ACTIONS = {
+  signIn: 'sign-in',
+  signUp: 'sign-up',
+  reset: 'reset',
+} as const;
+export type CaptchaAction = (typeof CAPTCHA_ACTIONS)[keyof typeof CAPTCHA_ACTIONS];
+
 /** Where to go afterwards; cleaned by safeRedirectPath() on the server. */
 const callbackUrl = z.string().max(512).optional();
 

@@ -12,8 +12,9 @@ import { checkPasswordBreach } from '@/server/security/breached-passwords';
  *     when the breach service is down);
  *   - emails are trimmed and lower-cased;
  *   - every redirect target is a path on this site (S2.4);
- *   - confirm-email links: links issued before an email change are refused, and the landing
- *     page learns whether this browser was signed in by the link (design 3.7).
+ *   - confirm-email links: links issued before an email change are refused, the landing page
+ *     learns whether this browser was signed in by the link (design 3.7), and a link opened in a
+ *     browser signed in to another account confirms the address without switching accounts.
  */
 
 export const BREACHED_PASSWORD_MESSAGE =
@@ -84,6 +85,24 @@ async function readLink(ctx: Ctx): Promise<LinkPayload | null> {
   return token ? verifyJWT(token, ctx.context.secret) : null;
 }
 
+/**
+ * A confirm link opened where someone else is signed in. The library would replace that session
+ * with one for the link's account, so a link sent by a stranger could quietly move the person into
+ * the stranger's account (login CSRF). The address is confirmed here instead, and the browser
+ * stays signed in as before. Links that do not match their account are left to the library,
+ * which refuses them without signing anyone in.
+ */
+async function confirmWithoutSwitching(
+  ctx: Ctx,
+  user: { id: string; email: string } | null,
+  payload: LinkPayload,
+  landing: string,
+) {
+  if (!user || user.email !== payload.email) return;
+  await ctx.context.internalAdapter.updateUser(user.id, { emailVerified: true });
+  throw ctx.redirect(withParams(landing, { status: 'confirmed', via: 'other-account' }));
+}
+
 /** GET /verify-email: refuse superseded links and tell the landing page what happened. */
 async function beforeVerifyEmail(ctx: Ctx) {
   const query: Fields = isRecord(ctx.query) ? ctx.query : {};
@@ -91,6 +110,11 @@ async function beforeVerifyEmail(ctx: Ctx) {
   const payload = await readLink(ctx);
   const params: Record<string, string> = {};
 
+  // Every link this site sends names its account. One that does not would let the library pick
+  // the account by email alone, so it is treated as tampered.
+  if (payload && typeof payload.userId !== 'string') {
+    throw ctx.redirect(withParams(landing, { error: 'INVALID_TOKEN' }));
+  }
   if (payload && typeof payload.userId === 'string') {
     const user = await ctx.context.internalAdapter.findUserById(payload.userId);
     const cutOff: unknown = user ? Reflect.get(user, 'emailLinksValidAfter') : null;
@@ -107,6 +131,9 @@ async function beforeVerifyEmail(ctx: Ctx) {
     params.status = alreadyConfirmed ? 'already-confirmed' : 'confirmed';
     if (!alreadyConfirmed) {
       const session = await getSessionFromCtx(ctx);
+      if (session && session.user.id !== user?.id && !isChange) {
+        await confirmWithoutSwitching(ctx, user, payload, landing);
+      }
       if (!session || session.user.id !== user?.id) {
         // A first confirmation signs this browser in; an email change does not.
         params.via = isChange ? 'other-browser' : 'new-session';

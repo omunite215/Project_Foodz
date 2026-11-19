@@ -23,6 +23,7 @@ interface AuthUser {
   id: string;
   email: string;
   name: string;
+  emailVerified?: boolean | null;
   role?: string | null;
   isDemo?: boolean | null;
   deletedAt?: Date | string | null;
@@ -94,7 +95,12 @@ export function recordFailedTwoFactor(userId: string | null) {
 export async function passwordChanged(user: AuthUser) {
   await record(actorFor(user), { action: 'auth.password-changed', targetId: user.id });
   if (receivesAccountEmail(user)) {
-    await queueAccountEmail({ kind: 'password-changed', to: user.email, name: user.name });
+    await queueAccountEmail({
+      kind: 'password-changed',
+      to: user.email,
+      // The name was typed by whoever signed up; only a confirmed owner is greeted with it.
+      name: user.emailVerified ? user.name : undefined,
+    });
   }
 }
 
@@ -107,7 +113,8 @@ export async function passwordWasReset(user: AuthUser) {
   await resetRateLimit('auth.sign-in.email', emailKey(user.email));
   await record(actorFor(user), { action: 'auth.password-reset', targetId: user.id });
   if (receivesAccountEmail(user)) {
-    await queueAccountEmail({ kind: 'password-changed', to: user.email, name: user.name });
+    // The reset proved the inbox, but the name may still be a stranger's: not used here either.
+    await queueAccountEmail({ kind: 'password-changed', to: user.email });
   }
 }
 

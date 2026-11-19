@@ -42,8 +42,41 @@ describe('safeRedirectPath', () => {
     '/menu\t',
     `/${'a'.repeat(520)}`,
     '/%E0%A4%A',
+    // Dot segments that collapse into a host-relative path once resolved.
+    '/.//evil.com',
+    '/..//evil.com',
+    '/a/..//evil.com',
+    '/%2e//evil.com',
+    '/%2E%2E//evil.com',
+    '/a/b/../..//evil.com',
+    '/./%2e/.//evil.com',
   ])('sends %j home', (raw) => {
     expect(safeRedirectPath(raw)).toBe('/');
+  });
+
+  it('keeps paths whose dot segments resolve to a single slash', () => {
+    expect(safeRedirectPath('/a/../menu')).toBe('/menu');
+    expect(safeRedirectPath('/./menu?x=1')).toBe('/menu?x=1');
+  });
+
+  it('is stable and never returns a host-relative path', () => {
+    const inputs = [
+      '/menu',
+      '/.//evil.com',
+      '/a/./b/../../c',
+      '/%2e%2e/%2e%2e//x',
+      '/menu?next=//evil.com',
+      '/menu#//evil.com',
+      '/x/..%2f..%2f/evil',
+      '/%252f%252fevil.com',
+      '/..',
+      '/.',
+    ];
+    for (const raw of inputs) {
+      const once = safeRedirectPath(raw);
+      expect(once.startsWith('//') || once.startsWith('/\\')).toBe(false);
+      expect(safeRedirectPath(once)).toBe(once);
+    }
   });
 
   it.each([

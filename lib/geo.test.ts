@@ -23,6 +23,14 @@ const street = feature({
   postcode: '02215',
 });
 
+/** One segment of a street-only result. */
+const segment = (osm_id: number, lng: number, extra: Record<string, unknown> = {}) =>
+  feature({ osm_type: 'W', osm_id, name: 'Peterborough Street', ...extra }, [lng, 42.3434]);
+
+/** "12 Main Street" in a given town and place. */
+const main = (osm_id: number, city: string, lng: number) =>
+  feature({ osm_type: 'N', osm_id, housenumber: '12', street: 'Main Street', city }, [lng, 42.37]);
+
 describe('parsePhotonResponse', () => {
   it('builds street, city and ZIP lines', () => {
     expect(parsePhotonResponse({ features: [house, street] })).toEqual([
@@ -86,6 +94,73 @@ describe('parsePhotonResponse', () => {
     expect(results.every((r) => r.line1.endsWith('Main Street'))).toBe(true);
   });
 
+  it('shows one suggestion for map objects that are the same address', () => {
+    // A building, its entrances and an address point: same label, a few metres apart.
+    const faneuil = [0, 1, 2, 3, 4].map((i) =>
+      feature(
+        {
+          osm_type: i ? 'N' : 'W',
+          osm_id: 500 + i,
+          housenumber: '1',
+          street: 'Faneuil Hall Square',
+          postcode: '02109',
+        },
+        [-71.0548 + i * 0.0001, 42.36],
+      ),
+    );
+    expect(parsePhotonResponse({ features: faneuil }, { near: store })).toHaveLength(1);
+  });
+
+  it('merges street segments of one street, keeping the fuller city line', () => {
+    const results = parsePhotonResponse(
+      { features: [segment(1, -71.0983), segment(2, -71.095, { postcode: '02215' })] },
+      { near: store },
+    );
+    expect(results).toEqual([
+      expect.objectContaining({ id: 'W2', line1: 'Peterborough Street', city: 'Boston, MA 02215' }),
+    ]);
+  });
+
+  it('keeps the same street and number in towns or places far apart', () => {
+    expect(
+      parsePhotonResponse({
+        features: [
+          main(1, 'Boston', -71.06),
+          main(2, 'Cambridge', -71.1),
+          main(3, 'Boston', -71.0),
+        ],
+      }),
+    ).toHaveLength(3);
+  });
+
+  it('drops results far from the store and keeps nearby towns outside the delivery area', () => {
+    const aurora = feature(
+      {
+        osm_type: 'W',
+        osm_id: 9,
+        housenumber: '13732',
+        street: 'East Quincy Avenue',
+        city: 'Aurora',
+        state: 'Colorado',
+      },
+      [-104.8, 39.64],
+    );
+    const quincy = feature(
+      {
+        osm_type: 'N',
+        osm_id: 10,
+        housenumber: '1',
+        street: 'Quincy Center Plaza',
+        city: 'Quincy',
+        postcode: '02169',
+      },
+      [-71.0036, 42.2513],
+    );
+    expect(
+      parsePhotonResponse({ features: [aurora, quincy] }, { near: store }).map((r) => r.city),
+    ).toEqual(['Quincy, MA 02169']);
+  });
+
   it('returns nothing for a body that is not a feature list', () => {
     expect(parsePhotonResponse(null)).toEqual([]);
     expect(parsePhotonResponse({ features: 'x' })).toEqual([]);
@@ -103,6 +178,20 @@ describe('photonSearchUrl', () => {
     expect(url.searchParams.get('lat')).toBe('42.35050');
   });
 
+  it('limits the search to a box around the store', () => {
+    const [west, south, east, north] = (
+      photonSearchUrl('main st', store).searchParams.get('bbox') ?? ''
+    )
+      .split(',')
+      .map(Number);
+    expect(south).toBeCloseTo(store.lat - 40 / 111.32, 3);
+    expect(north).toBeCloseTo(store.lat + 40 / 111.32, 3);
+    expect(west).toBeLessThan(-71.5);
+    expect(east).toBeGreaterThan(-70.6);
+    // Aurora, Colorado is far outside.
+    expect(-104.8).toBeLessThan(west!);
+  });
+
   it('refuses coordinates that are not real numbers', () => {
     expect(() => photonSearchUrl('x', { lat: Number.NaN, lng: 0 })).toThrow(/expected number/i);
     expect(() => photonSearchUrl('x', { lat: 91, lng: 0 })).toThrow(/too big/i);
@@ -110,10 +199,16 @@ describe('photonSearchUrl', () => {
 });
 
 describe('searchPlaces', () => {
-  it('returns parsed suggestions', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ features: [house] }));
+  it('returns parsed suggestions near the store', async () => {
+    const far = feature(
+      { osm_type: 'N', osm_id: 77, housenumber: '12', street: 'Peterborough Street' },
+      [-104.8, 39.64],
+    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ features: [far, house] }));
     const results = await searchPlaces('12 Peterborough', store, fetchImpl);
-    expect(results.map((r) => r.line1)).toEqual(['12 Peterborough Street']);
+    expect(results.map((r) => r.id)).toEqual(['N1']);
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url instanceof URL ? url.href : '').toMatch(/^https:\/\/photon\.komoot\.io\/api\/\?/);
     expect(init?.redirect).toBe('error');

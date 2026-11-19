@@ -1,9 +1,10 @@
 // Seeds the database: `npm run db:seed` locally, and the compose `migrate` job after migrations.
 // Runs as the migrator role (DATABASE_MIGRATOR_URL), like the migrations themselves.
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../server/db/generated/client';
-import { seedDatabase } from './seeding';
+import { sampleAccountsRefusal, seedDatabase } from './seeding';
 
 function env(
   name: string,
@@ -17,17 +18,23 @@ function env(
 }
 
 async function main() {
-  const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: env('DATABASE_MIGRATOR_URL') }),
-  });
+  const databaseUrl = env('DATABASE_MIGRATOR_URL');
+  // Sample customers: local and CI databases only, with a fresh password on every run.
+  let samplePassword: string | undefined;
+  if (['true', '1'].includes(process.env.SEED_SAMPLE_ACCOUNTS ?? '')) {
+    const refusal = sampleAccountsRefusal(databaseUrl, process.env);
+    if (refusal) throw new Error(`SEED_SAMPLE_ACCOUNTS is set, but ${refusal}. Unset it.`);
+    samplePassword = randomBytes(18).toString('base64url');
+  }
+
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   try {
     const result = await seedDatabase(prisma, {
       authSecret: env('BETTER_AUTH_SECRET', { minLength: 32 }),
       adminEmail: env('SEED_ADMIN_EMAIL', { fallback: 'admin@foodz.example' }),
       adminPassword: env('SEED_ADMIN_PASSWORD', { minLength: 12 }),
       demoPassword: env('DEMO_PASSWORD', { minLength: 10 }),
-      // Local and demo deployments only; production leaves it unset.
-      sampleAccounts: ['true', '1'].includes(process.env.SEED_SAMPLE_ACCOUNTS ?? ''),
+      samplePassword,
     });
 
     const created = Object.entries(result.created).filter(([, n]) => n > 0);
@@ -36,6 +43,11 @@ async function main() {
         ? `Seeded: ${created.map(([name, n]) => `${n} ${name}`).join(', ')}.\n`
         : 'Seed: nothing to add, the database already has the seed data.\n',
     );
+
+    if (samplePassword) {
+      // Reset on every run. The browser tests read it from this output (E2E_SEED_OUTPUT).
+      process.stdout.write(`Sample customers password (local and CI only): ${samplePassword}\n`);
+    }
 
     if (result.adminTwoFactor) {
       // Shown once: the secret is stored encrypted and cannot be read back.

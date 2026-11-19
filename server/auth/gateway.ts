@@ -25,11 +25,10 @@ const notFound = () =>
   Response.json({ code: 'NOT_FOUND', message: 'Not found.' }, { status: 404, headers: NO_STORE });
 
 // Endpoints that never depend on who is signed in.
-const SESSIONLESS = new Set(['/get-session', '/ok', '/error']);
+const SESSIONLESS = new Set(['/ok', '/error']);
 
 /**
- * In front of every /api/auth request: a rate limit per client address (the session read has
- * its own, larger budget so the header never flips to "Sign in", S2.1), the endpoint allowlist
+ * In front of every /api/auth request: a rate limit per client address, the endpoint allowlist
  * and demo rules from guards.ts, and the client address Better Auth records, taken from
  * `clientIp()` rather than from whatever the client sent.
  */
@@ -39,7 +38,7 @@ export async function handleAuthRequest(request: Request, handler: Handler): Pro
   const ip = clientIp(request.headers);
 
   try {
-    await enforceRateLimit(path === '/get-session' ? 'auth.session' : 'auth.default', `ip:${ip}`);
+    await enforceRateLimit('auth.default', `ip:${ip}`);
   } catch (error) {
     if (error instanceof AppError) return errorResponse(error);
     throw error;

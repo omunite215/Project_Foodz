@@ -6,6 +6,13 @@ import type { DeviceType } from './devices';
 
 export const NAME_MAX = 60;
 
+/**
+ * Invisible format characters (Unicode Cf): bidi overrides and isolates, zero-width spaces, the
+ * word joiner. They can make a name read differently from what is stored. The two joiners
+ * (U+200C, U+200D) stay allowed: Persian and several Indic scripts need them to spell names.
+ */
+const FORMAT_CHARACTER = /(?![\u200C\u200D])\p{Cf}/u;
+
 /** 1–60 characters in any script; surrounding spaces dropped, inner runs collapsed (S5.3). */
 export const nameSchema = z
   .string()
@@ -17,7 +24,7 @@ export const nameSchema = z
       .min(1, 'Enter your name.')
       .max(NAME_MAX, 'Use 60 characters or fewer.')
       .refine(
-        (value) => !hasControlCharacters(value),
+        (value) => !hasControlCharacters(value) && !FORMAT_CHARACTER.test(value),
         'Use letters, numbers and punctuation only.',
       ),
   );

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { getActor } from '@/server/auth/session';
+import { getActor, getSession } from '@/server/auth/session';
 import { ResultShell } from '@/components/auth/auth-shell';
 import { EmailResult, type EmailResultCase } from '@/components/auth/email-result';
 import { authPageHref, returnRoute } from '@/lib/auth-links';
@@ -13,21 +13,27 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
  * Where a confirm-email link lands (S3.2, S3.5). Confirmed in the browser that is signed in:
- * straight back to where the person was, where the "Email confirmed" notice shows. Any `error`
- * (expired, tampered, sent before an email change, account gone) reads as an expired link.
+ * straight back to where the person was, where the "Email confirmed" notice shows. A link for
+ * another account than the one signed in here confirms that address and leaves this browser
+ * signed in as it was, and the page names the account it is still in. Any `error` (expired,
+ * tampered, sent before an email change, account gone) reads as an expired link.
  */
 export default async function VerifyEmailPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const callbackUrl = safeRedirectPath(firstParam(params.callbackUrl));
   const status = firstParam(params.status);
   const via = firstParam(params.via);
-  const signedIn = (await getActor()).kind === 'user';
+  const [actor, session] = await Promise.all([getActor(), getSession()]);
+  const signedIn = actor.kind === 'user';
+  const accountEmail = signedIn ? session?.user.email : undefined;
 
   if (status === 'confirmed' && !via) redirect(returnRoute(callbackUrl));
 
   let result: EmailResultCase;
-  if (status === 'confirmed' && (via === 'new-session' || signedIn)) {
-    result = { kind: 'confirmed-new-session' };
+  if (status === 'confirmed' && via === 'other-account' && signedIn) {
+    result = { kind: 'confirmed-other-account', accountEmail };
+  } else if (status === 'confirmed' && (via === 'new-session' || signedIn)) {
+    result = { kind: 'confirmed-new-session', accountEmail };
   } else if (status === 'confirmed') {
     result = { kind: 'confirmed-signed-out', signInHref: authPageHref('/sign-in', callbackUrl) };
   } else if (status === 'already-confirmed') {

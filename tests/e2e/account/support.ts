@@ -13,9 +13,31 @@ export { expect };
 export const isPhone = (testInfo: TestInfo) => testInfo.project.name === 'account-375';
 
 export const MAILPIT = process.env.E2E_MAILPIT_URL ?? 'http://localhost:8025';
+/** The shared password of the demo accounts (demo.*@foodz.example). */
 export const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? '';
 
-/** Seeded accounts (prisma/seeding): all use DEMO_PASSWORD. */
+/**
+ * The seed's output, which CI saves to a file and names in E2E_SEED_OUTPUT (locally, point it at
+ * your own copy; appending each run's output to one file keeps every value findable). The last
+ * match wins, since some values change on every run.
+ */
+function fromSeedOutput(pattern: RegExp): string | null {
+  const file = process.env.E2E_SEED_OUTPUT;
+  if (!file || !existsSync(file)) return null;
+  const matches = [...readFileSync(file, 'utf8').matchAll(pattern)];
+  return matches.at(-1)?.[1] ?? null;
+}
+
+/**
+ * The sample customers' password (unconfirmed, suspended and second): random on every seed run
+ * and printed by the seed. A local database seeded before they had their own password still
+ * uses DEMO_PASSWORD until it is seeded again.
+ */
+export const SAMPLE_PASSWORD =
+  fromSeedOutput(/^Sample customers password[^:]*: (\S+)/gm) ??
+  (process.env.CI ? '' : DEMO_PASSWORD);
+
+/** Seeded accounts (prisma/seeding): the demo customer uses DEMO_PASSWORD, the others SAMPLE_PASSWORD. */
 export const ACCOUNTS = {
   demo: 'demo.customer@foodz.example',
   unconfirmed: 'unconfirmed.customer@foodz.example',
@@ -25,8 +47,9 @@ export const ACCOUNTS = {
 
 /**
  * Each test is its own network, as two customers on different carrier addresses would be, so the
- * per-network limits (sign-ups, failed sign-ins) of one test never spill into another. Without a
- * proxy in front, the app takes the client address from x-forwarded-for (server/request.ts).
+ * per-network limits (sign-ups, failed sign-ins) of one test never spill into another. The test
+ * server runs with CLIENT_IP_FROM_HEADER=1 (playwright.config.ts), so it takes the address from
+ * x-forwarded-for (server/client-ip.ts).
  * Only requests to the app carry it; third parties (Turnstile, map tiles) see nothing extra.
  */
 export const test = base.extend<{ clientIp: string }>({
@@ -181,11 +204,7 @@ export function linkIn(text: string, path: string) {
  * to a file and names it in E2E_SEED_OUTPUT; locally, point it at your own copy.
  */
 export function adminTotpSecret(): string | null {
-  const file = process.env.E2E_SEED_OUTPUT;
-  if (!file || !existsSync(file)) return null;
-  return (
-    /otpauth:\/\/totp\/[^\s]*[?&]secret=([A-Z2-7]+)/i.exec(readFileSync(file, 'utf8'))?.[1] ?? null
-  );
+  return fromSeedOutput(/otpauth:\/\/totp\/[^\s]*[?&]secret=([A-Z2-7]+)/gi);
 }
 
 export const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@foodz.example';

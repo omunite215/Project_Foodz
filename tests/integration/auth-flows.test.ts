@@ -1,6 +1,6 @@
 import { createOTP } from '@better-auth/utils/otp';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { symmetricEncrypt } from 'better-auth/crypto';
+import { signJWT, symmetricEncrypt } from 'better-auth/crypto';
 import { toNextJsHandler } from 'better-auth/next-js';
 import { v7 as uuid } from 'uuid';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
@@ -275,6 +275,20 @@ describe('sign-in', () => {
     ).toBe(1);
   });
 
+  it('never returns a path that dot segments turn into another host (S4)', async () => {
+    const { email } = await signUp();
+    switchBrowser(newBrowser());
+    for (const callbackUrl of [
+      '/.//evil.com',
+      '/..//evil.com',
+      '/a/..//evil.com',
+      '/%2e//evil.com',
+    ]) {
+      const result = await actions.signInAction({ email, password: PASSWORD, callbackUrl });
+      expect(result?.data).toEqual({ status: 'signed-in', redirectTo: '/' });
+    }
+  });
+
   it('answers a wrong password and an unknown email the same way', async () => {
     const { email } = await signUp();
     switchBrowser(newBrowser());
@@ -530,6 +544,64 @@ describe('confirm-email links', () => {
     expect(browser.jar.get('foodz_flash')).toBe('email-confirmed');
   });
 
+  it('confirms a link opened while signed in to another account, without switching (S2)', async () => {
+    const signedIn = await signUp('victim');
+    const before = await sessionOf(signedIn.browser);
+    const cookieBefore = [...signedIn.browser.jar].find(([name]) => name.includes('session_token'));
+    expect(cookieBefore).toBeDefined();
+
+    const stranger = await signUp('stranger');
+    const strangerSessions = await migrator.session.count({ where: { userId: stranger.userId } });
+    const link = new URL(await linkIn(stranger.email, 'verify-email'));
+
+    const response = await get(link.pathname + link.search, signedIn.browser);
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get('location') ?? '', SITE);
+    expect(location.pathname).toBe('/verify-email');
+    expect(location.searchParams.get('status')).toBe('confirmed');
+    expect(location.searchParams.get('via')).toBe('other-account');
+    expect(location.search).not.toContain(stranger.email);
+    expect(location.search).not.toContain(signedIn.email);
+
+    // The browser keeps its own session; the link's account is confirmed but not signed in.
+    expect(response.headers.getSetCookie().some((line) => line.includes('session_token'))).toBe(
+      false,
+    );
+    expect([...signedIn.browser.jar].find(([name]) => name.includes('session_token'))).toEqual(
+      cookieBefore,
+    );
+    const after = await sessionOf(signedIn.browser);
+    expect(after?.user.id).toBe(signedIn.userId);
+    expect(after?.session.id).toBe(before?.session.id);
+    expect(signedIn.browser.jar.has('foodz_flash')).toBe(false);
+    expect((await userByEmail(stranger.email)).emailVerified).toBe(true);
+    expect((await userByEmail(signedIn.email)).emailVerified).toBe(false);
+    expect(await migrator.session.count({ where: { userId: stranger.userId } })).toBe(
+      strangerSessions,
+    );
+
+    // Opened again, it is simply already confirmed.
+    const again = await get(link.pathname + link.search, signedIn.browser);
+    expect(new URL(again.headers.get('location') ?? '', SITE).searchParams.get('status')).toBe(
+      'already-confirmed',
+    );
+    expect((await sessionOf(signedIn.browser))?.user.id).toBe(signedIn.userId);
+  });
+
+  it('refuses a link that does not name its account, whoever is signed in', async () => {
+    const signedIn = await signUp('victim');
+    const other = await signUp('other');
+    const context = await auth.$context;
+    const token = await signJWT({ email: other.email }, context.secret, 3600);
+    const response = await get(
+      `/api/auth/verify-email?token=${token}&callbackURL=%2Fverify-email`,
+      signedIn.browser,
+    );
+    expect(response.headers.get('location')).toMatch(/^\/verify-email\?.*error=INVALID_TOKEN/);
+    expect((await sessionOf(signedIn.browser))?.user.id).toBe(signedIn.userId);
+    expect((await userByEmail(other.email)).emailVerified).toBe(false);
+  });
+
   it('sends a tampered link to the expired page, never an error trace', async () => {
     const response = await get(
       '/api/auth/verify-email?token=not.a.token&callbackURL=%2Fverify-email',
@@ -687,15 +759,14 @@ describe('the /api/auth gateway', () => {
     const accounts = await get('/api/auth/list-accounts', browser);
     expect(accounts.status).toBe(403);
     expect(await accounts.json()).toMatchObject({ code: 'DEMO_READ_ONLY' });
-    expect((await get('/api/auth/get-session', browser)).status).toBe(200);
   });
 
-  it('gives the session read its own budget, apart from everything else', async () => {
-    const browser = newBrowser();
-    for (let i = 0; i < 70; i++) {
-      expect((await get('/api/auth/get-session', browser)).status).toBe(200);
-    }
-    expect((await get('/api/auth/ok', browser)).status).toBe(200);
+  it('never hands the session, its token or its address to page scripts (S7)', async () => {
+    const { browser } = await signUp();
+    const response = await get('/api/auth/get-session', browser);
+    expect(response.status).toBe(404);
+    const body = await response.text();
+    expect(body).not.toMatch(/token|ipAddress|banReason/);
   });
 
   it('records the address the deployment trusts, not the one the client claims', async () => {
