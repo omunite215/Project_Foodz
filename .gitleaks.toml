@@ -3,9 +3,7 @@ useDefault = true
 
 [allowlist]
 description = "Placeholders and publicly documented test keys"
-paths = [
-  '''package-lock\.json''',
-]
+paths = ['''package-lock\.json''']
 regexes = [
   '''change-me''',
   # Cloudflare Turnstile's published always-pass test keys

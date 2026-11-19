@@ -4,7 +4,8 @@ import sharp from 'sharp';
 import { ACCEPTED_IMAGE_TYPES } from './policy';
 
 export type CheckedImage =
-  { ok: true; data: Buffer; width: number; height: number } | { ok: false; reason: string };
+  | { ok: true; data: Buffer; width: number; height: number }
+  | { ok: false; reason: string };
 
 /** Refuses images that would decode to more pixels than this (decompression bombs). */
 const MAX_INPUT_PIXELS = 40_000_000;
