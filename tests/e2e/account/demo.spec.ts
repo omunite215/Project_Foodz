@@ -83,11 +83,17 @@ test.describe('The shared demo account (S5.12, S5.13, U2)', () => {
     });
     await expect(liveRegion(page)).toHaveText(/We deliver here/);
     await expect(page.getByRole('button', { name: 'Save address' })).toHaveCount(0);
+    // One sentence under the h1, another in place of Save: nothing is said twice.
     await expect(
-      page
-        .getByText("The demo account can't save addresses. Create your own account to save yours.")
-        .first(),
+      page.getByText(
+        'You can try the search, the map and the delivery check. Saving is turned off for the demo account.',
+      ),
     ).toBeVisible();
+    await expect(
+      page.getByText(
+        "The demo account can't save addresses. Create your own account to save yours.",
+      ),
+    ).toHaveCount(1);
   });
 
   test('the demo notice can be dismissed for this visit', async ({ page }) => {

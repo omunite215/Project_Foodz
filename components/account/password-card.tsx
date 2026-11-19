@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useId, useRef, useState } from 'react';
 import { z } from 'zod';
 import { changePasswordAction, requestPasswordResetAction } from '@/server/modules/auth/actions';
-import { newPasswordSchema } from '@/server/modules/auth/schema';
+import { CAPTCHA_ACTIONS, newPasswordSchema } from '@/server/modules/auth/schema';
 import {
   blurField,
   FieldShell,
@@ -80,7 +80,7 @@ function SetPassword() {
           Set a password
         </SubmitButton>
       </div>
-      <Turnstile ref={turnstileRef} />
+      <Turnstile ref={turnstileRef} action={CAPTCHA_ACTIONS.reset} />
       <StatusLine tone={status?.tone}>{status?.text}</StatusLine>
     </div>
   );
@@ -136,7 +136,8 @@ function ChangePassword({ onChanged }: { onChanged: () => void }) {
     form.reset();
     setFailure(null);
     setOpen(false);
-    toggleRef.current?.focus();
+    // "Change password" is drawn again only once the form has closed.
+    requestAnimationFrame(() => toggleRef.current?.focus());
   };
 
   return (
@@ -170,6 +171,7 @@ function ChangePassword({ onChanged }: { onChanged: () => void }) {
         <form
           ref={formRef}
           noValidate
+          method="post"
           aria-label="Change password"
           className="mt-6 max-w-[524px]"
           onSubmit={(event) => {

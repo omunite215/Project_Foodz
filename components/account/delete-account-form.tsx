@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { deleteAccountAction } from '@/server/modules/account/actions';
 import { blurField, FieldShell, visibleError } from '@/components/forms/field-shell';
 import { FormAlert } from '@/components/forms/form-alert';
-import { focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
+import { focusFirstInvalid, focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
 import { GoogleButton } from '@/components/forms/google-button';
 import { PasswordInput } from '@/components/forms/password-input';
 import { SubmitButton } from '@/components/forms/submit-button';
@@ -52,6 +52,7 @@ function DeleteForm({ needsConfirm, methods }: { needsConfirm: boolean; methods:
   const passwordId = `${id}-password`;
   const reasonId = `${id}-reason`;
   const busyRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<Method[] | null>(needsConfirm ? methods : null);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -69,6 +70,7 @@ function DeleteForm({ needsConfirm, methods }: { needsConfirm: boolean; methods:
           : z.string(),
       }),
     },
+    onSubmitInvalid: () => focusFirstInvalid(formRef.current),
     onSubmit: ({ value }) => submit(value.password),
   }); // Re-render the fields when a submit is tried, so every error shows.
   const submitted = useStore(form.store, (formState) => formState.submissionAttempts > 0);
@@ -117,7 +119,9 @@ function DeleteForm({ needsConfirm, methods }: { needsConfirm: boolean; methods:
 
   return (
     <form
+      ref={formRef}
       noValidate
+      method="post"
       aria-label="Delete your account"
       onSubmit={(event) => {
         event.preventDefault();

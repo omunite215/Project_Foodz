@@ -145,6 +145,7 @@ export function ProfileForm({
       <form
         ref={formRef}
         noValidate
+        method="post"
         aria-label="Profile"
         onSubmit={(event) => {
           event.preventDefault();

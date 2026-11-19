@@ -11,7 +11,7 @@ import { blurField, FieldShell, visibleError } from '@/components/forms/field-sh
 import { FormAlert } from '@/components/forms/form-alert';
 import { focusFirstInvalid, focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
 import { StatusLine } from '@/components/forms/status-line';
-import { SubmitButton } from '@/components/forms/submit-button';
+import { BLOCKED_BUTTON_CLASS, SubmitButton } from '@/components/forms/submit-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
 import { clockTimeAfter, resendCountdownText } from '@/lib/account-text';
 import { announce } from '@/lib/announce';
+import { cn } from '@/lib/utils';
 import { useAccount } from './account-context';
 import { SettingsCard } from './settings-card';
 
@@ -41,7 +42,10 @@ export function EmailStatus({ verified }: { verified: boolean }) {
   );
 }
 
-/** "Resend link", resting 60 seconds after each send with a visible (never announced) countdown (S3.4). */
+/**
+ * "Resend link", resting 60 seconds after each send (S3.4). The countdown is part of the status
+ * line under it, visible but never announced, so the button keeps its name and its width.
+ */
 function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
   const router = useRouter();
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -71,6 +75,11 @@ function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
   }, [restUntil]);
 
   const resting = restUntil !== null && now < restUntil;
+  const countdown =
+    resting && restUntil !== null && restUntil - now <= COOLDOWN_SECONDS * 1000
+      ? `${resendCountdownText((restUntil - now) / 1000)}.`
+      : null;
+  const line = [state.text, countdown].filter(Boolean).join(' ') || null;
 
   return (
     // Its parts join the action row: the status line takes its own row under both buttons.
@@ -81,7 +90,10 @@ function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
         variant="outline"
         size="touch"
         aria-disabled={busy || resting || undefined}
-        className="border-brand-strong bg-white text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
+        className={cn(
+          'border-brand-strong bg-white text-brand-strong hover:bg-brand-soft hover:text-brand-strong',
+          resting && !busy && BLOCKED_BUTTON_CLASS,
+        )}
         onClick={() => {
           void (async () => {
             if (busy || resting) return;
@@ -120,12 +132,10 @@ function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
           })();
         }}
       >
-        {resting && restUntil !== null && restUntil - now <= COOLDOWN_SECONDS * 1000
-          ? resendCountdownText((restUntil - now) / 1000)
-          : 'Resend link'}
+        Resend link
       </Button>
       <StatusLine tone={state.tone} className="order-last mt-0 basis-full">
-        {state.text}
+        {line}
       </StatusLine>
     </div>
   );
@@ -182,6 +192,7 @@ function ChangeEmail({
           ref={formRef}
           id="change-email"
           noValidate
+          method="post"
           aria-label="Change email"
           className="mt-6 max-w-[524px] border-t border-neutral-6 pt-6"
           onSubmit={(event) => {
@@ -281,7 +292,7 @@ export function EmailCard({ resendRequested }: { resendRequested: boolean }) {
       </p>
       {canChange ? (
         <>
-          <p className="mt-2 text-body-5 text-neutral-3">
+          <p className="mt-2 text-body-5 text-neutral-3 [overflow-wrap:anywhere]">
             Confirm your email before your first order. We sent the link to {account.email}.
           </p>
           {sentTo ? (

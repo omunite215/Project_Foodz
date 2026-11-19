@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { z } from 'zod';
 import { requestPasswordResetAction } from '@/server/modules/auth/actions';
-import { emailSchema } from '@/server/modules/auth/schema';
+import { CAPTCHA_ACTIONS, emailSchema } from '@/server/modules/auth/schema';
 import { blurField, FieldShell, visibleError } from '@/components/forms/field-shell';
 import { FormAlert } from '@/components/forms/form-alert';
 import { focusFirstInvalid, focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
@@ -181,7 +181,10 @@ export function ForgotPasswordForm({
         <form
           ref={formRef}
           noValidate
+          method="post"
           aria-label="Reset your password"
+          // The dead-link page centres its text; labels and fields still read from the left.
+          className="text-left"
           onSubmit={(event) => {
             event.preventDefault();
             void submitChecked(form);
@@ -220,7 +223,7 @@ export function ForgotPasswordForm({
           >
             {submitLabel}
           </SubmitButton>
-          <Turnstile ref={turnstileRef} onChallenge={setChallenge} />
+          <Turnstile ref={turnstileRef} action={CAPTCHA_ACTIONS.reset} onChallenge={setChallenge} />
         </form>
         <div className="mt-4">{backToSignIn}</div>
       </div>

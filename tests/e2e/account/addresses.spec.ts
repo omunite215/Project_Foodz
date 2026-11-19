@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   expect,
   expectAccessible,
@@ -15,10 +15,16 @@ import {
  * queries are well-known places around the kitchen (88 Harbor Street, Boston; 8 km radius).
  */
 
+// A number and its unit never part at a line break (a no-break space joins them).
 const INSIDE =
-  /^We deliver here · (about [\d.]+ km|just under \d+ km|less than 0\.1 km) from our kitchen$/;
+  /^We deliver here · (about [\d,]+\.\d|just under \d+|less than 0\.1) km from our kitchen$/;
 const OUTSIDE =
-  /^Sorry, we don't deliver to .+ yet\. It's (about [\d.]+|just over \d+) km from our kitchen at 88 Harbor Street, and we deliver within 8 km\.$/;
+  /^Sorry, we don't deliver to .+ yet\. It's (about [\d,]+\.\d|just over \d+) km from our kitchen at 88 Harbor Street, and we deliver within 8 km\.$/;
+
+/** The grey of a control that can't be used right now (design 2.5, `neutral-6`). */
+const BLOCKED_FILL = 'rgb(230, 232, 236)';
+const fill = (locator: Locator) =>
+  locator.evaluate((element) => getComputedStyle(element).backgroundColor);
 
 /**
  * Types like a person, then picks by keyboard the first suggestion in `town` (the live search
@@ -55,8 +61,8 @@ test.describe('Address book (S4)', () => {
     // Empty: one picture, one line, one action (S4.1).
     await expect(page.getByRole('heading', { name: 'No saved addresses yet' })).toBeVisible();
     await expect(
-      page.getByText('We deliver within 8 km of 88 Harbor Street, Boston.').first(),
-    ).toBeVisible();
+      page.getByRole('main').getByText('We deliver within 8 km of 88 Harbor Street, Boston.'),
+    ).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Add an address' })).toHaveCount(1);
     await expectAccessible(page);
     await page.getByRole('link', { name: 'Add an address' }).click();
@@ -75,6 +81,19 @@ test.describe('Address book (S4)', () => {
     await page.getByRole('button', { name: 'Save address' }).click();
     await expect(page.getByText('Pick an address from the suggestions.')).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Address' })).toBeFocused();
+
+    // Five suggestions and their attribution fit the popup without scrolling it (5.5).
+    await page
+      .getByRole('combobox', { name: 'Address' })
+      .pressSequentially('Faneuil Hall Boston', { delay: 25 });
+    const attribution = page.getByText('Addresses © OpenStreetMap contributors');
+    await expect(attribution).toBeVisible({ timeout: 20_000 });
+    expect(
+      await attribution.evaluate((element) => {
+        const popup = element.parentElement!;
+        return popup.scrollHeight - popup.clientHeight;
+      }),
+    ).toBeLessThanOrEqual(0);
 
     await pickAddress(page, '1 Faneuil Hall Square Boston', /Boston/);
     await expect(result(page)).toHaveText(INSIDE, { timeout: 20_000 });
@@ -117,12 +136,15 @@ test.describe('Address book (S4)', () => {
     const save = page.getByRole('button', { name: 'Save address' });
     await expect(save).toHaveAttribute('aria-disabled', 'true');
     await expect(save).toHaveAttribute('aria-describedby', 'delivery-result');
+    // Blocked, so it doesn't look like it can be pressed (design 2.5).
+    expect(await fill(save)).toBe(BLOCKED_FILL);
     await page.getByRole('button', { name: 'Try another address' }).click();
     await expect(page.getByRole('combobox', { name: 'Address' })).toBeFocused();
     await expect(page.getByLabel('Apt, suite or floor (optional)')).toHaveValue('Floor 2');
 
     await pickAddress(page, 'Harvard Square Cambridge', /Cambridge/);
     await expect(result(page)).toHaveText(INSIDE, { timeout: 20_000 });
+    expect(await fill(save)).not.toBe(BLOCKED_FILL);
     await page.getByRole('radio', { name: 'Work' }).check({ force: true });
     await save.click();
     await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 20_000 });
@@ -148,10 +170,24 @@ test.describe('Address book (S4)', () => {
     await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 20_000 });
     await expect(home.getByText(/Apt 4/)).toBeVisible();
 
-    // Deleting the default names it, then names the new default (S4.9, S4.11).
-    await work.getByRole('button', { name: 'Delete Work' }).click();
+    // Cancelling, by Escape or by Cancel, returns focus to the Delete button (S7.8).
+    const deleteWork = work.getByRole('button', { name: 'Delete Work' });
     const dialog = page.getByRole('alertdialog', { name: /^Delete Work, .+\?$/ });
-    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    const cancel = dialog.getByRole('button', { name: 'Cancel' });
+    await deleteWork.click();
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(deleteWork).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toBeHidden();
+    await expect(deleteWork).toBeFocused();
+
+    // Deleting the default names it, then names the new default (S4.9, S4.11).
+    await deleteWork.click();
+    await expect(cancel).toBeFocused();
     await dialog.getByRole('button', { name: 'Delete address' }).click();
     await expect(liveRegion(page)).toHaveText('Address deleted. Home is now your default address');
     await expect(work).toHaveCount(0);
@@ -171,6 +207,8 @@ test.describe('Address book (S4)', () => {
     await expect(page.getByText('Map unavailable right now')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("We'll use the address as found.")).toBeVisible();
     await expect(page.getByRole('application')).toHaveCount(0);
+    // No pin to move, so no line asking to move it (5.6).
+    await expect(page.getByText('Not exactly right? Move the pin to your door.')).toHaveCount(0);
     await expect(result(page)).toHaveText(INSIDE, { timeout: 20_000 });
     await page.getByRole('button', { name: 'Save address' }).click();
     await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 20_000 });

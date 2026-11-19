@@ -191,6 +191,7 @@ export function TwoFactorForm({
         <form
           ref={formRef}
           noValidate
+          method="post"
           aria-label="Enter your code"
           onSubmit={(event) => {
             event.preventDefault();

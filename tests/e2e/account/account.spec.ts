@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import type { Locator } from '@playwright/test';
 import {
   addDishToCart,
   expect,
+  expectNoSidewaysScroll,
   isPhone,
   liveRegion,
   newPassword,
@@ -13,6 +16,11 @@ import {
 } from './support';
 
 const SIGNED_OUT_ELSEWHERE = 'You were signed out on this device, so we emptied your cart.';
+
+/** The grey of a control that can't be used right now (design 2.5, `neutral-6`). */
+const BLOCKED_FILL = 'rgb(230, 232, 236)';
+const fill = (locator: Locator) =>
+  locator.evaluate((element) => getComputedStyle(element).backgroundColor);
 
 test.describe('Signing out (S5.8, S5.10)', () => {
   test('with a cart, sign-out asks first, then empties the cart on this device', async ({
@@ -57,9 +65,23 @@ test.describe('Signing out (S5.8, S5.10)', () => {
       .getByRole('link', { name: 'Security' })
       .click();
     await expect(page).toHaveURL(/\/account\/security$/);
+    // Home arrives late, as on a slow connection.
+    await page.route(/\/\?_rsc=/, async (route) => {
+      if (!route.request().headers()['next-router-prefetch']) {
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
+      }
+      await route.fallback();
+    });
     if (isPhone(testInfo)) {
       await page.getByRole('button', { name: /^Account menu for / }).click();
-      await page.getByRole('menuitem', { name: 'Sign out' }).click();
+      const item = page.getByRole('menuitem', { name: 'Sign out' });
+      await expect(item).toBeVisible();
+      // The sign-out answer comes back before the menu has finished closing (as on a fast
+      // connection): the menu's return of focus to its button must not win over Home's content.
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Animation.enable');
+      await cdp.send('Animation.setPlaybackRate', { playbackRate: 0.1 });
+      await item.click();
     } else {
       await page
         .getByRole('navigation', { name: 'Account' })
@@ -122,6 +144,8 @@ test.describe('Your account (S3.3, S5.1 to S5.3)', () => {
     const profile = page.getByRole('form', { name: 'Profile' });
     const save = profile.getByRole('button', { name: 'Save changes' });
     await expect(save).toHaveAttribute('aria-disabled', 'true');
+    // Nothing to save yet, and it looks it (design 2.5).
+    expect(await fill(save)).toBe(BLOCKED_FILL);
     await save.click({ force: true });
     await expect(liveRegion(page)).toHaveText('No changes to save.');
 
@@ -132,6 +156,7 @@ test.describe('Your account (S3.3, S5.1 to S5.3)', () => {
     await phone.fill('617-555-0142');
     await phone.blur();
     await expect(phone).toHaveValue('(617) 555-0142');
+    expect(await fill(save)).not.toBe(BLOCKED_FILL);
     await save.click();
     await expect(profile.getByText('Saved')).toBeVisible();
     await expect(liveRegion(page)).toHaveText('Profile saved');
@@ -153,13 +178,48 @@ test.describe('Your account (S3.3, S5.1 to S5.3)', () => {
     await signUp(page);
     await open(page, '/account');
     const resend = page.getByRole('button', { name: 'Resend link' });
+    const width = (await resend.boundingBox())?.width;
     await resend.click();
-    await expect(
-      page.getByRole('main').getByText('Sent. Check your inbox and spam folder.'),
-    ).toBeVisible();
-    const resting = page.getByRole('button', { name: /^You can resend in \d+ s$/ });
-    await expect(resting).toHaveAttribute('aria-disabled', 'true');
-    await expect(resting).not.toHaveAttribute('aria-live');
+    // The countdown sits in the status line, which is not a live region; the button keeps its
+    // name and width, and looks blocked while it rests.
+    const status = page
+      .getByRole('main')
+      .getByText(/^Sent\. Check your inbox and spam folder\. You can resend in \d+ s\.$/);
+    await expect(status).toBeVisible();
+    await expect(liveRegion(page)).toHaveText('Sent. Check your inbox and spam folder.');
+    await expect(status).not.toHaveAttribute('aria-live');
+    await expect(status).not.toHaveAttribute('role');
+    await expect(resend).toHaveAttribute('aria-disabled', 'true');
+    expect((await resend.boundingBox())?.width).toBe(width);
+    expect(await fill(resend)).toBe(BLOCKED_FILL);
+  });
+
+  test('Cancel on Change password empties the form and returns focus to its button (design 4.3)', async ({
+    page,
+  }) => {
+    await signUp(page);
+    await open(page, '/account/security');
+    const toggle = page.getByRole('button', { name: 'Change password' });
+    await toggle.click();
+    const form = page.getByRole('form', { name: 'Change password' });
+    const current = form.getByLabel('Current password', { exact: true });
+    await expect(current).toBeFocused();
+    await current.fill('half typed');
+    await form.getByRole('button', { name: 'Cancel' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(form).toHaveCount(0);
+    await expect(toggle).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(current).toHaveValue('');
+  });
+
+  test('a long email wraps instead of widening the page (S7.12)', async ({ page }) => {
+    // 58 characters, as some work addresses are.
+    const email = `maximiliana.lopez-ruiz-${randomUUID().slice(0, 12)}@deliveries.example.com`;
+    await signUp(page, { email });
+    await open(page, '/account');
+    await expect(page.getByRole('main').getByText(`We sent the link to ${email}.`)).toBeVisible();
+    await expectNoSidewaysScroll(page);
   });
 
   test('the welcome notice\'s "Change it" opens the change-email form (S3.6)', async ({ page }) => {

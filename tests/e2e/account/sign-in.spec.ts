@@ -1,7 +1,6 @@
 import {
   ACCOUNTS,
   addDishToCart,
-  DEMO_PASSWORD,
   expect,
   expectAccessible,
   expectNoSidewaysScroll,
@@ -9,8 +8,10 @@ import {
   liveRegion,
   newPassword,
   open,
+  SAMPLE_PASSWORD,
   savedCartCount,
   signIn,
+  signUp,
   test,
   uniqueEmail,
   watchConsole,
@@ -78,11 +79,18 @@ test.describe('Create an account (S1)', () => {
     await page.keyboard.press('Escape');
     await expect(account).toBeFocused();
 
-    // Signed in, the sign-up page sends the person straight on (S2.7). (An account page: the
-    // storefront's offer countdowns can mismatch when hydration crosses a minute boundary.)
+    // Signed in, the sign-up page sends the person straight on (S2.7).
     await open(page, '/sign-up?callbackUrl=%2Faccount');
     await expect(page).toHaveURL(/\/account$/);
     expect(problems).toEqual([]);
+  });
+
+  test('with no return path, sign-up lands on Home with the welcome notice focused (S7.6)', async ({
+    page,
+  }) => {
+    await signUp(page);
+    await expect(page).toHaveURL(/localhost:\d+\/$/);
+    await expect(page.getByRole('region', { name: /^Welcome, Maya\./ })).toBeFocused();
   });
 
   test('a taken email reads the same and does not sign in (S1.5)', async ({ page }) => {
@@ -92,8 +100,10 @@ test.describe('Create an account (S1)', () => {
     await page.getByLabel('Password', { exact: true }).fill(newPassword());
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    const heading = page.getByRole('heading', { name: 'Check your inbox' });
+    // The panel replaces the title block, so its heading is the page's one h1 (S7.7).
+    const heading = page.getByRole('heading', { level: 1, name: 'Check your inbox' });
     await expect(heading).toBeFocused({ timeout: 30_000 });
+    await expect(page.locator('h1')).toHaveCount(1);
     await expect(
       page.getByRole('main').getByText(`We sent a link to ${ACCOUNTS.second}`),
     ).toBeVisible();
@@ -176,6 +186,9 @@ test.describe('Sign in (S2)', () => {
     const password = page.getByLabel('Password', { exact: true });
     await expect(password).toHaveValue('');
     await expect(password).toBeFocused();
+    // Emptied for a new try, not marked wrong: the alert is the only message.
+    await expect(password).not.toHaveAttribute('aria-invalid');
+    await expect(page.getByRole('main').getByText('Enter your password.')).toHaveCount(0);
     await expect(page.getByLabel('Email')).toHaveValue(ACCOUNTS.unconfirmed);
     await expect(liveRegion(page)).toHaveText(WRONG);
     await expect(page.getByRole('link', { name: 'reset your password' })).toHaveAttribute(
@@ -194,7 +207,7 @@ test.describe('Sign in (S2)', () => {
   test('a suspended account hears so only with the right password (S2.10)', async ({ page }) => {
     await open(page, '/sign-in');
     await page.getByLabel('Email').fill(ACCOUNTS.suspended);
-    await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD);
+    await page.getByLabel('Password', { exact: true }).fill(SAMPLE_PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(
       page
@@ -269,7 +282,7 @@ test.describe('Sign in (S2)', () => {
     await signIn(
       page,
       ACCOUNTS.second,
-      DEMO_PASSWORD,
+      SAMPLE_PASSWORD,
       '/sign-in?callbackUrl=%2Fmenu%3Fcuisine%3Dthai',
     );
     await expect(page).toHaveURL(/\/menu\?cuisine=thai$/);
@@ -288,7 +301,7 @@ test.describe('Sign in (S2)', () => {
     const response = await page.goto('/account/addresses');
     expect(response?.url()).toMatch(/\/sign-in\?callbackUrl=%2Faccount%2Faddresses$/);
     await page.getByLabel('Email').fill(ACCOUNTS.second);
-    await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD);
+    await page.getByLabel('Password', { exact: true }).fill(SAMPLE_PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 30_000 });
     await expect(page.getByRole('heading', { level: 1, name: 'Addresses' })).toBeVisible();

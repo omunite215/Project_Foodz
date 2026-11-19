@@ -9,7 +9,7 @@ import { deleteAddressAction, setDefaultAddressAction } from '@/server/modules/a
 import type { AddressBook as AddressBookData, AddressDto } from '@/server/modules/addresses/schema';
 import { LockedLine } from '@/components/account/settings-card';
 import { FormAlert } from '@/components/forms/form-alert';
-import { SubmitButton } from '@/components/forms/submit-button';
+import { BLOCKED_BUTTON_CLASS, SubmitButton } from '@/components/forms/submit-button';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -19,20 +19,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { radiusText } from '@/lib/account-text';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { prefersReducedMotion } from '@/lib/motion';
+import { cn } from '@/lib/utils';
 import { gsap } from 'gsap';
 import { AddressCard, addressName } from './address-card';
 import { peekAddressStatus, takeAddressStatus } from './address-status';
 
 /** "We deliver within 8 km of 88 Harbor Street, Boston." from the store settings. */
 export function deliveryAreaText(store: AddressBookData['store']) {
-  const radius = Number.isInteger(store.radiusKm)
-    ? String(store.radiusKm)
-    : store.radiusKm.toFixed(1);
   const place = store.addressText.split(',').slice(0, 2).join(',').trim();
-  return `We deliver within ${radius} km of ${place}.`;
+  return `We deliver within ${radiusText(store.radiusKm)} of ${place}.`;
 }
 
 type Status = { tone: 'success' | 'error'; text: string } | null;
@@ -85,8 +84,10 @@ export function AddressBook({ book }: { book: AddressBookData }) {
   const [deleting, setDeleting] = useState<AddressDto | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const addButtonRef = useRef<HTMLAnchorElement>(null);
-  // Where focus goes once the delete dialog has closed (its focus trap holds it until then).
+  // Where focus goes once the delete dialog has closed (its focus trap holds it until then):
+  // the next card after a delete, otherwise back to the Delete button that opened it.
   const focusAfterDialog = useRef<string | null>(null);
+  const dialogOpener = useRef<HTMLElement | null>(null);
 
   // The server's order and default win after every refresh.
   const [shownBook, setShownBook] = useState(book);
@@ -173,14 +174,17 @@ export function AddressBook({ book }: { book: AddressBookData }) {
           >
             Addresses
           </h1>
-          <p className="mt-2 text-body-4 text-muted-foreground">{subtitle}</p>
+          {/* The empty state says it under its picture instead, so it reads once (S4.1). */}
+          {addresses.length > 0 ? (
+            <p className="mt-2 text-body-4 text-muted-foreground">{subtitle}</p>
+          ) : null}
         </div>
         {book.canEdit && addresses.length > 0 ? (
           <div className="md:text-right">
             <Button
               asChild
               size="touch"
-              className="w-full uppercase md:w-auto"
+              className={cn('w-full uppercase md:w-auto', atLimit && BLOCKED_BUTTON_CLASS)}
               aria-disabled={atLimit || undefined}
               aria-describedby={atLimit ? limitId : undefined}
             >
@@ -258,7 +262,8 @@ export function AddressBook({ book }: { book: AddressBookData }) {
                 canEdit={book.canEdit}
                 busy={busy}
                 onSetDefault={() => void setDefault(address)}
-                onDelete={() => {
+                onDelete={(opener) => {
+                  dialogOpener.current = opener;
                   focusAfterDialog.current = null;
                   setDeleting(address);
                 }}
@@ -276,13 +281,15 @@ export function AddressBook({ book }: { book: AddressBookData }) {
       >
         <AlertDialogContent
           onCloseAutoFocus={(event) => {
-            // Cancelled: back to the Delete button (the default). Deleted: the next card, or
-            // "Add an address" when none is left.
-            const target = focusAfterDialog.current;
-            if (!target) return;
-            focusAfterDialog.current = null;
+            // The dialog has no trigger of its own, so focus is placed here every time.
+            // Deleted: the next card, or "Add an address" when none is left. Cancelled: back to
+            // the Delete button that opened it.
             event.preventDefault();
-            document.getElementById(target)?.focus();
+            const target = focusAfterDialog.current;
+            const opener = dialogOpener.current;
+            focusAfterDialog.current = null;
+            dialogOpener.current = null;
+            (target ? document.getElementById(target) : opener)?.focus();
           }}
         >
           <AlertDialogTitle>Delete {deleting ? addressName(deleting) : ''}?</AlertDialogTitle>

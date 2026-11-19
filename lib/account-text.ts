@@ -12,9 +12,12 @@ export function initialOf(name: string): string {
   return first.toLocaleUpperCase('en-US');
 }
 
+/** Keeps a number and its unit on one line ("2 items", "8 km"). */
+const NBSP = ' ';
+
 /** "(1 item)", "(3 items)": the cart's total quantity, as on the header badge. */
 export function itemsText(count: number): string {
-  return `(${count} ${count === 1 ? 'item' : 'items'})`;
+  return `(${count}${NBSP}${count === 1 ? 'item' : 'items'})`;
 }
 
 const dayMonthYear = (timeZone?: string) =>
@@ -64,7 +67,7 @@ export function deviceName(label: string): string {
 
 /** "You can resend in 45 s". */
 export function resendCountdownText(secondsLeft: number): string {
-  return `You can resend in ${Math.max(1, Math.ceil(secondsLeft))} s`;
+  return `You can resend in ${Math.max(1, Math.ceil(secondsLeft))}${NBSP}s`;
 }
 
 // ------------------------------------------------------------------ delivery (design 5.7)
@@ -78,8 +81,17 @@ export interface DeliveryFigures {
   storeStreet: string;
 }
 
-const km = (value: number) => value.toFixed(1);
-const radiusText = (radius: number) => (Number.isInteger(radius) ? String(radius) : km(radius));
+const oneDecimal = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+const upToOneDecimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+/** A distance as measured: "4.3 km", "2,839.7 km". */
+const kmText = (value: number) => `${oneDecimal.format(value)}${NBSP}km`;
+
+/** The delivery radius as set: "8 km", "7.5 km". */
+export const radiusText = (radius: number) => `${upToOneDecimal.format(radius)}${NBSP}km`;
 
 /**
  * The delivery result in words. Distances read so the edges never contradict the verdict: an
@@ -87,14 +99,14 @@ const radiusText = (radius: number) => (Number.isInteger(radius) ? String(radius
  */
 export function deliveryText(figures: DeliveryFigures, place: string): string {
   const radius = radiusText(figures.radiusKm);
-  const distance = Number(km(figures.distanceKm));
+  const distance = Number(figures.distanceKm.toFixed(1));
   if (figures.deliverable) {
-    if (distance < 0.1) return 'We deliver here · less than 0.1 km from our kitchen';
+    if (distance < 0.1) return `We deliver here · less than ${kmText(0.1)} from our kitchen`;
     if (distance >= figures.radiusKm) {
-      return `We deliver here · just under ${radius} km from our kitchen`;
+      return `We deliver here · just under ${radius} from our kitchen`;
     }
-    return `We deliver here · about ${km(distance)} km from our kitchen`;
+    return `We deliver here · about ${kmText(distance)} from our kitchen`;
   }
-  const how = distance <= figures.radiusKm ? `just over ${radius} km` : `about ${km(distance)} km`;
-  return `Sorry, we don't deliver to ${place} yet. It's ${how} from our kitchen at ${figures.storeStreet}, and we deliver within ${radius} km.`;
+  const how = distance <= figures.radiusKm ? `just over ${radius}` : `about ${kmText(distance)}`;
+  return `Sorry, we don't deliver to ${place} yet. It's ${how} from our kitchen at ${figures.storeStreet}, and we deliver within ${radius}.`;
 }

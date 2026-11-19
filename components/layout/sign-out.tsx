@@ -21,14 +21,17 @@ import { showSessionToast, SIGN_OUT_OFFLINE_TEXT } from './session-toast';
 /** Marks the header's "Sign in" link, which takes focus after signing out on a public page. */
 export const SIGN_IN_ENTRY_ATTRIBUTE = 'data-sign-in-entry';
 
-/** Focuses an element as soon as it is drawn (the refreshed header can take a moment). */
-function focusWhenDrawn(selector: string, attempts = 100) {
-  const element = document.querySelector<HTMLElement>(selector);
+/**
+ * Focuses an element as soon as it is drawn and `ready` holds (the refreshed header or the next
+ * page can take a moment). Gives up after 10 seconds.
+ */
+function focusWhenDrawn(selector: string, ready: () => boolean = () => true, attempts = 200) {
+  const element = ready() ? document.querySelector<HTMLElement>(selector) : null;
   if (element) {
     element.focus();
     return;
   }
-  if (attempts > 0) setTimeout(() => focusWhenDrawn(selector, attempts - 1), 50);
+  if (attempts > 0) setTimeout(() => focusWhenDrawn(selector, ready, attempts - 1), 50);
 }
 
 /**
@@ -75,7 +78,9 @@ export function useSignOut() {
     setDialogOpen(false);
     if (pathname.startsWith('/account')) {
       router.replace('/');
-      focusWhenDrawn('#main');
+      // <main> belongs to the root layout, so it is already there; wait until it holds Home, so
+      // the focus never lands on the account page that is about to go.
+      focusWhenDrawn('#main', () => window.location.pathname === '/');
     } else {
       router.refresh();
       focusWhenDrawn(`[${SIGN_IN_ENTRY_ATTRIBUTE}]`);

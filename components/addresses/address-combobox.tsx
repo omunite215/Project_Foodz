@@ -88,7 +88,7 @@ function Popup({
   return (
     <div
       ref={ref}
-      className="absolute inset-x-0 top-full z-20 mt-2 max-h-[320px] overflow-auto rounded-xl border border-neutral-6 bg-white py-1 shadow-raised"
+      className="absolute inset-x-0 top-full z-20 mt-2 max-h-[360px] overflow-auto rounded-xl border border-neutral-6 bg-white py-1 shadow-raised"
     >
       {state.kind === 'results' ? (
         <>

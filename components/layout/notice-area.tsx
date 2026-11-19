@@ -3,7 +3,7 @@
 import { CircleCheck, Info, type LucideIcon, MailCheck, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import { dismissNoticeAction } from '@/server/modules/account/actions';
 import { Button } from '@/components/ui/button';
 import { postAuthEvent, takeNoticeFocus } from '@/lib/auth-channel';
@@ -26,15 +26,19 @@ const TONES = {
 function Strip({
   tone,
   icon: Icon,
-  focusOnMount,
+  shouldFocus,
   onDismiss,
   remember,
   children,
 }: {
   tone: keyof typeof TONES;
   icon: LucideIcon;
-  /** Asked once, when the strip appears: should it take focus? (S7.6) */
-  focusOnMount: () => boolean;
+  /**
+   * Asked when the strip appears, and again on each page it stays on: take focus? (S7.6) The
+   * welcome notice can appear with the sign-up's own response, before the move to the page it
+   * greets the person on.
+   */
+  shouldFocus: (pathname: string) => boolean;
   onDismiss: () => void;
   /** Tells the server at once, before the fade. */
   remember?: () => void;
@@ -42,11 +46,14 @@ function Strip({
 }) {
   const ref = useRef<HTMLElement>(null);
   const textId = useId();
-  const [takeFocus] = useState(focusOnMount);
+  const pathname = usePathname();
+  const focusIfAsked = useEffectEvent((page: string) => {
+    if (shouldFocus(page)) ref.current?.focus();
+  });
 
   useEffect(() => {
-    if (takeFocus) ref.current?.focus();
-  }, [takeFocus]);
+    focusIfAsked(pathname);
+  }, [pathname]);
 
   const dismiss = () => {
     remember?.();
@@ -148,9 +155,10 @@ export function NoticeArea({
   if (welcome && !welcomeDismissed) {
     return (
       <Strip
+        key="welcome"
         tone="brand"
         icon={MailCheck}
-        focusOnMount={takeNoticeFocus}
+        shouldFocus={takeNoticeFocus}
         remember={() => void dismissNoticeAction({ notice: 'welcome' })}
         onDismiss={() => setWelcomeDismissed(true)}
       >
@@ -164,9 +172,10 @@ export function NoticeArea({
   if (flashNotice === 'email-confirmed') {
     return (
       <Strip
+        key="email-confirmed"
         tone="brand"
         icon={CircleCheck}
-        focusOnMount={flashFocus}
+        shouldFocus={flashFocus}
         onDismiss={() => setFlashOn(null)}
       >
         Email confirmed. You&apos;re ready to order.
@@ -177,9 +186,10 @@ export function NoticeArea({
   if (flashNotice === 'account-deleted') {
     return (
       <Strip
+        key="account-deleted"
         tone="neutral"
         icon={Info}
-        focusOnMount={flashFocus}
+        shouldFocus={flashFocus}
         onDismiss={() => setFlashOn(null)}
       >
         Your account has been deleted.

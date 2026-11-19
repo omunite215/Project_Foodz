@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { z } from 'zod';
 import { signInAction } from '@/server/modules/auth/actions';
-import { emailSchema } from '@/server/modules/auth/schema';
+import { CAPTCHA_ACTIONS, emailSchema } from '@/server/modules/auth/schema';
 import { blurField, FieldShell, visibleError } from '@/components/forms/field-shell';
 import { FormAlert } from '@/components/forms/form-alert';
 import {
@@ -178,7 +178,9 @@ export function SignInForm({
         return;
       case 'INVALID_CREDENTIALS':
       case 'ACCOUNT_SUSPENDED':
-        form.setFieldValue('password', '', { dontUpdateMeta: true });
+        // Emptied without a check: the alert says what went wrong, so the field shows no
+        // "Enter your password." until the person leaves it empty themselves.
+        form.setFieldValue('password', '', { dontUpdateMeta: true, dontValidate: true });
         setCaptcha(true);
         fail(error, passwordId);
         return;
@@ -263,6 +265,7 @@ export function SignInForm({
         <form
           ref={formRef}
           noValidate
+          method="post"
           aria-label="Sign in"
           onSubmit={(event) => {
             event.preventDefault();
@@ -349,7 +352,13 @@ export function SignInForm({
           >
             Sign in
           </SubmitButton>
-          {captcha ? <Turnstile ref={turnstileRef} onChallenge={setChallenge} /> : null}
+          {captcha ? (
+            <Turnstile
+              ref={turnstileRef}
+              action={CAPTCHA_ACTIONS.signIn}
+              onChallenge={setChallenge}
+            />
+          ) : null}
         </form>
 
         <p className="mt-6 text-center text-body-4 text-neutral-3">

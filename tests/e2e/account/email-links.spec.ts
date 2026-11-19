@@ -61,6 +61,38 @@ test.describe('Email links (S3)', () => {
     await expect(notice).toBeFocused();
   });
 
+  test("someone else's confirm link confirms that address and keeps this browser signed in (security S2)", async ({
+    page,
+  }) => {
+    // A stranger signs up and, instead of confirming, sends Maya the link.
+    const stranger = await signUp(page, { name: 'Sam Stranger' });
+    const link = linkIn(
+      await latestEmail(stranger.email, 'Confirm your email for Foodz'),
+      '/api/auth/verify-email',
+    );
+    await page.context().clearCookies();
+
+    // Maya, signed in to her own account, opens it.
+    const maya = await signUp(page, { name: 'Maya Lopez' });
+    await page.goto(link);
+    await expect(page).toHaveURL(/\/verify-email\?.*via=other-account/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Email confirmed' })).toBeFocused();
+    const main = page.getByRole('main');
+    await expect(
+      main.getByText(
+        'That email address is confirmed. It belongs to another Foodz account, so nothing changed here.',
+      ),
+    ).toBeVisible();
+    await expect(main.getByText(`You're still signed in as ${maya.email}.`)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Account menu for Maya' })).toBeVisible();
+
+    // Still Maya's account, and hers is still waiting for its own confirmation.
+    await open(page, '/account');
+    const email = page.getByRole('region', { name: 'Email' });
+    await expect(email.getByText(maya.email, { exact: true })).toBeVisible();
+    await expect(email.getByText('Not confirmed')).toBeVisible();
+  });
+
   test('an expired or tampered link reads as expired and offers a new one (S3.5)', async ({
     page,
   }) => {
@@ -90,8 +122,10 @@ test.describe('Email links (S3)', () => {
     await page.getByRole('link', { name: 'Forgot password?' }).click();
     await page.getByLabel('Email').fill(account.email);
     await page.getByRole('button', { name: 'Send reset link' }).click();
-    const sent = page.getByRole('heading', { name: 'Check your email' });
+    // The panel replaces the title block, so its heading is the page's one h1 (S7.7).
+    const sent = page.getByRole('heading', { level: 1, name: 'Check your email' });
     await expect(sent).toBeFocused({ timeout: 30_000 });
+    await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.getByText(`If there's a Foodz account for ${account.email}`)).toBeVisible();
 
     // An unknown address gets exactly the same answer.

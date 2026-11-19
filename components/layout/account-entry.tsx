@@ -78,6 +78,7 @@ function AccountMenu({ account }: { account: HeaderAccount }) {
   const pathname = usePathname();
   const signOut = useSignOut();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const signOutOnClose = useRef(false);
 
   return (
     <>
@@ -94,7 +95,19 @@ function AccountMenu({ account }: { account: HeaderAccount }) {
           </span>
           <ChevronDown className="hidden size-4 text-neutral-3 lg:block" aria-hidden />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={8} className="w-72 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuContent
+          align="end"
+          sideOffset={8}
+          className="w-72 max-w-[calc(100vw-2rem)]"
+          onCloseAutoFocus={() => {
+            // The menu hands focus back to its button only once its closing fade has ended. Signing
+            // out starts here, after that, so a quick answer can never be followed by the menu
+            // pulling focus back to a button that is about to disappear.
+            if (!signOutOnClose.current) return;
+            signOutOnClose.current = false;
+            signOut.request();
+          }}
+        >
           <DropdownMenuLabel>
             <span className="block text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
               {account.fullName}
@@ -127,8 +140,7 @@ function AccountMenu({ account }: { account: HeaderAccount }) {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => {
-              // After the menu has closed and handed focus back to its button.
-              setTimeout(() => signOut.request(), 0);
+              signOutOnClose.current = true;
             }}
           >
             <LogOut className="text-neutral-3" aria-hidden />

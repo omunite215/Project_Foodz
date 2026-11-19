@@ -2,11 +2,8 @@ import { Bike, Bookmark, CookingPot, MapPin } from 'lucide-react';
 import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { PageContainer } from '@/components/layout/page-container';
+import { radiusText } from '@/lib/account-text';
 import { loadStoreStatus } from '@/lib/storefront-data';
-
-function radiusText(km: number) {
-  return Number.isInteger(km) ? String(km) : km.toFixed(1);
-}
 
 /**
  * The benefits panel beside the sign-in forms from 1024 px (Figma Contact layout, design 3.1).
@@ -21,7 +18,7 @@ async function AuthPanel() {
   const benefits = [
     { icon: CookingPot, text: 'Cooked to order in our Boston kitchen' },
     { icon: Bike, text: `At your door in about ${minutes} minutes` },
-    { icon: MapPin, text: `We deliver within ${radius} km of ${street}` },
+    { icon: MapPin, text: `We deliver within ${radius} of ${street}` },
     { icon: Bookmark, text: 'Save your addresses for a faster checkout' },
   ];
 

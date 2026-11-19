@@ -460,6 +460,7 @@ export function AddressForm({
     <form
       ref={formRef}
       noValidate
+      method="post"
       aria-label={address ? `Edit ${address.label}` : 'Add an address'}
       className="max-w-[640px]"
       onSubmit={(event) => {
@@ -535,10 +536,13 @@ export function AddressForm({
         ) : null}
 
         <div>
-          <p className="text-body-5 text-neutral-3">
-            Not exactly right? Move the pin to your door.
-          </p>
-          <div className="relative mt-2 aspect-[16/10] w-full rounded-2xl bg-neutral-7">
+          {/* No pin to move while the map is down. */}
+          {mapState === 'failed' ? null : (
+            <p className="mb-2 text-body-5 text-neutral-3">
+              Not exactly right? Move the pin to your door.
+            </p>
+          )}
+          <div className="relative aspect-[16/10] w-full rounded-2xl bg-neutral-7">
             {mapState === 'failed' ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
                 <MapPinOff className="size-6 text-neutral-3" aria-hidden />

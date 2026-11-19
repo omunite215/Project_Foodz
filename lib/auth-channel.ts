@@ -36,17 +36,21 @@ export function onAuthEvent(listener: (type: AuthEvent) => void): () => void {
 }
 
 /*
- * A notice that appears after a navigation (the welcome notice after sign-up) takes focus once
- * it is drawn (S7.6). The form that caused it asks for that before navigating.
+ * A notice that greets the person after a navigation (the welcome notice after sign-up) takes
+ * focus once it is drawn on the page they were sent to (S7.6). The form that caused it names
+ * that page before navigating; the notice may already be drawn on the form's own page, from the
+ * action's response, and must not take focus there.
  */
-let noticeFocusPending = false;
+let noticeFocusPath: string | null = null;
 
-export function requestNoticeFocus(): void {
-  noticeFocusPending = true;
+/** `destination` is where the form is sending the person ("/menu?cuisine=thai" is fine). */
+export function requestNoticeFocus(destination: string): void {
+  noticeFocusPath = destination.split(/[?#]/)[0] || '/';
 }
 
-export function takeNoticeFocus(): boolean {
-  const pending = noticeFocusPending;
-  noticeFocusPending = false;
-  return pending;
+/** True once, on the page named by `requestNoticeFocus`. */
+export function takeNoticeFocus(pathname: string): boolean {
+  if (noticeFocusPath === null || noticeFocusPath !== pathname) return false;
+  noticeFocusPath = null;
+  return true;
 }

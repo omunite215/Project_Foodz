@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import { signUpAction } from '@/server/modules/auth/actions';
-import { signUpInput } from '@/server/modules/auth/schema';
+import { CAPTCHA_ACTIONS, signUpInput } from '@/server/modules/auth/schema';
 import { firstNameOf } from '@/server/modules/account/schema';
 import {
   blurField,
@@ -108,8 +108,9 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
       if (outcome.ok) {
         if (outcome.data.signedIn) {
           postAuthEvent('signed-in');
-          requestNoticeFocus();
-          router.replace(returnRoute(outcome.data.redirectTo));
+          const destination = returnRoute(outcome.data.redirectTo);
+          requestNoticeFocus(destination);
+          router.replace(destination);
         } else {
           setSentTo({ firstName: firstNameOf(value.name), email: outcome.data.email });
         }
@@ -216,6 +217,7 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
         <form
           ref={formRef}
           noValidate
+          method="post"
           aria-label="Create an account"
           onSubmit={(event) => {
             event.preventDefault();
@@ -359,7 +361,11 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
           >
             Create account
           </SubmitButton>
-          <Turnstile ref={turnstileRef} onChallenge={setChallenge} />
+          <Turnstile
+            ref={turnstileRef}
+            action={CAPTCHA_ACTIONS.signUp}
+            onChallenge={setChallenge}
+          />
         </form>
 
         <p className="mt-6 text-center text-body-4 text-neutral-3">

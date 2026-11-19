@@ -69,7 +69,9 @@ test.describe('Account pages for everyone (S7)', () => {
     }
   });
 
-  test('with reduced motion, menus and dialogs appear without moving (S7.11)', async ({ page }) => {
+  test('with reduced motion, menus and dialogs appear without moving (S7.11)', async ({
+    page,
+  }, testInfo) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await signUp(page);
     await page.getByRole('button', { name: /^Account menu for / }).click();
@@ -82,6 +84,17 @@ test.describe('Account pages for everyone (S7)', () => {
     const skeletons = page.locator('.animate-skeleton');
     for (const skeleton of await skeletons.all()) {
       expect(await skeleton.evaluate((element) => getComputedStyle(element).animationName)).toBe(
+        'none',
+      );
+    }
+
+    if (isPhone(testInfo)) {
+      // The footer's groups fold on phones; one opens at once, without its fade.
+      const footer = page.getByRole('navigation', { name: 'Footer' });
+      await footer.getByRole('button').first().click();
+      const group = footer.getByRole('region').first();
+      await expect(group).toBeVisible();
+      expect(await group.evaluate((element) => getComputedStyle(element).animationName)).toBe(
         'none',
       );
     }

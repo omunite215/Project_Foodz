@@ -50,7 +50,7 @@ export function FooterLinks({ groups }: { groups: FooterLinkGroup[] }) {
                 </AccordionPrimitive.Trigger>
               </h2>
             </AccordionPrimitive.Header>
-            <AccordionPrimitive.Content className="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-150 motion-reduce:animate-none">
+            <AccordionPrimitive.Content className="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-150 motion-reduce:data-[state=open]:animate-none">
               <ul className="pb-3">
                 {group.links.map((link) => (
                   <li key={`${link.label}-${link.href}`}>

@@ -3,7 +3,15 @@
 import { type ComponentProps, type ReactNode, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { useHydrated } from '@/lib/use-hydrated';
 import { cn } from '@/lib/utils';
+
+/**
+ * How a control that can't be used right now looks (design 2.5): never like an active one. The
+ * same grey as a sold-out dish's button. Its reason is shown nearby.
+ */
+export const BLOCKED_BUTTON_CLASS =
+  'cursor-not-allowed border-neutral-6 bg-neutral-6 text-neutral-3 hover:bg-neutral-6 hover:text-neutral-3';
 
 /** Pending labels appear only once a request has taken this long, so quick answers never flash. */
 export const PENDING_LABEL_DELAY_MS = 300;
@@ -25,7 +33,12 @@ export function useSlowPending(pending: boolean, delay = PENDING_LABEL_DELAY_MS)
 /**
  * A submit button that never sends twice (design 2.5): while pending, or while blocked for a
  * reason shown nearby, it is aria-disabled (it stays focusable and in the tab order) and ignores
- * presses. After 300 ms of waiting it shows a spinner and its pending label.
+ * presses. After 300 ms of waiting it shows a spinner and its pending label; while blocked it
+ * is grey.
+ *
+ * Its forms are sent by the page's scripts. Until they run, a submit button is disabled, so a
+ * press (or Enter in a field) on a page that is still loading never sends the form the browser's
+ * own way, with what was typed in the address. It keeps its look meanwhile, so nothing flickers.
  */
 export function SubmitButton({
   pending,
@@ -46,12 +59,15 @@ export function SubmitButton({
   onBlockedPress?: () => void;
 }) {
   const slow = useSlowPending(pending);
+  const hydrated = useHydrated();
   const inactive = pending || blocked;
+  const loading = type === 'submit' && !hydrated;
 
   return (
     <Button
       type={type}
       size="touch"
+      disabled={loading || undefined}
       aria-disabled={inactive || undefined}
       onClick={(event) => {
         if (inactive) {
@@ -61,7 +77,13 @@ export function SubmitButton({
         }
         onClick?.(event);
       }}
-      className={cn(inactive && 'cursor-not-allowed', className)}
+      // The blocked look comes after the caller's classes, so it wins over their colours.
+      className={cn(
+        inactive && 'cursor-not-allowed',
+        loading && 'disabled:opacity-100',
+        className,
+        blocked && !pending && BLOCKED_BUTTON_CLASS,
+      )}
       {...props}
     >
       {slow ? (

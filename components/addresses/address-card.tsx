@@ -44,7 +44,8 @@ export function AddressCard({
   canEdit: boolean;
   ref?: Ref<HTMLElement>;
   onSetDefault: () => void;
-  onDelete: () => void;
+  /** Gets the Delete button, so focus can go back to it when the dialog is cancelled. */
+  onDelete: (opener: HTMLElement) => void;
   busy: boolean;
 }) {
   const Icon = KIND_ICONS[address.kind];
@@ -137,8 +138,8 @@ export function AddressCard({
               size="touch"
               aria-label={`Delete ${address.label}`}
               aria-disabled={busy || undefined}
-              onClick={() => {
-                if (!busy) onDelete();
+              onClick={(event) => {
+                if (!busy) onDelete(event.currentTarget);
               }}
               className={cn('px-3 text-destructive hover:bg-neutral-7 hover:text-destructive')}
             >

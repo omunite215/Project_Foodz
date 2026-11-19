@@ -95,6 +95,7 @@ export function ResetPasswordForm({
         <form
           ref={formRef}
           noValidate
+          method="post"
           aria-label="Choose a new password"
           onSubmit={(event) => {
             event.preventDefault();

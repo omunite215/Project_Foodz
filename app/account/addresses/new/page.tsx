@@ -32,7 +32,8 @@ export default async function NewAddressPage() {
       </h1>
       {book.canEdit ? null : (
         <LockedLine className="mt-3">
-          The demo account can&apos;t save addresses. Create your own account to save yours.
+          You can try the search, the map and the delivery check. Saving is turned off for the demo
+          account.
         </LockedLine>
       )}
       <div className="mt-8">

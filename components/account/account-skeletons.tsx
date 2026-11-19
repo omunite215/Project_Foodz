@@ -28,7 +28,7 @@ function Card({ children, className }: { children: ReactNode; className?: string
 function Head({ subtitle = false }: { subtitle?: boolean }) {
   return (
     <div>
-      <Bar className="h-8 w-48 md:h-10" />
+      <Bar className="h-10 w-48 md:h-[50px]" />
       {subtitle ? <Bar className="mt-2 h-6 w-full max-w-80" /> : null}
     </div>
   );
@@ -120,7 +120,7 @@ export function AddressesSkeleton() {
   return (
     <LoadingRegion label="Loading addresses">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <Head subtitle />
+        <Head subtitle={addressCount > 0} />
         {addressCount > 0 ? <Bar className="h-11 w-full rounded-lg md:w-48" /> : null}
       </div>
       {addressCount > 0 ? (
@@ -147,7 +147,7 @@ export function AddressFormSkeleton() {
   return (
     <LoadingRegion label="Loading address">
       <Bar className="h-11 w-48 rounded-lg" />
-      <Bar className="mt-6 h-8 w-48 md:h-10" />
+      <Bar className="mt-6 h-10 w-48 md:h-[50px]" />
       <div className="mt-8 max-w-[640px] space-y-6">
         <FieldBox />
         <div>
@@ -173,6 +173,26 @@ export function AddressFormSkeleton() {
   );
 }
 
+/**
+ * One signed-in device: its name (with "This device" on the current one) over when it was
+ * active. Below `sm` both lines wrap, as the real row's do.
+ */
+function DeviceRowBox({ current }: { current: boolean }) {
+  return (
+    <div className="flex items-center gap-4 py-4">
+      <Bar className="size-10 shrink-0 rounded-full" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Bar className="h-6 w-36" />
+          {current ? <Bar className="h-7 w-24" /> : null}
+        </div>
+        <Bar className="h-[42px] w-full sm:h-[21px] sm:w-72" />
+      </div>
+      {current ? null : <Bar className="h-11 w-20 shrink-0 rounded-lg" />}
+    </div>
+  );
+}
+
 export function SecuritySkeleton() {
   const account = useAccount();
   const rows = account.isDemo ? 1 : Math.max(1, Math.min(account.deviceCount, 5));
@@ -185,7 +205,10 @@ export function SecuritySkeleton() {
           {account.isDemo ? (
             <Bar className="mt-5 h-6 w-72 max-w-full" />
           ) : (
-            <Bar className="mt-5 h-11 w-full rounded-lg" />
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <Bar className="h-6 w-60 max-w-full" />
+              <Bar className="h-11 w-44 rounded-lg" />
+            </div>
           )}
         </Card>
         {account.twoFactorEnabled ? (
@@ -197,14 +220,20 @@ export function SecuritySkeleton() {
         <Card>
           <Bar className="h-6 w-44" />
           <Bar className="mt-1 h-[21px] w-64 max-w-full" />
-          <div className="mt-9 space-y-0">
-            {Array.from({ length: rows }, (_, index) => (
-              <Bar key={index} className="my-2 h-[56px] w-full" />
-            ))}
+          <div className="mt-5">
+            <div className="-mt-1 divide-y divide-neutral-6">
+              {Array.from({ length: rows }, (_, index) => (
+                <DeviceRowBox key={index} current={index === 0} />
+              ))}
+            </div>
           </div>
-          {!account.isDemo && account.deviceCount > 1 ? (
+          {account.isDemo ? (
+            <Bar className="mt-4 h-[42px] w-full sm:h-[21px] sm:w-96" />
+          ) : account.deviceCount > 1 ? (
             <Bar className="mt-4 h-11 w-64 max-w-full rounded-lg" />
-          ) : null}
+          ) : (
+            <Bar className="mt-4 h-[21px] w-56 max-w-full" />
+          )}
         </Card>
       </div>
     </LoadingRegion>
@@ -218,13 +247,13 @@ export function PrivacySkeleton() {
       <div className="mt-8 space-y-6">
         <Card>
           <Bar className="h-6 w-48" />
-          <Bar className="mt-1 h-12 w-full" />
+          <Bar className="mt-1 h-24 w-full md:h-12" />
           <Bar className="mt-5 h-11 w-48 rounded-lg" />
           <div className="mt-3 min-h-6" />
         </Card>
         <Card>
           <Bar className="h-6 w-48" />
-          <Bar className="mt-1 h-[21px] w-3/4" />
+          <Bar className="mt-1 h-[42px] w-full sm:h-[21px] sm:w-3/4" />
           <Bar className="mt-5 h-11 w-48 rounded-lg" />
         </Card>
       </div>
