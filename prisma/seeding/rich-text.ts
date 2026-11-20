@@ -18,7 +18,8 @@ export interface RichText {
   html: string;
 }
 
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const text = (value: string): TextNode => ({ type: 'text', text: value });
 const paragraph = (value: string): ElementNode => ({ type: 'paragraph', content: [text(value)] });

@@ -11,7 +11,8 @@ export const siteSettings = {
   deliveryRadiusKm: 8,
   baseDeliveryFeeCents: 199,
   perKmFeeCents: 50,
-  taxRateBps: 625,
+  // Boston's meals tax: the 6.25 % state rate plus the 0.75 % local option (F3 U1).
+  taxRateBps: 700,
   openingHours: {
     mon: { open: '11:00', close: '22:00' },
     tue: { open: '11:00', close: '22:00' },
@@ -42,6 +43,32 @@ export const siteSettings = {
       'Order Korean, Thai and Vietnamese dishes cooked to order and delivered hot, with live tracking.',
   },
 };
+
+// ------------------------------------------------------------------ copy (F3)
+
+// Codes work in the cart now, not only at checkout; WELCOME10 is once per customer, and nothing
+// checks "first order" (F3 B17).
+export const FAQ_COUPON_ANSWER =
+  "Enter it in your cart or at checkout. You'll see the discount before you pay.";
+export const WELCOME10_DESCRIPTION = '10% off one order, once per customer (up to $10)';
+export const FREE_DELIVERY_BAR = 'Use code FREEDELIVERY in your cart';
+
+/**
+ * Seeded values earlier runs wrote and F3 changed. A database still holding the old value gets
+ * the new one; a value someone has edited since is left alone.
+ */
+export const SEED_CORRECTIONS = {
+  taxRateBps: { from: 625, to: 700 },
+  welcome10Description: {
+    from: '10% off your first order (up to $10)',
+    to: WELCOME10_DESCRIPTION,
+  },
+  freeDeliveryBar: { from: 'Use code FREEDELIVERY at checkout', to: FREE_DELIVERY_BAR },
+  faqCouponAnswer: {
+    from: 'Enter the code at checkout. The discount is shown before you pay.',
+    to: FAQ_COUPON_ANSWER,
+  },
+} as const;
 
 // ------------------------------------------------------------------ site pages
 
@@ -141,7 +168,7 @@ const pages: { slug: string; title: string; blocks: Block[] }[] = [
       { h3: 'Can I pay with cash?' },
       { p: 'Yes. Choose cash at checkout and pay the courier when your order arrives.' },
       { h3: 'How do I use a coupon?' },
-      { p: 'Enter the code at checkout. The discount is shown before you pay.' },
+      { p: FAQ_COUPON_ANSWER },
       { h3: 'Can I change my order after placing it?' },
       {
         p: 'You can cancel until the kitchen accepts the order. After that, contact support and we will do what we can.',
@@ -179,7 +206,7 @@ export function coupons(now: Date) {
   return [
     {
       code: 'WELCOME10',
-      description: '10% off your first order (up to $10)',
+      description: WELCOME10_DESCRIPTION,
       type: 'PERCENT' as const,
       value: 10,
       minSubtotalCents: 1500,
@@ -234,7 +261,7 @@ export function campaigns(now: Date) {
     {
       key: 'bar-free-delivery',
       title: 'Free delivery on orders over $30',
-      subtitle: 'Use code FREEDELIVERY at checkout',
+      subtitle: FREE_DELIVERY_BAR,
       ctaLabel: null,
       ctaHref: null,
       placement: 'ANNOUNCEMENT_BAR' as const,
@@ -371,4 +398,48 @@ export function blogPosts(now: Date) {
     body: richText(post.blocks),
     publishedAt: new Date(now.getTime() - post.daysAgo * day),
   }));
+}
+
+// ------------------------------------------------------------------ sample promotions (local and CI)
+
+/**
+ * Codes for the refusals nobody could reach otherwise (F3 Decision 16): seeded only with the
+ * sample customers, never on a shared deployment.
+ */
+export function sampleCoupons(now: Date, owners: { secondCustomer: string }) {
+  return [
+    {
+      code: 'NEXTWEEK',
+      description: '15% off, starting next week',
+      type: 'PERCENT' as const,
+      value: 15,
+      startsAt: new Date(now.getTime() + 7 * day),
+    },
+    {
+      code: 'FIRST100',
+      description: '$3 off for our first 100 orders',
+      type: 'FIXED' as const,
+      value: 300,
+      usageLimit: 100,
+      usedCount: 100,
+    },
+    {
+      code: 'PAUSED20',
+      description: '20% off (paused)',
+      type: 'PERCENT' as const,
+      value: 20,
+      isActive: false,
+    },
+    {
+      // A store-credit code as F10 will issue them: long, random, for one customer only.
+      code: 'CREDIT-PRIYA-7Q2XK9',
+      description: 'Store credit',
+      type: 'FIXED' as const,
+      value: 800,
+      usageLimit: 1,
+      perUserLimit: 1,
+      ownerUserId: owners.secondCustomer,
+      isStoreCredit: true,
+    },
+  ];
 }

@@ -76,6 +76,38 @@ export const dishSuggestionsInput = z
   .strict();
 export type DishSuggestionsInput = z.input<typeof dishSuggestionsInput>;
 
+// ------------------------------------------------------------------ search (F3 S6)
+
+/** Longer queries are cut to this many characters (S6.8). */
+export const SEARCH_MAX_LENGTH = 100;
+
+/**
+ * What the customer typed. Anything up to 1000 characters is accepted and cut to 100 on the
+ * server; control characters are ignored (S6.14). It is only ever used as Postgres full-text
+ * and trigram input, never as a pattern.
+ */
+export const menuSearchInput = z.object({ q: z.string().max(1000) }).strict();
+export type MenuSearchInput = z.input<typeof menuSearchInput>;
+
+export const menuSearchResultSchema = z.object({
+  /** The query as searched: cleaned, spaces collapsed, at most 100 characters. Render as text. */
+  query: z.string(),
+  /**
+   * all: nothing to search for (empty, only stop words such as "the", or only punctuation):
+   * show the whole menu. matches: `ids` hold the matches. suggestions: no exact match, `ids`
+   * hold close matches and `didYouMean` the best one (S6.5). none: nothing matches (S6.7).
+   */
+  kind: z.enum(['all', 'matches', 'suggestions', 'none']),
+  /**
+   * Dish ids in result order: dishes whose name matches first, sold-out dishes last (S6.2).
+   * Price and cuisine filters apply to these in the browser (B10).
+   */
+  ids: z.array(z.uuid()),
+  /** With kind suggestions: the closest dish name, e.g. "Bulgogi". */
+  didYouMean: z.string().nullable(),
+});
+export type MenuSearchResult = z.infer<typeof menuSearchResultSchema>;
+
 // ------------------------------------------------------------------ campaigns
 
 export const campaignCouponSchema = z.object({

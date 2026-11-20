@@ -81,6 +81,8 @@ export interface AccountDto {
   googleLinked: boolean;
   signInMethods: SignInMethod[];
   addressCount: number;
+  /** Saved favorite dishes (F3), for the account menu and side nav. */
+  favoriteCount: number;
   /** Signed-in devices; 1 for the shared demo accounts, which see only this device. */
   deviceCount: number;
   createdAt: string;
@@ -123,6 +125,8 @@ export interface AccountExport {
     savedAt: string;
   }[];
   devices: { device: string; signedInAt: string; lastActiveAt: string; thisDevice: boolean }[];
+  /** Hearted dishes, most recently saved first (F3 S5.11). */
+  favorites: { dish: string; savedAt: string }[];
 }
 
 /** A person as staff see them; personal fields are masked for demo staff (U4). */

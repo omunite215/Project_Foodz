@@ -39,6 +39,22 @@ export const CAPTCHA_ACTIONS = {
 } as const;
 export type CaptchaAction = (typeof CAPTCHA_ACTIONS)[keyof typeof CAPTCHA_ACTIONS];
 
+/**
+ * Why someone was sent to sign in (F3 B13): `/sign-in?reason=checkout|promo|favorite`. Only these
+ * fixed values are honoured, so a link can never put its own words on the sign-in page; any
+ * other value reads as no reason. `/sign-up` passes it on.
+ */
+export const SIGN_IN_REASONS = ['checkout', 'promo', 'favorite'] as const;
+export type SignInReason = (typeof SIGN_IN_REASONS)[number];
+
+const isSignInReason = (value: unknown): value is SignInReason =>
+  typeof value === 'string' && (SIGN_IN_REASONS as readonly string[]).includes(value);
+
+/** The reason from a search parameter, or null for anything else. */
+export function signInReason(raw: unknown): SignInReason | null {
+  return isSignInReason(raw) ? raw : null;
+}
+
 /** Where to go afterwards; cleaned by safeRedirectPath() on the server. */
 const callbackUrl = z.string().max(512).optional();
 

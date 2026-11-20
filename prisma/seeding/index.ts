@@ -3,9 +3,19 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { generateRandomString, symmetricEncrypt } from 'better-auth/crypto';
 import { v5 as uuidv5, v7 as uuidv7 } from 'uuid';
-import type { PrismaClient } from '../../server/db/generated/client';
-import { blogPosts, campaigns, contentPages, coupons, siteSettings, tags } from './content';
+import type { Prisma, PrismaClient } from '../../server/db/generated/client';
+import {
+  blogPosts,
+  campaigns,
+  contentPages,
+  coupons,
+  SEED_CORRECTIONS,
+  sampleCoupons,
+  siteSettings,
+  tags,
+} from './content';
 import { menuItems } from './menu';
+import { escapeHtml } from './rich-text';
 
 /*
  * Seeds an empty database with everything a fresh install needs: the menu, store settings,
@@ -78,6 +88,10 @@ export const SAMPLE_ACCOUNTS = [
 ] as const;
 
 const TERMS_VERSION = 1;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The demo customer's favorites in local and CI databases (F3): one of them sold out. */
+const DEMO_FAVORITE_SLUGS = ['bulgogi', 'naengmyeon'] as const;
 
 /** Database hosts of a developer machine, the compose network and CI. */
 const LOCAL_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', 'db']);
@@ -274,6 +288,35 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
           });
           count('addresses', true);
         }
+
+        // F3 fixtures: codes for the refusals nobody could reach otherwise, the second
+        // customer's store credit and past WELCOME10 order, and the demo customer's favorites.
+        const secondCustomer = sample['second.customer@foodz.example']!;
+        for (const coupon of sampleCoupons(now, { secondCustomer })) {
+          const existing = await tx.coupon.findUnique({
+            where: { code: coupon.code },
+            select: { id: true },
+          });
+          if (existing) continue;
+          await tx.coupon.create({ data: coupon });
+          count('coupons', true);
+        }
+        count('orders', await seedPastWelcomeOrder(tx, secondCustomer, now));
+
+        const favoriteDishes = await tx.menuItem.findMany({
+          where: { slug: { in: [...DEMO_FAVORITE_SLUGS] } },
+          select: { id: true, slug: true },
+        });
+        const favorites = await tx.favorite.createMany({
+          data: favoriteDishes.map((dish) => ({
+            userId: demo.customer!,
+            menuItemId: dish.id,
+            // Bulgogi was saved last, so it leads the list.
+            createdAt: new Date(now.getTime() - (dish.slug === 'bulgogi' ? 1 : 2) * DAY_MS),
+          })),
+          skipDuplicates: true,
+        });
+        created.favorites = (created.favorites ?? 0) + favorites.count;
       }
 
       // -------------------------------------------------------------- site pages
@@ -304,6 +347,8 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         });
         count('contentPages', true);
       }
+
+      count('contentVersions', await correctFaqCouponAnswer(tx, admin.id, now));
 
       // -------------------------------------------------------------- blog
       for (const tag of tags) {
@@ -390,12 +435,148 @@ export async function seedCatalog(tx: Tx, options: { now: Date; updatedById?: st
     campaignsCreated += 1;
   }
 
+  // Values earlier runs seeded and F3 changed; edited values are left alone.
+  const { taxRateBps, welcome10Description, freeDeliveryBar } = SEED_CORRECTIONS;
+  const corrected = await Promise.all([
+    tx.siteSettings.updateMany({
+      where: { id: 1, taxRateBps: taxRateBps.from },
+      data: { taxRateBps: taxRateBps.to },
+    }),
+    tx.coupon.updateMany({
+      where: { code: 'WELCOME10', description: welcome10Description.from },
+      data: { description: welcome10Description.to },
+    }),
+    tx.campaign.updateMany({
+      where: { id: seedId('campaign:bar-free-delivery'), subtitle: freeDeliveryBar.from },
+      data: { subtitle: freeDeliveryBar.to },
+    }),
+  ]);
+
   return {
     siteSettings: siteSettingsCreated,
     menuItems: menu.count,
     coupons: couponsCreated,
     campaigns: campaignsCreated,
+    corrections: corrected.reduce((sum, result) => sum + result.count, 0),
   };
+}
+
+/**
+ * The second customer's delivered order that used WELCOME10, so "already used by me" (R6) can
+ * be tried before checkout exists (F3). Amounts as quote() gives them at 7 %: 2 × Gimbap
+ * $25.98, WELCOME10 −$2.60, delivery 1.3 km $2.64, tax on $23.38 = $1.64, total $27.66.
+ */
+async function seedPastWelcomeOrder(tx: Tx, userId: string, now: Date): Promise<boolean> {
+  const id = seedId('second-customer-past-order');
+  if (await tx.order.findUnique({ where: { id }, select: { id: true } })) return false;
+  const [welcome, gimbap] = await Promise.all([
+    tx.coupon.findUniqueOrThrow({ where: { code: 'WELCOME10' }, select: { id: true } }),
+    tx.menuItem.findUniqueOrThrow({ where: { slug: 'gimbap' }, select: { id: true, title: true } }),
+  ]);
+  const placedAt = new Date(now.getTime() - 3 * DAY_MS);
+  await tx.order.create({
+    data: {
+      id,
+      number: 'S1001',
+      userId,
+      status: 'DELIVERED',
+      paymentMethod: 'CASH',
+      paymentStatus: 'PAID',
+      contactName: 'Priya Shah',
+      contactPhone: '+16175550123',
+      addressText: '1 Faneuil Hall Square, Boston, MA 02109',
+      addressLat: 42.36,
+      addressLng: -71.0548,
+      distanceKm: 1.3,
+      subtotalCents: 2598,
+      discountCents: 260,
+      deliveryFeeCents: 264,
+      taxCents: 164,
+      tipCents: 0,
+      totalCents: 2766,
+      couponId: welcome.id,
+      placedAt,
+      deliveredAt: new Date(placedAt.getTime() + 38 * 60 * 1000),
+      createdAt: placedAt,
+      items: {
+        create: [
+          {
+            menuItemId: gimbap.id,
+            title: gimbap.title,
+            unitPriceCents: 1299,
+            quantity: 2,
+            flavors: [],
+          },
+        ],
+      },
+    },
+  });
+  await tx.couponRedemption.create({
+    data: {
+      couponId: welcome.id,
+      userId,
+      orderId: id,
+      status: 'REDEEMED',
+      discountCents: 260,
+      createdAt: placedAt,
+    },
+  });
+  await tx.coupon.update({ where: { id: welcome.id }, data: { usedCount: { increment: 1 } } });
+  return true;
+}
+
+/**
+ * The FAQ's answer about coupons said "at checkout" (F3). When the published version still has
+ * that sentence, a new version with the new one is published, the way the CMS would.
+ */
+async function correctFaqCouponAnswer(tx: Tx, publishedById: string, now: Date) {
+  const { from, to } = SEED_CORRECTIONS.faqCouponAnswer;
+  const page = await tx.contentPage.findUnique({
+    where: { slug: 'faq' },
+    select: {
+      id: true,
+      publishedVersion: { select: { title: true, content: true, contentHtml: true } },
+    },
+  });
+  const current = page?.publishedVersion;
+  if (!page || !current?.contentHtml.includes(escapeHtml(from))) return false;
+  const content = replaceText(current.content, from, to);
+  if (content === null) return false;
+
+  const latest = await tx.contentVersion.findFirst({
+    where: { pageId: page.id },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  });
+  const versionId = uuidv7();
+  await tx.contentVersion.create({
+    data: {
+      id: versionId,
+      pageId: page.id,
+      version: (latest?.version ?? 0) + 1,
+      title: current.title,
+      content,
+      contentHtml: current.contentHtml.replaceAll(escapeHtml(from), escapeHtml(to)),
+      publishedById,
+      publishedAt: now,
+    },
+  });
+  await tx.contentPage.update({ where: { id: page.id }, data: { publishedVersionId: versionId } });
+  return true;
+}
+
+/** The same document with every text node that reads `from` reading `to`. */
+function replaceText(node: Prisma.JsonValue, from: string, to: string): Prisma.JsonValue {
+  if (Array.isArray(node)) return node.map((child) => replaceText(child, from, to));
+  if (node !== null && typeof node === 'object') {
+    return Object.fromEntries(
+      Object.entries(node).map(([key, value]) => [
+        key,
+        key === 'text' && value === from ? to : replaceText(value ?? null, from, to),
+      ]),
+    );
+  }
+  return node;
 }
 
 async function upsertUser(

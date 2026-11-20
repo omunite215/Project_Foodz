@@ -42,15 +42,25 @@ export const statements = {
   // Self-service on one's own account and address book.
   account: ['update-own', 'export-own', 'delete-own'],
   address: ['manage-own'],
+  // Hearted dishes (F3). The shared demo customer may use them: they hold no personal data.
+  favorite: ['manage-own'],
 } as const;
 
 export const ac = createAccessControl(statements);
 
-/** Everyone manages their own profile and addresses. Staff accounts are removed by an admin. */
-const selfService = { account: ['update-own', 'export-own'], address: ['manage-own'] } as const;
+/**
+ * Everyone manages their own profile, addresses and favorites. Staff accounts are removed by an
+ * admin.
+ */
+const selfService = {
+  account: ['update-own', 'export-own'],
+  address: ['manage-own'],
+  favorite: ['manage-own'],
+} as const;
 const selfServiceWithDelete = {
   account: ['update-own', 'export-own', 'delete-own'],
   address: ['manage-own'],
+  favorite: ['manage-own'],
 } as const;
 
 const customer = ac.newRole({

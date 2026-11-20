@@ -10,7 +10,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [postgis, pg_trgm]
+  extensions = [postgis, pg_trgm, unaccent]
 }
 
 // ------------------------------------------------------------------ auth (Better Auth)
@@ -194,13 +194,19 @@ model MenuItem {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  /// Search document (title, cuisine name, description), a column the database generates (F3
+  /// migration f3_menu_search). The default below is that generation expression exactly as
+  /// Postgres prints it, so `prisma migrate dev` sees no difference; Prisma never writes it.
+  /// The trigram index on the accent-free title is an expression index Prisma can't describe.
+  searchVector Unsupported("tsvector")? @default(dbgenerated("((setweight(to_tsvector('foodz_search'::regconfig, title), 'A'::\"char\") || setweight(to_tsvector('foodz_search'::regconfig,\nCASE cuisine\n    WHEN 'KOREAN'::\"Cuisine\" THEN 'Korean'::text\n    WHEN 'THAI'::\"Cuisine\" THEN 'Thai'::text\n    WHEN 'VIETNAMESE'::\"Cuisine\" THEN 'Vietnamese'::text\n    ELSE ''::text\nEND), 'B'::\"char\")) || setweight(to_tsvector('foodz_search'::regconfig, description), 'C'::\"char\"))")) @map("search_vector")
+
   favorites  Favorite[]
   orderItems OrderItem[]
   reviews    Review[]
   campaigns  Campaign[]
 
   @@index([cuisine, isAvailable])
-  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([searchVector], type: Gin)
   @@map("menu_items")
 }
 
@@ -463,6 +469,8 @@ enum CouponType {
   FREE_DELIVERY
 }
 
+// Row-level security (F3): a personal or store-credit code (owner_user_id set) is visible only to
+// its owner and to non-demo support and admin; public codes are visible to everyone.
 model Coupon {
   id               String     @id @default(uuid(7)) @db.Uuid
   code             String     @unique
@@ -744,7 +752,7 @@ model SiteSettings {
   deliveryRadiusKm     Float                                  @default(8) @map("delivery_radius_km")
   baseDeliveryFeeCents Int                                    @default(199) @map("base_delivery_fee_cents")
   perKmFeeCents        Int                                    @default(50) @map("per_km_fee_cents")
-  taxRateBps           Int                                    @default(625) @map("tax_rate_bps")
+  taxRateBps           Int                                    @default(700) @map("tax_rate_bps")
   openingHours         Json                                   @map("opening_hours")
   contactEmail         String                                 @map("contact_email")
   contactPhone         String                                 @map("contact_phone")

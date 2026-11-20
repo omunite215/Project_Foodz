@@ -1,7 +1,13 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/server/errors';
 import { redis } from '@/server/redis';
-import { enforceRateLimit, formatWait, takeAttempt } from '@/server/security/rate-limit';
+import {
+  blockedFor,
+  enforceRateLimit,
+  formatWait,
+  takeAttempt,
+  takeAttempts,
+} from '@/server/security/rate-limit';
 
 afterAll(() => redis.quit());
 
@@ -69,6 +75,54 @@ describe('refundable attempts', () => {
     expect(formatWait(61)).toBe('2 minutes');
     expect(formatWait(600)).toBe('10 minutes');
     expect(formatWait(3600)).toBe('1 hour');
+  });
+});
+
+/** A fresh caller's account and network keys under the promo-guessing policies. */
+function keys() {
+  const id = crypto.randomUUID();
+  return [
+    { policy: 'coupon.miss.user' as const, key: `user:${id}` },
+    { policy: 'coupon.miss.ip' as const, key: `ip:${id}` },
+  ];
+}
+
+describe('limits counted under several keys (per account and per network)', () => {
+  it('takes a point under each key and gives them all back at once', async () => {
+    const checks = keys();
+    for (let i = 0; i < 20; i++) {
+      const attempt = await takeAttempts(checks);
+      await attempt.refund();
+    }
+    expect(await blockedFor(checks)).toBeNull();
+  });
+
+  it('is all or nothing: over one limit, the other keys get their point back', async () => {
+    const [user, ip] = keys();
+    for (let i = 0; i < 10; i++) await takeAttempts([user!, ip!]);
+    const refused = await takeAttempts([user!, ip!]).catch((error: unknown) => error);
+    expect(refused).toMatchObject({
+      code: 'RATE_LIMITED',
+      message: 'Too many codes tried. You can try again in 10 minutes.',
+    });
+    // The network key kept only the 10 that counted: 20 more fit before its limit of 30.
+    for (let i = 0; i < 20; i++) await takeAttempt('coupon.miss.ip', ip!.key);
+    await expect(takeAttempt('coupon.miss.ip', ip!.key)).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+    });
+  });
+
+  it('says whether a key is blocked, and for how long, without using a point', async () => {
+    const [user, ip] = keys();
+    expect(await blockedFor([user!, ip!])).toBeNull();
+    for (let i = 0; i < 10; i++) await takeAttempt('coupon.miss.user', user!.key);
+    // At the limit but not over it: not blocked, and asking doesn't use the last point.
+    for (let i = 0; i < 5; i++) expect(await blockedFor([user!, ip!])).toBeNull();
+    await takeAttempt('coupon.miss.user', user!.key).catch(() => undefined);
+    const blocked = await blockedFor([user!, ip!]);
+    expect(blocked).toMatchObject({ code: 'RATE_LIMITED', status: 429 });
+    expect(blocked?.retryAfterSeconds).toBeGreaterThan(9 * 60);
+    expect(blocked?.retryAfterSeconds).toBeLessThanOrEqual(10 * 60);
   });
 });
 
