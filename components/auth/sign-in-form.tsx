@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { z } from 'zod';
 import { signInAction } from '@/server/modules/auth/actions';
-import { CAPTCHA_ACTIONS, emailSchema } from '@/server/modules/auth/schema';
+import { CAPTCHA_ACTIONS, emailSchema, type SignInReason } from '@/server/modules/auth/schema';
 import { blurField, FieldShell, visibleError } from '@/components/forms/field-shell';
 import { FormAlert } from '@/components/forms/form-alert';
 import {
@@ -27,7 +27,9 @@ import { announce } from '@/lib/announce';
 import { postAuthEvent, takeNoticeFocus } from '@/lib/auth-channel';
 import { authPageHref, returnRoute } from '@/lib/auth-links';
 import { forgetEmail, recalledEmail, rememberEmail } from '@/lib/email-handoff';
+import { signInFor } from '@/lib/sign-in-reason';
 import { AuthTitle } from './auth-title';
+import { SignInReasonNotice } from './sign-in-reason';
 
 const fields = z.object({
   email: emailSchema,
@@ -63,11 +65,14 @@ const GOOGLE_FAILED = "We couldn't reach Google. Check your connection, then try
  */
 export function SignInForm({
   callbackUrl,
+  reason = null,
   notice,
   googleError,
   google,
 }: {
   callbackUrl: string;
+  /** Why she was sent here (F3 B13), from the fixed list. */
+  reason?: SignInReason | null;
   notice: Notice | null;
   googleError: string | null;
   google: boolean;
@@ -238,6 +243,8 @@ export function SignInForm({
           <div ref={noticeRef} tabIndex={-1} className="mb-6 focus:outline-none">
             <FormAlert variant={NOTICES[notice].variant}>{NOTICES[notice].text}</FormAlert>
           </div>
+        ) : reason ? (
+          <SignInReasonNotice reason={reason} />
         ) : null}
         {google ? (
           <>
@@ -374,7 +381,7 @@ export function SignInForm({
         <p className="mt-6 text-center text-body-4 text-neutral-3">
           New to Foodz?{' '}
           <Link
-            href={authPageHref('/sign-up', callbackUrl)}
+            href={signInFor('/sign-up', callbackUrl, reason)}
             onClick={() => rememberEmail(form.getFieldValue('email'))}
             className="inline-flex h-11 items-center font-medium text-brand-strong underline-offset-4 hover:underline"
           >

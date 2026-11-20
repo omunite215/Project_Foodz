@@ -25,7 +25,18 @@ const MIN_QUERY = 3;
 const SEARCH_TIMEOUT_MS = 5_000;
 const SEARCHING_DELAY_MS = 300;
 const ANNOUNCE_DELAY_MS = 500;
-const LISTBOX_ID = 'address-options';
+const DEFAULT_LISTBOX_ID = 'address-options';
+
+/** Looks up suggestions: the signed-in search by default, the guest one from the cart (F3 U2). */
+export type AddressSearch = (input: {
+  query: string;
+}) => Promise<
+  { data?: AddressSuggestion[]; serverError?: unknown; validationErrors?: unknown } | undefined
+>;
+
+/** The per-network limit of the cart's address check (F3 design 2.15). */
+export const GUEST_LIMIT_TEXT =
+  'Too many address checks from this network. Try again in a few minutes.';
 
 type SearchState =
   | { kind: 'idle' }
@@ -33,6 +44,7 @@ type SearchState =
   | { kind: 'results'; items: AddressSuggestion[] }
   | { kind: 'none' }
   | { kind: 'down' }
+  | { kind: 'limited' }
   | { kind: 'offline' };
 
 const countText = (count: number) =>
@@ -62,6 +74,7 @@ function Panel({
 }
 
 function Popup({
+  listboxId,
   state,
   active,
   slow,
@@ -69,6 +82,7 @@ function Popup({
   onHover,
   onRetry,
 }: {
+  listboxId: string;
   state: SearchState;
   active: number;
   slow: boolean;
@@ -94,11 +108,11 @@ function Popup({
         <>
           {/* The ARIA combobox pattern: a styled two-line list a native <select> can't draw. */}
           {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role */}
-          <div id={LISTBOX_ID} role="listbox" aria-label="Address suggestions">
+          <div id={listboxId} role="listbox" aria-label="Address suggestions">
             {state.items.map((item, index) => (
               <div
                 key={item.id}
-                id={`${LISTBOX_ID}-${index}`}
+                id={`${listboxId}-${index}`}
                 // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
                 role="option"
                 aria-selected={index === active}
@@ -161,6 +175,11 @@ function Popup({
           icon={<CircleExclamationPoint className="size-5 shrink-0 text-destructive" aria-hidden />}
           text={OFFLINE_TEXT}
         />
+      ) : state.kind === 'limited' ? (
+        <Panel
+          icon={<CircleExclamationPoint className="size-5 shrink-0 text-destructive" aria-hidden />}
+          text={GUEST_LIMIT_TEXT}
+        />
       ) : null}
     </div>
   );
@@ -179,6 +198,9 @@ export function AddressCombobox({
   onType,
   onPick,
   disabled,
+  search: searchAction = searchAddressesAction,
+  listboxId = DEFAULT_LISTBOX_ID,
+  inputRef: givenRef,
 }: {
   control: FieldControlProps;
   value: string;
@@ -186,14 +208,20 @@ export function AddressCombobox({
   onType: (text: string) => void;
   onPick: (item: AddressSuggestion) => void;
   disabled?: boolean;
+  search?: AddressSearch;
+  /** Unique on the page (the cart can open over the address form). */
+  listboxId?: string;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
+  const LISTBOX_ID = listboxId;
   const [state, setState] = useState<SearchState>({ kind: 'idle' });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [confirm, setConfirm] = useState<AddressSuggestion | null>(null);
   const requestRef = useRef(0);
   const announceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const ownRef = useRef<HTMLInputElement>(null);
+  const inputRef = givenRef ?? ownRef;
 
   useEffect(
     () => () => {
@@ -219,7 +247,7 @@ export function AddressCombobox({
     }
     setState({ kind: 'searching' });
     if (!fromAutofill) setOpen(true);
-    const outcome = await callAction(() => searchAddressesAction({ query: query.trim() }), {
+    const outcome = await callAction(() => searchAction({ query: query.trim() }), {
       timeoutMs: SEARCH_TIMEOUT_MS,
     });
     if (request !== requestRef.current) return;
@@ -235,6 +263,9 @@ export function AddressCombobox({
     } else if (outcome.error.code === 'INVALID_INPUT') {
       next = { kind: 'idle' };
       spoken = '';
+    } else if (outcome.error.code === 'RATE_LIMITED') {
+      next = { kind: 'limited' };
+      spoken = GUEST_LIMIT_TEXT;
     } else {
       next = { kind: 'down' };
       spoken = SEARCH_DOWN_TEXT;
@@ -343,6 +374,7 @@ export function AddressCombobox({
         />
         {expanded ? (
           <Popup
+            listboxId={LISTBOX_ID}
             state={state}
             active={active}
             slow={slow}

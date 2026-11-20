@@ -1,6 +1,10 @@
 import 'server-only';
 import { cache } from 'react';
+import { getActor } from '@/server/auth/session';
+import { CampaignPlacement } from '@/server/db/enums';
 import { logger } from '@/server/logger';
+import { getMyFavoriteIds } from '@/server/modules/favorites/service';
+import { displayPhone } from './phone';
 import { getDishBySlug, getStoreStatus, listActiveCampaigns } from '@/server/modules/menu/service';
 import type { CampaignBanner, StoreStatus } from '@/server/modules/menu/schema';
 
@@ -28,6 +32,44 @@ export const loadAnnouncement = cache(async (): Promise<CampaignBanner | null> =
     return (await listActiveCampaigns('ANNOUNCEMENT_BAR'))[0] ?? null;
   } catch (error) {
     logger.error({ err: error }, 'announcement unavailable');
+    return null;
+  }
+});
+
+/**
+ * The signed-in customer's favorite dish ids, for hearts that are right in the first HTML (F3
+ * S5.9); null when signed out or unavailable (hearts then start empty and fill from the browser).
+ */
+export const loadFavoriteIds = cache(async (): Promise<string[] | null> => {
+  try {
+    const actor = await getActor();
+    if (actor.kind !== 'user') return null;
+    return (await getMyFavoriteIds(actor)).ids;
+  } catch (error) {
+    logger.error({ err: error }, 'favorites unavailable');
+    return null;
+  }
+});
+
+/** "(617) 555-0142" and its tel: form, from the store settings. */
+export function storePhone(status: StoreStatus | null): { display: string; tel: string } | null {
+  if (!status?.store.phone) return null;
+  const tel = status.store.phone.replace(/\s+/g, '');
+  return { display: displayPhone(tel).display, tel };
+}
+
+/**
+ * A running campaign by id, whatever its placement: the dish page names the code and the deal
+ * of its offer (F3 S4.12). Null when it has ended or can't be read.
+ */
+export const loadCampaign = cache(async (campaignId: string): Promise<CampaignBanner | null> => {
+  try {
+    const placements = await Promise.all(
+      Object.values(CampaignPlacement).map((placement) => listActiveCampaigns(placement)),
+    );
+    return placements.flat().find((campaign) => campaign.id === campaignId) ?? null;
+  } catch (error) {
+    logger.error({ err: error }, 'campaign unavailable');
     return null;
   }
 });

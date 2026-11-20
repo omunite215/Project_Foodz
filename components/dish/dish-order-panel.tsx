@@ -3,20 +3,21 @@
 import { Check, CircleExclamationPoint } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { StoreMoment } from '@/server/modules/menu/schema';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { Textarea } from '@/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { announce } from '@/lib/announce';
-import { MAX_NOTE_LENGTH, useCartActions } from '@/lib/data/cart';
+import { openCart } from '@/lib/cart-dialog';
+import { cartFullText, lineFullText } from '@/lib/cart-text';
+import { useCartActions } from '@/lib/data/cart';
+import { useCartDishActions } from '@/lib/data/cart-dishes';
 import { formatPrice, momentText } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { checkDishes } from './check-dishes';
+import { FlavorToggles } from './flavor-toggles';
+import { KitchenNote } from './kitchen-note';
 
-const MAX_FLAVORS = 5;
 /** The availability check gets this long before the button says "Adding…". */
 const PENDING_AFTER_MS = 300;
 /** A second press this soon after adding is ignored. */
@@ -30,12 +31,18 @@ interface Message {
   text: string;
   /** Errors interrupt (role="alert"); the rest stay quiet (the live region speaks for them). */
   alert?: boolean;
+  /** Offer "View cart" after it (F3 S1.4, S1.11). */
+  viewCart?: boolean;
+  /** The store's number, as a tel: link inside the text (S1.12). */
+  phone?: { display: string; tel: string } | null;
 }
 
 export interface DishOrderPanelProps {
   dish: {
     id: string;
     title: string;
+    slug: string;
+    image: string | null;
     priceCents: number;
     flavors: string[];
     isAvailable: boolean;
@@ -44,17 +51,40 @@ export interface DishOrderPanelProps {
   closedUntil?: StoreMoment | null;
   /** Sold out: are other dishes suggested below? */
   hasSuggestions?: boolean;
+  /** For "Your cart is full … call us on (617) 555-0142." */
+  phone?: { display: string; tel: string } | null;
+}
+
+/** The message text, with the store's number as a link when it has one. */
+function MessageText({ message }: { message: Message }) {
+  const phone = message.phone;
+  if (!phone || !message.text.includes(phone.display)) return <>{message.text}</>;
+  const [before, after] = message.text.split(phone.display);
+  return (
+    <>
+      {before}
+      <a href={`tel:${phone.tel}`} className="font-medium text-neutral-1 underline">
+        {phone.display}
+      </a>
+      {after}
+    </>
+  );
 }
 
 /**
  * Extra flavors, a note for the kitchen and "Add to cart". The dish is checked again just
  * before it is added; if it has just sold out nothing is added and the page switches to its
- * sold-out state.
+ * sold-out state. The cart doesn't open by itself: "View cart" opens it (F3 S1.4).
  */
-export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: DishOrderPanelProps) {
-  const id = useId();
+export function DishOrderPanel({
+  dish,
+  closedUntil,
+  hasSuggestions = false,
+  phone = null,
+}: DishOrderPanelProps) {
   const router = useRouter();
   const cart = useCartActions();
+  const cartDishes = useCartDishActions();
   const [flavors, setFlavors] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [phase, setPhase] = useState<Phase>('ready');
@@ -72,8 +102,6 @@ export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: Di
   const closedText = closedUntil
     ? `We're closed now. Your cart will keep this until we open at ${momentText(closedUntil)}.`
     : null;
-  const flavorsFull = flavors.length >= MAX_FLAVORS;
-  const charactersLeft = MAX_NOTE_LENGTH - note.length;
 
   const add = async () => {
     if (locked.current || soldOut) return;
@@ -98,11 +126,34 @@ export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: Di
       return;
     }
 
-    cart.add({ menuItemId: dish.id, flavors, note, quantity: 1 });
+    const outcome = cart.add({ menuItemId: dish.id, flavors, note, quantity: 1 });
+    if (outcome.kind !== 'added') {
+      // Nothing was added: the button never says "Added" (S1.11, S1.12).
+      setPhase('ready');
+      const text =
+        outcome.kind === 'lineFull'
+          ? lineFullText(dish.title)
+          : cartFullText(outcome.limit, phone?.display ?? null);
+      setMessage({ tone: 'error', text, viewCart: true, phone });
+      announce(text);
+      later(REPEAT_GUARD_MS, () => {
+        locked.current = false;
+      });
+      return;
+    }
+
+    cartDishes.remember({
+      id: dish.id,
+      title: dish.title,
+      slug: dish.slug,
+      image: dish.image,
+      priceCents: checked?.get(dish.id)?.priceCents ?? dish.priceCents,
+    });
     setPhase('added');
     setMessage({
       tone: 'success',
       text: closedText ? `Added to your cart. ${closedText}` : 'Added to your cart.',
+      viewCart: true,
     });
     announce(`${dish.title} added to your cart.`);
     later(REPEAT_GUARD_MS, () => {
@@ -125,65 +176,34 @@ export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: Di
       </>
     ) : null;
 
+  const viewCart = message?.viewCart ? (
+    <button
+      type="button"
+      onClick={(event) => openCart(event.currentTarget)}
+      className="ml-2 inline-flex h-11 items-center font-medium text-brand-strong underline underline-offset-4"
+    >
+      View cart
+    </button>
+  ) : null;
+
   return (
     <div>
-      {dish.flavors.length > 0 ? (
-        <div className="mt-4">
-          <h2 id={`${id}-flavors`} className="text-body-4 text-neutral-3">
-            Extra flavor
-          </h2>
-          <p id={`${id}-flavors-help`} className="text-body-5 text-muted-foreground">
-            {flavorsFull
-              ? 'You can pick up to 5.'
-              : 'Optional. Pick what you’d like more of (up to 5).'}
-          </p>
-          <ToggleGroup
-            type="multiple"
-            value={flavors}
-            onValueChange={(value) => setFlavors(value.slice(0, MAX_FLAVORS))}
-            aria-labelledby={`${id}-flavors`}
-            aria-describedby={`${id}-flavors-help`}
-            disabled={soldOut}
-            className="mt-2 w-full flex-wrap justify-start"
-          >
-            {dish.flavors.map((flavor) => {
-              const on = flavors.includes(flavor);
-              return (
-                <ToggleGroupItem
-                  key={flavor}
-                  value={flavor}
-                  disabled={soldOut || (flavorsFull && !on)}
-                  className="h-11 rounded-lg border border-input bg-white px-4 text-body-5 font-normal text-neutral-2 hover:bg-neutral-7 aria-pressed:border-2 aria-pressed:border-brand-strong aria-pressed:bg-brand-soft aria-pressed:text-neutral-1 data-[state=on]:bg-brand-soft"
-                >
-                  {on ? <Check className="size-4" aria-hidden /> : null}
-                  {flavor}
-                </ToggleGroupItem>
-              );
-            })}
-          </ToggleGroup>
-        </div>
-      ) : null}
+      <FlavorToggles
+        flavors={dish.flavors}
+        value={flavors}
+        onChange={setFlavors}
+        disabled={soldOut}
+        className="mt-4"
+      />
 
-      <div className="mt-4">
-        <Label htmlFor={`${id}-note`} className="text-body-4 font-normal text-neutral-3">
-          Note for the kitchen
-        </Label>
-        <Textarea
-          id={`${id}-note`}
-          value={note}
-          maxLength={MAX_NOTE_LENGTH}
-          disabled={soldOut}
-          placeholder="No onions, extra sauce…"
-          onChange={(event) => setNote(event.target.value)}
-          className="mt-1 min-h-[114px] rounded-xl bg-white px-5 py-2.5 text-body-4 disabled:bg-neutral-7 md:text-body-4"
-        />
-        <p aria-hidden className="mt-1 text-right text-caption text-muted-foreground tabular-nums">
-          {note.length}/{MAX_NOTE_LENGTH}
-        </p>
-        <p aria-live="polite" className="sr-only">
-          {charactersLeft <= 20 ? `${charactersLeft} characters left` : ''}
-        </p>
-      </div>
+      <KitchenNote
+        value={note}
+        onChange={setNote}
+        disabled={soldOut}
+        placeholder="No onions, extra sauce…"
+        className="mt-4"
+        textareaClassName="min-h-[114px]"
+      />
 
       <div className="mt-8 xl:mt-14">
         <Button
@@ -210,7 +230,7 @@ export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: Di
             <>Add to cart · {formatPrice(dish.priceCents)}</>
           )}
         </Button>
-        <div className="mt-3 min-h-6 text-body-5">
+        <div className={cn('mt-3 text-body-5', viewCart ? 'min-h-11' : 'min-h-6')}>
           {/* Present from the start, so a message put into it is announced at once. */}
           <div role="alert">
             {message?.alert ? (
@@ -223,14 +243,23 @@ export function DishOrderPanel({ dish, closedUntil, hasSuggestions = false }: Di
           {message?.alert ? null : (
             <p
               className={cn(
-                'flex items-start gap-1.5',
-                message?.tone === 'success' ? 'text-brand-strong' : 'text-neutral-3',
+                'flex flex-wrap items-center gap-x-1.5',
+                message?.tone === 'success'
+                  ? 'text-brand-strong'
+                  : message?.tone === 'error'
+                    ? 'text-destructive'
+                    : 'text-neutral-3',
               )}
             >
               {message?.tone === 'success' ? (
-                <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <Check className="size-4 shrink-0" aria-hidden />
+              ) : message?.tone === 'error' ? (
+                <CircleExclamationPoint className="size-4 shrink-0" aria-hidden />
               ) : null}
-              <span>{message?.text ?? soldOutLine ?? closedText}</span>
+              <span>
+                {message ? <MessageText message={message} /> : (soldOutLine ?? closedText)}
+              </span>
+              {viewCart}
             </p>
           )}
         </div>

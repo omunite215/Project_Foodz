@@ -102,3 +102,9 @@ export function useMotion(
 export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(MOTION_QUERIES.reduced).matches;
 }
+
+/** A small "pop" for something just pressed (a heart): 1.25 back to 1. Nothing under reduced motion. */
+export function pop(target: Element | null): void {
+  if (!target || prefersReducedMotion()) return;
+  gsap.fromTo(target, { scale: 1.25 }, { scale: 1, duration: 0.3, ease: 'back.out(2)' });
+}

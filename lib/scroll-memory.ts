@@ -33,7 +33,11 @@ if (typeof window !== 'undefined') {
   // where it exists; elsewhere the hook also checks again once popstate has been handled.
   if ('navigation' in window && window.navigation) {
     window.navigation.addEventListener('navigate', (event) => {
-      if (event.navigationType === 'traverse') poppedTo = addressOf(event.destination.url);
+      if (event.navigationType !== 'traverse') return;
+      const destination = addressOf(event.destination.url);
+      // Closing a dialog steps back over its own entry on the same address (F3 D2): the page
+      // never left, so there is nothing to restore.
+      if (destination !== currentAddress()) poppedTo = destination;
     });
   } else {
     window.addEventListener('popstate', () => {

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { CampaignBanner as Campaign } from '@/server/modules/menu/schema';
 import { dishHref } from '@/server/modules/menu/urls';
 import { DishPlate } from '@/components/dish/dish-plate';
+import { FavoriteButton } from '@/components/favorites/favorite-button';
 import { OfferCountdown } from '@/components/dish/offer-countdown';
 import { Button } from '@/components/ui/button';
 import { formatPrice, splitByCode } from '@/lib/format';
@@ -73,7 +74,7 @@ export function CampaignBanner({
       {campaign.dishes.length > 0 ? (
         <ul className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6 lg:mt-0 lg:grid-cols-2 xl:grid-cols-4">
           {campaign.dishes.map((dish) => (
-            <li key={dish.id}>
+            <li key={dish.id} className="relative">
               <Link
                 href={dishHref(dish.slug)}
                 className="flex min-h-11 flex-col items-center gap-2 rounded-xl p-1 text-center outline-offset-2 hover:bg-white/60"
@@ -94,6 +95,10 @@ export function CampaignBanner({
                   {formatPrice(dish.priceCents)}
                 </span>
               </Link>
+              <FavoriteButton
+                dish={{ id: dish.id, title: dish.title }}
+                className="absolute -top-1 -right-1 z-10"
+              />
             </li>
           ))}
         </ul>
