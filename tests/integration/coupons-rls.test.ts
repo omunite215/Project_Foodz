@@ -167,6 +167,14 @@ describe('changing coupons', () => {
     expect(demoChanged.count).toBe(0);
   });
 
+  it('never lets store credit exist without an owner, so it can never read as public', async () => {
+    await expect(
+      migrator.coupon.create({
+        data: { code: `CREDIT-${TAG}-NOBODY`, type: 'FIXED', value: 500, isStoreCredit: true },
+      }),
+    ).rejects.toThrow(/coupons_store_credit_owner/);
+  });
+
   it('keeps codes in the form the cart looks them up in', async () => {
     await expect(
       migrator.coupon.create({ data: { code: 'lower-case', type: 'FIXED', value: 1 } }),

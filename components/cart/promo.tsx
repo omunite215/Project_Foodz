@@ -1,12 +1,16 @@
 'use client';
 
-import { useDebouncer } from '@tanstack/react-pacer';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, TicketPercent } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
-import { normalizeCode, type Quote, type QuotePromo } from '@/server/modules/cart/schema';
-import { PROMO_UNAVAILABLE } from '@/server/modules/cart/promo-text';
+import {
+  isPossibleCode,
+  normalizeCode,
+  type Quote,
+  type QuotePromo,
+} from '@/server/modules/cart/schema';
+import { PROMO_UNAVAILABLE, promoMessage } from '@/server/modules/cart/promo-text';
 import { useSlowPending } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,7 +54,6 @@ import { fetchQuote, type QuoteRequest, quoteQueryKey, requestKey } from './use-
  */
 
 const PROMO_OFFLINE = "You're offline. We'll check the code when you're back online.";
-const LIVE_CHECK_MS = 400;
 
 // ------------------------------------------------------------------ the section and its logic
 
@@ -99,7 +102,6 @@ export function PromoSection({
   const [compare, setCompare] = useState<CompareState | null>(null);
   const slowChecking = useSlowPending(checking);
 
-  const live = useRef(false);
   const requestId = useRef(0);
   const inFlight = useRef<string | null>(null);
   const lastChecked = useRef<string | null>(null);
@@ -128,13 +130,11 @@ export function PromoSection({
     queryClient.setQueryData(quoteQueryKey(requestKey({ ...request, code: promo.code })), answer);
     previous.current = { code: promo.code, status: promo.status };
     setTyped('');
-    live.current = false;
     lastChecked.current = null;
   };
 
   /** What a code's answer means for the field, the message and the cart's code. */
   const answer = (promo: QuotePromo | null, quoted: Quote, canAttach: boolean) => {
-    live.current = true;
     if (!promo) return;
     switch (promo.status) {
       case 'applied':
@@ -168,6 +168,18 @@ export function PromoSection({
   async function check(raw: string, { fromField = true }: { fromField?: boolean } = {}) {
     const code = normalizeCode(raw);
     if (!code || code.length > 32 || blocked || inFlight.current === code) return;
+    // A code that can't exist is answered here: sending it would only spend a guessing point.
+    if (!isPossibleCode(code)) {
+      if (fromField) inputRef.current?.focus();
+      lastChecked.current = code;
+      say({
+        tone: 'error',
+        // The "not found" sentence has no date in it, so the time zone doesn't matter.
+        text: promoMessage(code, { code: 'notFound', rule: 'R1' }, { timeZone: 'UTC' }),
+        invalid: true,
+      });
+      return;
+    }
     // Focus stays in the field after Apply (S7.5).
     if (fromField) inputRef.current?.focus();
     onAction();
@@ -199,7 +211,6 @@ export function PromoSection({
         }
         const nextPromo = next.data.promo;
         if (nextPromo?.status === 'applied') {
-          live.current = true;
           if (!current.ok) {
             setCompare({ status: 'failed', code });
             announce("We couldn't compare the totals.");
@@ -215,7 +226,6 @@ export function PromoSection({
           return;
         }
         if (nextPromo?.status === 'notApplied') {
-          live.current = true;
           say({ tone: 'neutral', text: `${nextPromo.message ?? ''} ${storedCode} stays applied.` });
           return;
         }
@@ -237,8 +247,6 @@ export function PromoSection({
       }
     }
   }
-
-  const liveCheck = useDebouncer((value: string) => void check(value), { wait: LIVE_CHECK_MS });
 
   /** What each new quote means for the cart's own code (S4.6, S4.9, S4.15, S3.6). */
   const followQuote = (newest: Quote | null, code: string | null) => {
@@ -336,7 +344,6 @@ export function PromoSection({
     if (compare?.status !== 'ready') return;
     setCompare(null);
     setTyped('');
-    live.current = false;
     announce(`Kept ${compare.current.code}.`);
     focusField();
   };
@@ -413,13 +420,10 @@ export function PromoSection({
               const value = event.target.value;
               setTyped(value);
               if (compare) setCompare(null);
-              if (live.current && value.trim()) liveCheck.maybeExecute(value);
-              else liveCheck.cancel();
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                liveCheck.cancel();
                 void check(typed);
               } else if (event.key === 'Escape' && compare) {
                 event.preventDefault();
@@ -432,7 +436,6 @@ export function PromoSection({
               if (next instanceof HTMLElement && next.dataset.promoApply !== undefined) return;
               const code = normalizeCode(typed);
               if (code && code !== lastChecked.current && code !== storedCode) {
-                liveCheck.cancel();
                 void check(typed);
               }
             }}
@@ -445,7 +448,6 @@ export function PromoSection({
             data-promo-apply=""
             aria-disabled={checking || blocked || undefined}
             onClick={() => {
-              liveCheck.cancel();
               void check(typed);
             }}
             className="min-w-24 border-brand-strong bg-white text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
@@ -490,7 +492,6 @@ export function PromoSection({
         offers={quote?.offers ?? []}
         appliedCode={storedPromo?.status === 'applied' ? storedCode : null}
         onApply={(code) => {
-          liveCheck.cancel();
           void check(code, { fromField: false });
         }}
       />

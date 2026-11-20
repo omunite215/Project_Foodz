@@ -10,19 +10,13 @@ import {
   MapPinOff,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useId, useRef, useState, useSyncExternalStore } from 'react';
-import { z } from 'zod';
+import { useId, useRef, useState } from 'react';
 import {
   guestAddressSearchAction,
   guestDeliveryCheckAction,
   listAddressesAction,
 } from '@/server/modules/addresses/actions';
-import {
-  type AddressDto,
-  type AddressSuggestion,
-  latitudeSchema,
-  longitudeSchema,
-} from '@/server/modules/addresses/schema';
+import type { AddressDto, AddressSuggestion } from '@/server/modules/addresses/schema';
 import type { Quote } from '@/server/modules/cart/schema';
 import { AddressCombobox, GUEST_LIMIT_TEXT } from '@/components/addresses/address-combobox';
 import { useSlowPending } from '@/components/forms/submit-button';
@@ -31,6 +25,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { distanceText } from '@/lib/cart-text';
+import type { CheckedAddress } from '@/lib/data/checked-address';
 import { cn } from '@/lib/utils';
 
 /*
@@ -39,65 +34,6 @@ import { cn } from '@/lib/utils';
  * someone with no saved address, can check an address without saving it: the point is kept in
  * this tab only and sent inside quotes.
  */
-
-// ------------------------------------------------------------------ the checked address (this tab only)
-
-export interface CheckedAddress {
-  line1: string;
-  lat: number;
-  lng: number;
-}
-
-const CHECKED_KEY = 'foodz.cart.point';
-const checkedSchema = z.object({
-  line1: z.string().min(1).max(200),
-  lat: latitudeSchema,
-  lng: longitudeSchema,
-});
-const checkedListeners = new Set<() => void>();
-let checkedCache: { raw: string | null; value: CheckedAddress | null } = { raw: null, value: null };
-
-function readChecked(): CheckedAddress | null {
-  let raw: string | null = null;
-  try {
-    raw = window.sessionStorage.getItem(CHECKED_KEY);
-  } catch {
-    return null;
-  }
-  if (raw === checkedCache.raw) return checkedCache.value;
-  let value: CheckedAddress | null = null;
-  try {
-    const parsed = checkedSchema.safeParse(raw ? JSON.parse(raw) : null);
-    value = parsed.success ? parsed.data : null;
-  } catch {
-    value = null;
-  }
-  checkedCache = { raw, value };
-  return value;
-}
-
-export function setCheckedAddress(value: CheckedAddress | null) {
-  try {
-    if (value) window.sessionStorage.setItem(CHECKED_KEY, JSON.stringify(value));
-    else window.sessionStorage.removeItem(CHECKED_KEY);
-  } catch {
-    // Storage blocked: the check holds until the page is left.
-  }
-  for (const listener of checkedListeners) listener();
-}
-
-export function useCheckedAddress(): CheckedAddress | null {
-  return useSyncExternalStore(
-    (listener) => {
-      checkedListeners.add(listener);
-      return () => {
-        checkedListeners.delete(listener);
-      };
-    },
-    readChecked,
-    () => null,
-  );
-}
 
 // ------------------------------------------------------------------ pieces
 

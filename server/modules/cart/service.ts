@@ -32,6 +32,7 @@ import {
   type CheckoutBlocker,
   cleanFlavor,
   cleanNote,
+  isPossibleCode,
   MAX_CART_ITEMS,
   MAX_CART_LINES,
   type ParsedQuoteInput,
@@ -238,6 +239,9 @@ async function checkCode(
   ];
   const caller = userId ? `user:${userId}` : `ip:${ip}`;
   const who = userId ? { userId } : { ip };
+
+  // A code that can't exist tells a guesser nothing, so it costs no guessing point.
+  if (!isPossibleCode(code)) return { request: { kind: 'lookup', code, coupon: null, customer } };
 
   try {
     if (!coupon || !isCodeVisibleTo(coupon, userId)) {

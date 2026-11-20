@@ -11,6 +11,8 @@ import {
   listMenu,
   searchMenu,
 } from '@/server/modules/menu/service';
+import { requestInfo } from '@/server/request';
+import { enforceRateLimit } from '@/server/security/rate-limit';
 import { parseMenuQuery, priceBounds } from '@/lib/menu-query';
 import { loadStoreStatus, readOrNull } from '@/lib/storefront-data';
 
@@ -34,8 +36,15 @@ export default async function MenuPage({ searchParams }: { searchParams: SearchP
   ]);
   const bounds = priceBounds(dishes);
   const query = parseMenuQuery(params, bounds);
-  // A search that fails here is run again by the browser.
-  const search = query.q ? await readOrNull('menu search', () => searchMenu({ q: query.q })) : null;
+  // A search run here counts against the same per-network limit as one from the browser (F3
+  // security S5). One that fails or is over the limit is run again by the browser, which then
+  // shows the limit's message.
+  const search = query.q
+    ? await readOrNull('menu search', async () => {
+        await enforceRateLimit('search', `ip:${(await requestInfo()).ip}`);
+        return searchMenu({ q: query.q });
+      })
+    : null;
   const campaign = specials[0] ?? null;
 
   return (

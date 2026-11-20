@@ -40,6 +40,15 @@ export function normalizeCode(raw: string): string {
     .toUpperCase();
 }
 
+/** The form every stored code has (the `coupons_code_format` check in the database). */
+const CODE_FORMAT = /^[A-Z0-9][A-Z0-9-]{0,31}$/;
+
+/**
+ * Whether a normalised code could exist at all. One that couldn't is answered "not found"
+ * without being looked up against the guessing limits, and the browser doesn't send it.
+ */
+export const isPossibleCode = (code: string): boolean => CODE_FORMAT.test(code);
+
 /**
  * The kitchen note as it is used and stored (S1.16): control characters become a space,
  * invisible format characters are removed, and the ends are trimmed. Everything else stays

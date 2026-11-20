@@ -48,7 +48,8 @@ import {
   noticeText,
 } from './cart-notices';
 import { CheckoutBar } from './checkout-bar';
-import { DeliveryBlock, setCheckedAddress, useCheckedAddress } from './delivery-block';
+import { setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
+import { DeliveryBlock } from './delivery-block';
 import { PriceBreakdown } from './price-breakdown';
 import { PromoSection } from './promo';
 import { useQuote } from './use-quote';

@@ -10,6 +10,9 @@ import {
 } from '@tanstack/react-db';
 import { useEffect, useRef } from 'react';
 import { z } from 'zod';
+import { clearPendingFavorite, clearPendingPromo } from '@/lib/sign-in-reason';
+import { type CartDishActions, useCartDishActions } from './cart-dishes';
+import { setCheckedAddress } from './checked-address';
 
 /*
  * The cart lives in the browser: saved in localStorage and kept in sync across tabs. It holds
@@ -445,9 +448,10 @@ export function useCartSession(
 ) {
   const { isReady, itemCount } = useCart();
   const actions = useCartActions();
-  const latest = useRef({ itemCount, actions, onEmptied, onSessionEnded });
+  const dishActions = useCartDishActions();
+  const latest = useRef({ itemCount, actions, dishActions, onEmptied, onSessionEnded });
   useEffect(() => {
-    latest.current = { itemCount, actions, onEmptied, onSessionEnded };
+    latest.current = { itemCount, actions, dishActions, onEmptied, onSessionEnded };
   });
 
   useEffect(() => {
@@ -455,14 +459,18 @@ export function useCartSession(
     const {
       itemCount: count,
       actions: cart,
+      dishActions: dishes,
       onEmptied: emptied,
       onSessionEnded: ended,
     } = latest.current;
     const saved = readCartOwner();
     const check = cartSessionCheck(saved, sessionKey, count > 0);
     writeCartOwner(check.owner);
-    // The chosen saved address belonged to the session that ended.
-    if (saved !== null && saved !== sessionKey) cart.forgetMeta();
+    // The chosen saved address, and what the ended session left in this browser, go with it.
+    if (saved !== null && saved !== sessionKey) {
+      cart.forgetMeta();
+      forgetSessionTraces(dishes);
+    }
     if (check.emptyCart) {
       cart.clear();
       emptied();
@@ -475,9 +483,23 @@ export function useCartSession(
 /** Signing out on purpose: the cart on this device is emptied (every tab follows). */
 export function useEndCartSession() {
   const actions = useCartActions();
+  const dishes = useCartDishActions();
   return () => {
     writeCartOwner(null);
     actions.clear();
     actions.forgetMeta();
+    forgetSessionTraces(dishes);
   };
+}
+
+/**
+ * What a session leaves in this browser beyond the cart: the address checked without saving
+ * it, the dish names and photos kept for the cart, and a code or heart waiting for sign-in.
+ * On a shared device the next person must find none of it (F3 security S2).
+ */
+function forgetSessionTraces(dishes: Pick<CartDishActions, 'keepOnly'>) {
+  setCheckedAddress(null);
+  dishes.keepOnly(new Set());
+  clearPendingPromo();
+  clearPendingFavorite();
 }

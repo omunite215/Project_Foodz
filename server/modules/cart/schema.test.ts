@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanFlavor, cleanNote, normalizeCode, quoteInput } from './schema';
+import { cleanFlavor, cleanNote, isPossibleCode, normalizeCode, quoteInput } from './schema';
 
 const GIMBAP = '01933b2e-7c4a-7d10-9b1a-2c3d4e5f6a7b';
 const line = (extra: Record<string, unknown> = {}) => ({
@@ -15,6 +15,15 @@ describe('promo codes as typed (S4.2)', () => {
       expect(normalizeCode(typed)).toBe('KBBQ5');
     }
     expect(normalizeCode('credit-priya-7q2xk9')).toBe('CREDIT-PRIYA-7Q2XK9');
+  });
+
+  it('knows which codes could exist, in the form stored codes have', () => {
+    for (const code of ['KBBQ5', 'CREDIT-PRIYA-7Q2XK9', 'A', 'X'.repeat(32)]) {
+      expect(isPossibleCode(code)).toBe(true);
+    }
+    for (const code of ['', '-KBBQ5', 'KBB_Q5', 'KBBQ5!', 'X'.repeat(33), 'ÉTÉ']) {
+      expect(isPossibleCode(code)).toBe(false);
+    }
   });
 
   it('treats an empty code as no code and refuses one longer than 32 characters', () => {

@@ -604,6 +604,25 @@ describe('code guessing (B5, S4.13, S4.14)', () => {
     expect((await quote({ lines: cartA(), code: 'KBBQ5' })).promo?.status).toBe('applied');
   });
 
+  it('spends no point on a code that could not exist', async () => {
+    await dana();
+    for (let i = 0; i < 15; i++) {
+      expect((await quote({ lines: cartA(), code: `NO_SUCH!${i}` })).promo).toMatchObject({
+        status: 'refused',
+        reason: { code: 'notFound' },
+      });
+    }
+    // All ten points are still there for codes that could exist.
+    for (let i = 0; i < 10; i++) {
+      expect((await quote({ lines: cartA(), code: `GUESS${i}-${TAG}-F` })).promo?.status).toBe(
+        'refused',
+      );
+    }
+    expect((await quote({ lines: cartA(), code: `GUESS10-${TAG}-F` })).promo?.status).toBe(
+      'unchecked',
+    );
+  });
+
   it('follows the account to another network, and blocks a network after 30 unknown codes', async () => {
     const { browser } = await dana();
     for (let i = 0; i < 11; i++) await quote({ lines: cartA(), code: `ROAM${i}-${TAG}` });
