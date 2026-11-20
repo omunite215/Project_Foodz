@@ -14,6 +14,10 @@ export const ILLUSTRATIONS = {
   pageEaten: '/illustrations/page-eaten.svg',
   warning: '/illustrations/warning.svg',
   orderFood: '/illustrations/order-food.svg',
+  eatingTogether: '/illustrations/eating-together.svg',
+  deliveryAddress: '/illustrations/delivery-address.svg',
+  mobileInbox: '/illustrations/mobile-inbox.svg',
+  mailSent: '/illustrations/mail-sent.svg',
 } as const;
 
 export interface EmptyStateProps {

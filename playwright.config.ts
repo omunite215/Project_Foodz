@@ -40,6 +40,25 @@ export default defineConfig({
       testMatch: /storefront\/.*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
+    // Sign-in and account pages (F2). They create accounts and wait for emails, so each test
+    // gets more time than a storefront page needs.
+    {
+      name: 'account-375',
+      testMatch: /account\/.*\.spec\.ts/,
+      timeout: 90_000,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 375, height: 812 },
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: 'account-1440',
+      testMatch: /account\/.*\.spec\.ts/,
+      timeout: 90_000,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
   ],
   // Tests run against a production build, the same thing users get.
   webServer: process.env.E2E_BASE_URL
@@ -56,6 +75,9 @@ export default defineConfig({
           BETTER_AUTH_URL: baseURL,
           NEXT_PUBLIC_SITE_URL: baseURL,
           NEXT_TELEMETRY_DISABLED: '1',
+          // Test-only: each test sends its own X-Forwarded-For, so per-network limits stay apart
+          // (tests/e2e/account/support.ts). A server given through E2E_BASE_URL needs it too.
+          CLIENT_IP_FROM_HEADER: '1',
         },
       },
 });

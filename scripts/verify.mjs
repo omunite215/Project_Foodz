@@ -43,10 +43,14 @@ const STEPS = {
   e2e: npx(
     'playwright',
     'test',
-    ...['smoke', 'smoke-mobile', 'storefront-375', 'storefront-1440'].flatMap((project) => [
-      '--project',
-      project,
-    ]),
+    ...[
+      'smoke',
+      'smoke-mobile',
+      'storefront-375',
+      'storefront-1440',
+      'account-375',
+      'account-1440',
+    ].flatMap((project) => ['--project', project]),
   ),
 };
 

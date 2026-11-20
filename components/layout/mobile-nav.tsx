@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useMotion } from '@/lib/motion';
 import { isCurrentSection, NAV_LINKS } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
+import { useAuthHref } from './account-entry';
 
 const DESKTOP = '(min-width: 1024px)';
 
@@ -16,13 +17,15 @@ const DESKTOP = '(min-width: 1024px)';
  * moves focus to the first link. It closes on Escape (focus back on the button), on a link, on a
  * route change, when focus or a click lands outside the header, and at the desktop width.
  */
-export function MobileNav() {
+export function MobileNav({ signedIn }: { signedIn: boolean }) {
   // The page the menu was opened on: navigating anywhere else closes it.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const pathname = usePathname();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const firstLinkRef = useRef<HTMLAnchorElement>(null);
+  const signInHref = useAuthHref('/sign-in');
+  const signUpHref = useAuthHref('/sign-up');
 
   const isOpen = openOn === pathname;
   const close = () => setOpenOn(null);
@@ -119,12 +122,33 @@ export function MobileNav() {
             })}
           </ul>
         </nav>
-        <div className="px-6 pt-2 pb-6">
+        <div className="flex flex-col gap-3 px-6 pt-2 pb-6">
           <Button asChild size="touch" className="w-full uppercase">
             <Link href="/menu" onClick={close}>
               Order now
             </Link>
           </Button>
+          {signedIn ? null : (
+            <>
+              <Button
+                asChild
+                variant="outline"
+                size="touch"
+                className="w-full border-brand-strong bg-transparent text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
+              >
+                <Link href={signInHref} onClick={close}>
+                  Sign in
+                </Link>
+              </Button>
+              <Link
+                href={signUpHref}
+                onClick={close}
+                className="flex h-11 items-center justify-center text-button-1 font-medium text-brand-strong underline-offset-4 hover:underline"
+              >
+                Create an account
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

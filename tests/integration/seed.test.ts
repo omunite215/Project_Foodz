@@ -6,7 +6,14 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { db } from '@/server/db/client';
 import { runAs } from '@/server/db/context';
 import { PrismaClient } from '@/server/db/generated/client';
-import { DEMO_ACCOUNTS, type SeedResult, seedDatabase } from '../../prisma/seeding';
+import {
+  DEMO_ACCOUNTS,
+  SAMPLE_ACCOUNTS,
+  sampleAccountsRefusal,
+  type SeedResult,
+  seedDatabase,
+} from '../../prisma/seeding';
+import { currentTermsVersion, getLegalPage } from '@/server/modules/content/service';
 import { menuItems } from '../../prisma/seeding/menu';
 
 const config = {
@@ -14,6 +21,7 @@ const config = {
   adminEmail: 'Owner@Foodz.Example',
   adminPassword: 'correct horse battery staple',
   demoPassword: 'demo-password-1',
+  samplePassword: 'sample-password-1',
 };
 
 let migrator: PrismaClient;
@@ -25,7 +33,11 @@ beforeAll(async () => {
     adapter: new PrismaPg({ connectionString: inject('migratorUrl') }),
   });
   first = await seedDatabase(migrator, config);
-  second = await seedDatabase(migrator, { ...config, demoPassword: 'demo-password-2' });
+  second = await seedDatabase(migrator, {
+    ...config,
+    demoPassword: 'demo-password-2',
+    samplePassword: 'sample-password-2',
+  });
 }, 120_000);
 
 afterAll(async () => {
@@ -134,7 +146,9 @@ describe('seed', () => {
   it('adds nothing the second time and keeps the admin secret', async () => {
     expect(second.adminTwoFactor).toBeUndefined();
     expect(Object.values(second.created).every((n) => n === 0)).toBe(true);
-    expect(await migrator.twoFactor.count()).toBe(1);
+    expect(
+      await migrator.twoFactor.count({ where: { user: { email: 'owner@foodz.example' } } }),
+    ).toBe(1);
   });
 
   it('resets demo passwords on every run but never the admin password', async () => {
@@ -154,5 +168,131 @@ describe('seed', () => {
     });
     expect(await addressCount(customer.id)).toBe(1);
     expect(await addressCount(uuid())).toBe(0);
+  });
+});
+
+describe('sample customers (local and CI only)', () => {
+  it('adds an unconfirmed, a suspended and a second customer, none of them demo logins', async () => {
+    const users = await migrator.user.findMany({
+      where: { email: { in: SAMPLE_ACCOUNTS.map((account) => account.email) } },
+      select: {
+        email: true,
+        isDemo: true,
+        isSample: true,
+        emailVerified: true,
+        banned: true,
+        banReason: true,
+        role: true,
+      },
+      orderBy: { email: 'asc' },
+    });
+    expect(users).toEqual([
+      {
+        email: 'second.customer@foodz.example',
+        isDemo: false,
+        isSample: true,
+        emailVerified: true,
+        banned: false,
+        banReason: null,
+        role: 'customer',
+      },
+      {
+        email: 'suspended.customer@foodz.example',
+        isDemo: false,
+        isSample: true,
+        emailVerified: true,
+        banned: true,
+        banReason: 'Repeated coupon abuse (test account)',
+        role: 'customer',
+      },
+      {
+        email: 'unconfirmed.customer@foodz.example',
+        isDemo: false,
+        isSample: true,
+        emailVerified: false,
+        banned: false,
+        banReason: null,
+        role: 'customer',
+      },
+    ]);
+  });
+
+  it('gives them their own password, reset on every run, never the shared demo password', async () => {
+    for (const { email } of SAMPLE_ACCOUNTS) {
+      const { password } = await credentialOf(email);
+      expect(await verifyPassword({ hash: password!, password: 'sample-password-2' })).toBe(true);
+      expect(await verifyPassword({ hash: password!, password: 'demo-password-2' })).toBe(false);
+    }
+  });
+
+  it('are refused for any database that is not local or CI', () => {
+    const local = 'postgresql://foodz_migrator:x@127.0.0.1:5433/foodz';
+    expect(sampleAccountsRefusal(local, {})).toBeNull();
+    expect(sampleAccountsRefusal('postgresql://u:x@localhost:5432/foodz', {})).toBeNull();
+    expect(sampleAccountsRefusal('postgresql://u:x@db:5432/foodz', {})).toBeNull();
+    expect(
+      sampleAccountsRefusal('postgresql://u:x@postgres:5432/foodz', { CI: 'true' }),
+    ).toBeNull();
+
+    const hosted = 'postgresql://u:x@ep-demo-123.us-east-2.aws.neon.tech/foodz';
+    expect(sampleAccountsRefusal(hosted, {})).toMatch(/not a local or CI database/);
+    expect(sampleAccountsRefusal(local, { VERCEL_ENV: 'preview' })).toMatch(/Vercel/);
+    expect(sampleAccountsRefusal(local, { VERCEL_ENV: 'production', CI: '1' })).toMatch(/Vercel/);
+    expect(sampleAccountsRefusal('not a url', {})).toMatch(/could not be read/);
+  });
+
+  it('are left out when no sample password is given', async () => {
+    const before = await migrator.user.count({ where: { isSample: true } });
+    await seedDatabase(migrator, {
+      ...config,
+      demoPassword: 'demo-password-2',
+      samplePassword: undefined,
+    });
+    expect(await migrator.user.count({ where: { isSample: true } })).toBe(before);
+    const { password } = await credentialOf('second.customer@foodz.example');
+    expect(await verifyPassword({ hash: password!, password: 'sample-password-2' })).toBe(true);
+  });
+
+  it('gives the second customer a Work address inside the area, and the demo Home its kind', async () => {
+    const work = await migrator.address.findFirstOrThrow({
+      where: { user: { email: 'second.customer@foodz.example' } },
+      select: { kind: true, label: true, line1: true, isDefault: true },
+    });
+    expect(work).toEqual({
+      kind: 'WORK',
+      label: 'Work',
+      line1: '1 Faneuil Hall Square',
+      isDefault: true,
+    });
+    const home = await migrator.address.findFirstOrThrow({
+      where: { user: { email: 'demo.customer@foodz.example' } },
+      select: { kind: true },
+    });
+    expect(home.kind).toBe('HOME');
+  });
+});
+
+describe('legal pages', () => {
+  it('reads the published Terms and Privacy Policy as plain blocks', async () => {
+    const terms = await getLegalPage('terms');
+    expect(terms).toMatchObject({ slug: 'terms', title: 'Terms and Conditions', version: 1 });
+    expect(terms?.blocks[0]).toEqual({
+      type: 'paragraph',
+      text: 'Foodz is a demonstration store. Orders placed here are not cooked or delivered, and card payments run in test mode only.',
+    });
+    expect(terms?.blocks).toContainEqual({ type: 'heading', level: 2, text: 'Using Foodz' });
+
+    const privacy = await getLegalPage('privacy');
+    expect(privacy?.blocks).toContainEqual(expect.objectContaining({ type: 'list' }));
+    expect(privacy?.blocks).toContainEqual({
+      type: 'paragraph',
+      text: 'From your account page you can download a copy of your data or delete your account at any time.',
+    });
+    expect(await currentTermsVersion()).toBe(1);
+  });
+
+  it('returns nothing for other or malformed slugs', async () => {
+    expect(await getLegalPage('faq')).toBeNull();
+    expect(await getLegalPage('../terms')).toBeNull();
   });
 });
