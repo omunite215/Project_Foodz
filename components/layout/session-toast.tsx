@@ -16,6 +16,7 @@ export const SIGNED_OUT_ELSEWHERE_TEXT =
   'You were signed out on this device, so we emptied your cart.';
 export const SIGN_OUT_OFFLINE_TEXT =
   "You're offline. Try signing out again when you're back online.";
+export const SIGN_OUT_FAILED_TEXT = "We couldn't sign you out. Please try again.";
 
 type Listener = (text: string) => void;
 const listeners = new Set<Listener>();

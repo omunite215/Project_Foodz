@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { authPageHref, returnPathFor, returnRoute } from './auth-links';
+import {
+  authPageHref,
+  isAuthPage,
+  returnPathFor,
+  returnRoute,
+  sessionEndedHref,
+} from './auth-links';
 
 describe('returnPathFor', () => {
   it('returns to the page the person is on, query included', () => {
@@ -43,5 +49,32 @@ describe('authPageHref', () => {
   it('types a cleaned path for the router', () => {
     expect(returnRoute('//evil.example')).toBe('/');
     expect(returnRoute('/account?resend=1')).toBe('/account?resend=1');
+  });
+});
+
+describe('sessionEndedHref', () => {
+  it('signs in again with the reason, and comes back to the form (S2.12)', () => {
+    expect(sessionEndedHref('/account')).toBe(
+      '/sign-in?callbackUrl=%2Faccount&notice=session-ended',
+    );
+    expect(sessionEndedHref('/account/addresses/new')).toBe(
+      '/sign-in?callbackUrl=%2Faccount%2Faddresses%2Fnew&notice=session-ended',
+    );
+  });
+
+  it('cleans the return path like every other sign-in link', () => {
+    expect(sessionEndedHref('//evil.example')).toBe('/sign-in?notice=session-ended');
+    expect(sessionEndedHref('/')).toBe('/sign-in?notice=session-ended');
+  });
+});
+
+describe('isAuthPage', () => {
+  it('knows the sign-in pages and the steps under them', () => {
+    for (const page of ['/sign-in', '/sign-in/two-factor', '/reset-password', '/Sign-Up']) {
+      expect(isAuthPage(page)).toBe(true);
+    }
+    for (const page of ['/', '/account', '/sign-inside', '/menu']) {
+      expect(isAuthPage(page)).toBe(false);
+    }
   });
 });

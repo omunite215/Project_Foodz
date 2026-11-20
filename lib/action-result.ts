@@ -129,3 +129,21 @@ export async function callAction<T>(
 /** The first message for a field, from a failure. */
 export const fieldError = (failure: ActionFailure | null | undefined, field: string) =>
   failure?.fieldErrors?.[field]?.[0];
+
+/**
+ * The failure once `field` has changed: the server judged the old value, so its error under that
+ * field goes ("This password has appeared in a data breach" must not stick to a new password,
+ * S7.5). A field-only failure with nothing left becomes null. Unchanged failures keep their
+ * identity, so typing in a field without an error re-renders nothing.
+ */
+export function withoutFieldError(
+  failure: ActionFailure | null,
+  field: string,
+): ActionFailure | null {
+  if (!failure?.fieldErrors || !(field in failure.fieldErrors)) return failure;
+  const rest = Object.fromEntries(
+    Object.entries(failure.fieldErrors).filter(([name]) => name !== field),
+  );
+  if (Object.keys(rest).length === 0 && failure.code === 'INVALID_INPUT') return null;
+  return { ...failure, fieldErrors: rest };
+}

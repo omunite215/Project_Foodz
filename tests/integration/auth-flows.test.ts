@@ -55,13 +55,20 @@ let migrator: PrismaClient;
 
 const sent = () => mocks.send.mock.calls.map(([event]) => unsealAccountEmail(event.data.sealed));
 const emailsTo = (address: string) => sent().filter((email) => email.to === address);
-const linkIn = async (address: string, kind: 'verify-email' | 'reset-password') => {
+const linkIn = async (
+  address: string,
+  kind: 'verify-email' | 'verify-new-email' | 'reset-password',
+) => {
   await vi.waitFor(() => expect(emailsTo(address).some((e) => e.kind === kind)).toBe(true));
   const email = emailsTo(address).findLast((e) => e.kind === kind);
   return email && 'url' in email ? email.url : '';
 };
 
 const freshEmail = (tag = 'maya') => `${tag}-${uuid()}@example.com`;
+
+/** Whether a browser still has a session cookie. */
+const holdsSession = (browser: Browser) =>
+  [...browser.jar.keys()].some((name) => name.endsWith('session_token'));
 
 const userByEmail = (email: string) =>
   migrator.user.findUniqueOrThrow({
@@ -507,6 +514,32 @@ describe('password reset', () => {
       message: 'This link has expired or has already been used. We can send you a new one.',
     });
   });
+
+  it('clears the session cookie of the browser it was made in, not of another account (S3.11)', async () => {
+    const { email, browser } = await signUp();
+    const resetToken = async () => {
+      mocks.send.mockClear();
+      await actions.requestPasswordResetAction({ email, captchaToken: 'ok' });
+      const link = new URL(await linkIn(email, 'reset-password'));
+      const landing = await get(link.pathname + link.search);
+      return new URL(landing.headers.get('location') ?? '', SITE).searchParams.get('token') ?? '';
+    };
+    // Reset from the browser still signed in to the account: signed out there in the same answer,
+    // so the sign-in page it lands on shows no trace of the old session.
+    expect(holdsSession(browser)).toBe(true);
+    const token = await resetToken();
+    expect(
+      (await actions.resetPasswordAction({ token, newPassword: 'a brand new password' }))?.data,
+    ).toEqual({ email });
+    expect(holdsSession(browser)).toBe(false);
+
+    // Reset from a browser signed in to someone else's account: that session stays.
+    const other = await signUp('other');
+    const second = await resetToken();
+    await actions.resetPasswordAction({ token: second, newPassword: 'another brand new password' });
+    expect(holdsSession(other.browser)).toBe(true);
+    expect(await sessionOf(other.browser)).not.toBeNull();
+  });
 });
 
 // ------------------------------------------------------------------ email links (S3.1 to S3.6)
@@ -647,7 +680,8 @@ describe('changing an unconfirmed email (S3.6)', () => {
     const stale = await get(oldLink.pathname + oldLink.search, newBrowser());
     expect(stale.headers.get('location')).toMatch(/error=TOKEN_EXPIRED/);
 
-    const newLink = new URL(await linkIn(newEmail, 'verify-email'));
+    // Worded for a changed address, not for a new account.
+    const newLink = new URL(await linkIn(newEmail, 'verify-new-email'));
     const confirmed = await get(newLink.pathname + newLink.search, browser);
     expect(confirmed.headers.get('location')).not.toMatch(/error=/);
     expect(await userByEmail(newEmail)).toMatchObject({ id: userId, emailVerified: true });

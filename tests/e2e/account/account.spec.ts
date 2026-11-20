@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import type { Locator } from '@playwright/test';
 import {
   addDishToCart,
+  carriedEmail,
+  carryEmail,
+  endSessionElsewhere,
   expect,
   expectNoSidewaysScroll,
   isPhone,
@@ -10,12 +13,18 @@ import {
   newPassword,
   open,
   savedCartCount,
+  savedDrafts,
+  SESSION_ENDED,
   signIn,
+  signOutFromHeader,
   signUp,
   test,
 } from './support';
 
 const SIGNED_OUT_ELSEWHERE = 'You were signed out on this device, so we emptied your cart.';
+const SIGN_OUT_REFUSED = "We couldn't sign you out. Please try again.";
+const SIGN_OUT_OFFLINE = "You're offline. Try signing out again when you're back online.";
+const DRAFT_RESTORED = 'We kept your changes. Press Save to keep them.';
 
 /** The grey of a control that can't be used right now (design 2.5, `neutral-6`). */
 const BLOCKED_FILL = 'rgb(230, 232, 236)';
@@ -129,6 +138,132 @@ test.describe('Signing out (S5.8, S5.10)', () => {
     await page.getByRole('button', { name: 'Dismiss' }).last().click();
     await expect(page.getByRole('main').getByText(SIGNED_OUT_ELSEWHERE)).toHaveCount(0);
   });
+
+  test('a refused sign-out says so and keeps the account; only a lost connection reads as offline', async ({
+    page,
+  }) => {
+    await signUp(page);
+    const account = page.getByRole('button', { name: /^Account menu for / });
+    // The floating message (the live region holds the same words, unseen).
+    const toast = (text: string) =>
+      page.locator('[data-slot="alert-description"]').filter({ hasText: text });
+    const signOut = async () => {
+      await account.click();
+      await page.getByRole('menuitem', { name: 'Sign out' }).click();
+    };
+
+    // Online, and the server says no (403, 429 or 5xx).
+    await page.route('**/api/auth/sign-out', (route) => route.fulfill({ status: 403, body: '{}' }));
+    await signOut();
+    await expect(toast(SIGN_OUT_REFUSED)).toBeVisible();
+    await expect(liveRegion(page)).toHaveText(SIGN_OUT_REFUSED);
+    await expect(toast(SIGN_OUT_OFFLINE)).toHaveCount(0);
+    await expect(account).toBeVisible();
+
+    // A request that never reaches the server is a connection problem.
+    await page.unroute('**/api/auth/sign-out');
+    await page.route('**/api/auth/sign-out', (route) => route.abort('internetdisconnected'));
+    await signOut();
+    await expect(toast(SIGN_OUT_OFFLINE)).toBeVisible();
+    await expect(account).toBeVisible();
+  });
+
+  test('signing out forgets the email the sign-in forms carry, so the next person starts empty (S2.2)', async ({
+    page,
+  }) => {
+    await signUp(page);
+    // Signing up is signing in: the email has done its job.
+    expect(await carriedEmail(page)).toBeNull();
+
+    // Whatever this tab still carries goes with the sign-out.
+    await carryEmail(page, 'last.customer@example.com');
+    await signOutFromHeader(page);
+    expect(await carriedEmail(page)).toBeNull();
+    await page.locator('header').getByRole('link', { name: 'Sign in' }).click();
+    await expect(page).toHaveTitle('Sign in | Foodz');
+    await expect(page.getByLabel('Email')).toHaveValue('');
+  });
+});
+
+test.describe('A session that ends while a form is open (S2.12, S5.8)', () => {
+  test('ended on another device: Save says so, and after signing in the typed profile is back (S7.6)', async ({
+    page,
+    browser,
+  }) => {
+    const account = await signUp(page);
+    await open(page, '/account');
+    const profile = page.getByRole('form', { name: 'Profile' });
+    await profile.getByLabel('Name').fill('Maya Draft Name');
+    const phone = profile.getByLabel('Phone (optional)');
+    await phone.fill('617-555-0142');
+    await phone.blur();
+    // Something the sign-in forms carry, which must not outlive the session (S2.2).
+    await carryEmail(page, 'last.customer@example.com');
+
+    await endSessionElsewhere(browser, account);
+
+    await profile.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page).toHaveURL(/\/sign-in\?callbackUrl=%2Faccount&notice=session-ended$/, {
+      timeout: 30_000,
+    });
+    await expect(page.getByRole('main').getByText(SESSION_ENDED)).toBeVisible();
+    // The reason has focus and is read out (S7.6).
+    await expect(page.locator(':focus')).toContainText(SESSION_ENDED);
+    await expect(liveRegion(page)).toHaveText(SESSION_ENDED);
+    await expect(page.locator('header').getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByLabel('Email')).toHaveValue('');
+    expect(await savedDrafts(page)).toEqual(['foodz.draft:/account']);
+
+    await page.getByLabel('Email').fill(account.email);
+    await page.getByLabel('Password', { exact: true }).fill(account.password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    // Back on the form, with what was typed.
+    await expect(page).toHaveURL(/\/account$/, { timeout: 30_000 });
+    await expect(profile.getByLabel('Name')).toHaveValue('Maya Draft Name');
+    await expect(phone).toHaveValue('(617) 555-0142');
+    await expect(liveRegion(page)).toHaveText(DRAFT_RESTORED);
+    // Given back once, then gone.
+    expect(await savedDrafts(page)).toEqual([]);
+    await profile.getByRole('button', { name: 'Save changes' }).click();
+    await expect(profile.getByText('Saved')).toBeVisible();
+    await expect(profile.getByLabel('Name')).toHaveValue('Maya Draft Name');
+  });
+
+  test('signed out in another tab: this tab keeps its typing, and the draft never reaches someone else', async ({
+    page,
+    context,
+  }) => {
+    await signUp(page);
+    await open(page, '/account');
+    const profile = page.getByRole('form', { name: 'Profile' });
+    await profile.getByLabel('Name').fill('Maya Draft Name');
+
+    const other = await context.newPage();
+    await open(other, '/menu');
+    await signOutFromHeader(other);
+
+    // This tab hears of it, but shows it only on its next action (S5.8): nothing typed is lost.
+    await page.bringToFront();
+    await page.waitForTimeout(1_500);
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(profile.getByLabel('Name')).toHaveValue('Maya Draft Name');
+
+    await profile.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('main').getByText(SESSION_ENDED)).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Sign in' })).toHaveAttribute(
+      'href',
+      '/sign-in?callbackUrl=%2Faccount&notice=session-ended',
+    );
+    expect(await savedDrafts(page)).toEqual(['foodz.draft:/account']);
+
+    // Someone else signs in on this device: the draft is not theirs, so it is dropped unseen.
+    await signUp(page, { name: 'Priya Shah' });
+    await open(page, '/account');
+    await expect(profile.getByLabel('Name')).toHaveValue('Priya Shah');
+    await expect(liveRegion(page)).not.toHaveText(DRAFT_RESTORED);
+    expect(await savedDrafts(page)).toEqual([]);
+  });
 });
 
 test.describe('Your account (S3.3, S5.1 to S5.3)', () => {
@@ -191,7 +326,37 @@ test.describe('Your account (S3.3, S5.1 to S5.3)', () => {
     await expect(status).not.toHaveAttribute('role');
     await expect(resend).toHaveAttribute('aria-disabled', 'true');
     expect((await resend.boundingBox())?.width).toBe(width);
-    expect(await fill(resend)).toBe(BLOCKED_FILL);
+    // The fill eases into the grey, so it is read once the change has settled.
+    await expect.poll(() => fill(resend)).toBe(BLOCKED_FILL);
+    // Resting, the button names its reason: the line with the countdown (design 4.2).
+    const describedBy = await resend.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+      // A no-break space keeps the number and its unit together.
+      /^Sent\. Check your inbox and spam folder\. You can resend in \d+\ss\.$/,
+    );
+  });
+
+  test('a server error under a field goes once that field changes (S7.5)', async ({ page }) => {
+    await signUp(page);
+    await open(page, '/account/security');
+    await page.getByRole('button', { name: 'Change password' }).click();
+    const form = page.getByRole('form', { name: 'Change password' });
+    const current = form.getByLabel('Current password', { exact: true });
+    await current.fill('not my password');
+    await form.getByLabel('New password', { exact: true }).fill(newPassword());
+    await form.getByRole('button', { name: 'Save new password' }).click();
+
+    const wrong = form.getByText("Your current password isn't right.");
+    await expect(wrong).toBeVisible();
+    await expect(current).toBeFocused();
+    await expect(current).toHaveAttribute('aria-invalid', 'true');
+
+    // A new value is not the one the server refused.
+    await current.press('End');
+    await current.pressSequentially('!');
+    await expect(wrong).toHaveCount(0);
+    await expect(current).not.toHaveAttribute('aria-invalid');
   });
 
   test('Cancel on Change password empties the form and returns focus to its button (design 4.3)', async ({

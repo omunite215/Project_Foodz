@@ -16,7 +16,9 @@ import { isOffline } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { postAuthEvent } from '@/lib/auth-channel';
 import { useCart, useEndCartSession } from '@/lib/data/cart';
-import { showSessionToast, SIGN_OUT_OFFLINE_TEXT } from './session-toast';
+import { forgetEmail } from '@/lib/email-handoff';
+import { forgetDrafts } from '@/lib/form-draft';
+import { showSessionToast, SIGN_OUT_FAILED_TEXT, SIGN_OUT_OFFLINE_TEXT } from './session-toast';
 
 /** Marks the header's "Sign in" link, which takes focus after signing out on a public page. */
 export const SIGN_IN_ENTRY_ATTRIBUTE = 'data-sign-in-entry';
@@ -38,7 +40,12 @@ function focusWhenDrawn(selector: string, ready: () => boolean = () => true, att
  * Signing out of this device (S5.8, S5.10). The request is a POST from a button, never a link.
  * With items in the cart, a dialog says the cart will be emptied first. Afterwards the cart is
  * emptied in every tab, other tabs are told, and focus lands somewhere sensible: Home's content
- * after an account page, otherwise the header's new "Sign in" link.
+ * after an account page, otherwise the header's new "Sign in" link. Nothing typed by this person
+ * stays behind in the tab: no form draft, and no email for the sign-in form (S2.2).
+ *
+ * If it fails, the account stays shown and the toast says why: "You're offline" only when the
+ * browser is offline or the request never reached the server; a refusal (403, 429, 5xx) asks
+ * to try again.
  */
 export function useSignOut() {
   const router = useRouter();
@@ -49,31 +56,41 @@ export function useSignOut() {
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
 
+  function fail(text: string) {
+    busy.current = false;
+    setPending(false);
+    setDialogOpen(false);
+    showSessionToast(text);
+  }
+
   async function signOutNow() {
     if (busy.current) return;
     if (isOffline()) {
-      setDialogOpen(false);
-      showSessionToast(SIGN_OUT_OFFLINE_TEXT);
+      fail(SIGN_OUT_OFFLINE_TEXT);
       return;
     }
     busy.current = true;
     setPending(true);
+    let response: Response;
     try {
-      const response = await fetch('/api/auth/sign-out', {
+      response = await fetch('/api/auth/sign-out', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: '{}',
       });
-      if (!response.ok) throw new Error(`Sign-out answered ${response.status}`);
     } catch {
-      busy.current = false;
-      setPending(false);
-      setDialogOpen(false);
-      showSessionToast(SIGN_OUT_OFFLINE_TEXT);
+      // The request never reached the server.
+      fail(SIGN_OUT_OFFLINE_TEXT);
+      return;
+    }
+    if (!response.ok) {
+      fail(SIGN_OUT_FAILED_TEXT);
       return;
     }
 
     endCartSession();
+    forgetDrafts();
+    forgetEmail();
     postAuthEvent('signed-out');
     setDialogOpen(false);
     if (pathname.startsWith('/account')) {

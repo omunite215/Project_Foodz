@@ -48,6 +48,7 @@ export default async function NewAddressPage() {
             defaultKind={defaultKind}
             firstAddress={book.addresses.length === 0}
             canSave={book.canEdit}
+            draftOwner={actor.userId}
           />
         )}
       </div>

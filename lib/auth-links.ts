@@ -7,7 +7,8 @@ import { AUTH_PAGES, safeRedirectPath } from './redirect';
  * through safeRedirectPath(), so these are always plain paths on this site.
  */
 
-const isAuthPage = (pathname: string) => {
+/** A sign-in, sign-up, reset or confirm page, or one under it (`/sign-in/two-factor`). */
+export const isAuthPage = (pathname: string) => {
   const path = pathname.toLowerCase();
   return AUTH_PAGES.some((page) => path === page || path.startsWith(`${page}/`));
 };
@@ -26,6 +27,16 @@ export function authPageHref(
   const path = safeRedirectPath(returnPath);
   const href = path === '/' ? page : `${page}?callbackUrl=${encodeURIComponent(path)}`;
   return isSitePath(href) ? href : page;
+}
+
+/**
+ * Sign in again after the session ended under a form (S2.12): the sign-in page says why
+ * ("You've been signed out. Sign in again to save your changes.") and returns to the form.
+ */
+export function sessionEndedHref(returnPath: unknown): Route {
+  const signIn = authPageHref('/sign-in', returnPath);
+  const href = `${signIn}${signIn.includes('?') ? '&' : '?'}notice=session-ended`;
+  return isSitePath(href) ? href : '/sign-in';
 }
 
 /**

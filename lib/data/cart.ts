@@ -206,25 +206,39 @@ function writeCartOwner(owner: string | null) {
 
 /**
  * Ties the cart to the signed-in session. Calls `onEmptied` once when a cart kept for a session
- * that has since ended was emptied.
+ * that has since ended was emptied, and `onSessionEnded` once when this device's session ended
+ * some other way than signing out here (another device, a reset, deletion, 7 idle days) and
+ * nobody is signed in now.
  */
-export function useCartSession(sessionKey: string | null, onEmptied: () => void) {
+export function useCartSession(
+  sessionKey: string | null,
+  onEmptied: () => void,
+  onSessionEnded?: () => void,
+) {
   const { isReady, itemCount } = useCart();
   const actions = useCartActions();
-  const latest = useRef({ itemCount, actions, onEmptied });
+  const latest = useRef({ itemCount, actions, onEmptied, onSessionEnded });
   useEffect(() => {
-    latest.current = { itemCount, actions, onEmptied };
+    latest.current = { itemCount, actions, onEmptied, onSessionEnded };
   });
 
   useEffect(() => {
     if (!isReady) return;
-    const { itemCount: count, actions: cart, onEmptied: emptied } = latest.current;
-    const check = cartSessionCheck(readCartOwner(), sessionKey, count > 0);
+    const {
+      itemCount: count,
+      actions: cart,
+      onEmptied: emptied,
+      onSessionEnded: ended,
+    } = latest.current;
+    const saved = readCartOwner();
+    const check = cartSessionCheck(saved, sessionKey, count > 0);
     writeCartOwner(check.owner);
     if (check.emptyCart) {
       cart.clear();
       emptied();
     }
+    // Signing out here forgets the owner first, so only an ending elsewhere gets this far.
+    if (saved !== null && sessionKey === null) ended?.();
   }, [isReady, sessionKey]);
 }
 

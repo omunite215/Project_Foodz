@@ -5,6 +5,9 @@ import {
   expectNoSidewaysScroll,
   liveRegion,
   open,
+  savedDrafts,
+  SESSION_ENDED,
+  signOutFromHeader,
   signUp,
   test,
   watchConsole,
@@ -213,6 +216,58 @@ test.describe('Address book (S4)', () => {
     await page.getByRole('button', { name: 'Save address' }).click();
     await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 20_000 });
     await expect(page.getByRole('article', { name: 'Home' })).toBeFocused();
+  });
+
+  test('a half-filled address survives a sign-out in another tab and is back after signing in (S2.12, S5.8)', async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(150_000);
+    const account = await signUp(page);
+    await open(page, '/account/addresses/new');
+    await pickAddress(page, '1 Faneuil Hall Square Boston', /Boston/);
+    await expect(result(page)).toHaveText(INSIDE, { timeout: 20_000 });
+    const apt = page.getByLabel('Apt, suite or floor (optional)');
+    const notes = page.getByLabel('Instructions for the courier (optional)');
+    await apt.fill('Draft apt 9');
+    await notes.fill('Ring twice');
+
+    const other = await context.newPage();
+    await open(other, '/');
+    await signOutFromHeader(other);
+
+    // Not sent to sign in at once: the next action shows the signed-out state (S5.8).
+    await page.bringToFront();
+    await page.waitForTimeout(1_500);
+    await expect(page).toHaveURL(/\/account\/addresses\/new$/);
+    await expect(apt).toHaveValue('Draft apt 9');
+
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await expect(page.getByRole('main').getByText(SESSION_ENDED)).toBeVisible();
+    expect(await savedDrafts(page)).toEqual(['foodz.draft:/account/addresses/new']);
+    await page.getByRole('main').getByRole('link', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(
+      /\/sign-in\?callbackUrl=%2Faccount%2Faddresses%2Fnew&notice=session-ended$/,
+    );
+    await expect(page.locator(':focus')).toContainText(SESSION_ENDED);
+    // A fresh page: no header or welcome left over from the ended session.
+    await expect(page.locator('header').getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Account menu for / })).toHaveCount(0);
+
+    await page.getByLabel('Email').fill(account.email);
+    await page.getByLabel('Password', { exact: true }).fill(account.password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    // Back on the form with the pick, the apartment and the note, checked again.
+    await expect(page).toHaveURL(/\/account\/addresses\/new$/, { timeout: 30_000 });
+    await expect(apt).toHaveValue('Draft apt 9');
+    await expect(notes).toHaveValue('Ring twice');
+    await expect(page.getByRole('combobox', { name: 'Address' })).toHaveValue(/Faneuil Hall/);
+    await expect(result(page)).toHaveText(INSIDE, { timeout: 20_000 });
+    expect(await savedDrafts(page)).toEqual([]);
+    await page.getByRole('button', { name: 'Save address' }).click();
+    await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 20_000 });
+    await expect(page.getByRole('article', { name: 'Home' })).toContainText('Draft apt 9');
   });
 
   test('an address nobody can find says so, and the search keeps what was typed (S4.16)', async ({

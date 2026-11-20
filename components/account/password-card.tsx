@@ -20,7 +20,7 @@ import { SubmitButton } from '@/components/forms/submit-button';
 import { CHECK_FAILED_TEXT, Turnstile, type TurnstileHandle } from '@/components/forms/turnstile';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
+import { type ActionFailure, callAction, fieldError, withoutFieldError } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { useAccount } from './account-context';
 import { LockedLine, SettingsCard } from './settings-card';
@@ -201,6 +201,7 @@ function ChangePassword({ onChanged }: { onChanged: () => void }) {
                         value={field.state.value}
                         onChange={(event) => {
                           field.handleChange(event.target.value);
+                          setFailure((current) => withoutFieldError(current, 'currentPassword'));
                           if (error) void form.validate('blur');
                         }}
                         onBlur={blurField(field.handleBlur)}
@@ -232,6 +233,7 @@ function ChangePassword({ onChanged }: { onChanged: () => void }) {
                         value={field.state.value}
                         onChange={(event) => {
                           field.handleChange(event.target.value);
+                          setFailure((current) => withoutFieldError(current, 'newPassword'));
                           if (error) void form.validate('blur');
                         }}
                         onBlur={blurField(field.handleBlur)}

@@ -8,6 +8,7 @@ import {
   OFFLINE_MESSAGE,
   readActionResult,
   TIMEOUT_MESSAGE,
+  withoutFieldError,
 } from './action-result';
 
 describe('readActionResult', () => {
@@ -122,5 +123,44 @@ describe('isOffline', () => {
     expect(isOffline()).toBe(false);
     vi.stubGlobal('navigator', { onLine: false });
     expect(isOffline()).toBe(true);
+  });
+});
+
+describe('withoutFieldError', () => {
+  const breached = {
+    code: 'INVALID_INPUT',
+    message: 'Check the highlighted fields.',
+    fieldErrors: {
+      password: ['This password has appeared in a data breach. Please choose a different one.'],
+    },
+  };
+
+  it('drops the error of a field once it changes, and the failure with its last error', () => {
+    expect(withoutFieldError(breached, 'password')).toBeNull();
+  });
+
+  it('keeps the errors of the other fields', () => {
+    const two = {
+      ...breached,
+      fieldErrors: { ...breached.fieldErrors, name: ['Enter your name.'] },
+    };
+    expect(withoutFieldError(two, 'password')).toEqual({
+      ...breached,
+      fieldErrors: { name: ['Enter your name.'] },
+    });
+  });
+
+  it('keeps a form-level failure, without the field error it carried', () => {
+    const limited = { code: 'RATE_LIMITED', message: 'Too many attempts.', fieldErrors: {} };
+    expect(withoutFieldError({ ...limited, fieldErrors: { code: ['x'] } }, 'code')).toEqual(
+      limited,
+    );
+  });
+
+  it('changes nothing when the field had no error', () => {
+    expect(withoutFieldError(breached, 'email')).toBe(breached);
+    expect(withoutFieldError(null, 'email')).toBeNull();
+    const plain = { code: 'OFFLINE', message: OFFLINE_MESSAGE };
+    expect(withoutFieldError(plain, 'email')).toBe(plain);
   });
 });

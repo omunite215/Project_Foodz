@@ -26,6 +26,26 @@ export const CLIENT_IP_HEADER = 'x-foodz-client-ip';
 /** Ways of starting a session that skip the password-and-code step. */
 const SESSIONS_WITHOUT_SECOND_STEP = /^\/(callback\/|sign-in\/social$|verify-email$)/;
 
+/**
+ * Whether a confirm link is for a changed address (S3.6): the library names the new address as
+ * `updateTo` in the link's token only then. The token was signed a moment ago by the library
+ * itself; reading it only chooses the email's wording.
+ */
+function confirmsEmailChange(token: string): boolean {
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
+    );
+    return (
+      typeof payload === 'object' &&
+      payload !== null &&
+      typeof Reflect.get(payload, 'updateTo') === 'string'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const auth = betterAuth({
   appName: 'Foodz',
   baseURL: process.env.BETTER_AUTH_URL,
@@ -65,9 +85,13 @@ export const auth = betterAuth({
     // another account stays as it is (hooks.ts).
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60 * 24,
-    async sendVerificationEmail({ user, url }) {
+    async sendVerificationEmail({ user, url, token }) {
       if (!receivesAccountEmail(user)) return;
-      await queueAccountEmail({ kind: 'verify-email', to: user.email, url });
+      await queueAccountEmail({
+        kind: confirmsEmailChange(token) ? 'verify-new-email' : 'verify-email',
+        to: user.email,
+        url,
+      });
     },
   },
 

@@ -17,7 +17,7 @@ import { FormAlert } from '@/components/forms/form-alert';
 import { focusFirstInvalid, focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
 import { PasswordInput } from '@/components/forms/password-input';
 import { SubmitButton } from '@/components/forms/submit-button';
-import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
+import { type ActionFailure, callAction, fieldError, withoutFieldError } from '@/lib/action-result';
 import { rememberEmail } from '@/lib/email-handoff';
 import { safeRedirectPath } from '@/lib/redirect';
 import { AuthTitle } from './auth-title';
@@ -124,6 +124,7 @@ export function ResetPasswordForm({
                       value={field.state.value}
                       onChange={(event) => {
                         field.handleChange(event.target.value);
+                        setFailure((current) => withoutFieldError(current, 'newPassword'));
                         if (error) void form.validate('blur');
                       }}
                       onBlur={blurField(field.handleBlur)}

@@ -22,10 +22,10 @@ import { SubmitButton } from '@/components/forms/submit-button';
 import { CHECK_FAILED_TEXT, Turnstile, type TurnstileHandle } from '@/components/forms/turnstile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
+import { type ActionFailure, callAction, fieldError, withoutFieldError } from '@/lib/action-result';
 import { postAuthEvent, requestNoticeFocus } from '@/lib/auth-channel';
 import { authPageHref, returnRoute } from '@/lib/auth-links';
-import { recalledEmail, rememberEmail } from '@/lib/email-handoff';
+import { forgetEmail, recalledEmail, rememberEmail } from '@/lib/email-handoff';
 import { suggestEmail } from '@/lib/email-typo';
 import { AuthTitle } from './auth-title';
 import { CheckInboxPanel } from './check-inbox-panel';
@@ -107,6 +107,8 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
       const outcome = await callAction(() => signUpAction({ ...value, captchaToken, callbackUrl }));
       if (outcome.ok) {
         if (outcome.data.signedIn) {
+          // Signed in: the email has done its job, as after signing in (design 3.8).
+          forgetEmail();
           postAuthEvent('signed-in');
           const destination = returnRoute(outcome.data.redirectTo);
           requestNoticeFocus(destination);
@@ -249,6 +251,7 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
                         value={field.state.value}
                         onChange={(event) => {
                           field.handleChange(event.target.value);
+                          setFailure((current) => withoutFieldError(current, 'name'));
                           if (error) void form.validate('blur');
                         }}
                         onBlur={blurField(field.handleBlur)}
@@ -304,6 +307,7 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
                         onChange={(event) => {
                           field.handleChange(event.target.value);
                           setSuggestion(null);
+                          setFailure((current) => withoutFieldError(current, 'email'));
                           if (error) void form.validate('blur');
                         }}
                         onBlur={(event) => {
@@ -338,6 +342,7 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
                         value={field.state.value}
                         onChange={(event) => {
                           field.handleChange(event.target.value);
+                          setFailure((current) => withoutFieldError(current, 'password'));
                           if (error) void form.validate('blur');
                         }}
                         onBlur={blurField(field.handleBlur)}

@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
-import { postAuthEvent } from '@/lib/auth-channel';
+import { postAuthEvent, takeNoticeFocus } from '@/lib/auth-channel';
 import { authPageHref, returnRoute } from '@/lib/auth-links';
 import { forgetEmail, recalledEmail, rememberEmail } from '@/lib/email-handoff';
 import { AuthTitle } from './auth-title';
@@ -75,6 +75,8 @@ export function SignInForm({
   const router = useRouter();
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const turnstileRef = useRef<TurnstileHandle>(null);
   const busyRef = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -96,6 +98,13 @@ export function SignInForm({
     onSubmit: ({ value }) => submit(value),
   }); // Re-render the fields when a submit is tried, so every error shows.
   const submitted = useStore(form.store, (formState) => formState.submissionAttempts > 0);
+
+  // Sent here with a notice ("Password changed…", "You've been signed out…"): it takes focus and
+  // is read out (S7.6). Back from the code step, the page's heading does.
+  useEffect(() => {
+    if (notice) focusThenAnnounce(noticeRef.current, NOTICES[notice].text);
+    else if (takeNoticeFocus('/sign-in')) focusThenAnnounce(titleRef.current);
+  }, [notice]);
 
   // The email typed on another sign-in page (design 3.8).
   useEffect(() => {
@@ -222,12 +231,13 @@ export function SignInForm({
       <AuthTitle
         title="Sign in"
         subtitle="Welcome back. Sign in to order and use your saved addresses."
+        headingRef={titleRef}
       />
       <div className="mt-6 md:mt-10 xl:mt-12">
         {notice ? (
-          <FormAlert variant={NOTICES[notice].variant} className="mb-6">
-            {NOTICES[notice].text}
-          </FormAlert>
+          <div ref={noticeRef} tabIndex={-1} className="mb-6 focus:outline-none">
+            <FormAlert variant={NOTICES[notice].variant}>{NOTICES[notice].text}</FormAlert>
+          </div>
         ) : null}
         {google ? (
           <>

@@ -281,8 +281,27 @@ export async function requestPasswordReset(input: unknown, request: FlowRequest)
 }
 
 /**
- * Sets the new password, signs out every device, confirms the email and sends "Your Foodz
- * password was changed". Returns the account email for the sign-in page (S3.11).
+ * After a reset every session of the account is gone (`revokeSessionsOnPasswordReset`), but a
+ * browser that held one still has its cookie, so the page it lands on would still show the old
+ * session's header and welcome until the next request. Reading the session here finds it gone
+ * and clears that cookie in this response (S3.11). A browser signed in to another account keeps
+ * its own session. The cookie cache is off (server/auth), and is skipped here in any case.
+ */
+async function clearEndedSession(request: FlowRequest) {
+  try {
+    await auth.api.getSession({
+      headers: authHeaders(request),
+      query: { disableCookieCache: true },
+    });
+  } catch (error) {
+    // The password is changed either way; the next request finds the session gone.
+    logger.warn({ err: error }, 'session not re-read after a reset');
+  }
+}
+
+/**
+ * Sets the new password, signs out every device (this browser included), confirms the email and
+ * sends "Your Foodz password was changed". Returns the account email for the sign-in page (S3.11).
  */
 export async function resetPassword(input: unknown, request: FlowRequest) {
   const { token, newPassword } = resetPasswordInput.parse(input);
@@ -298,6 +317,7 @@ export async function resetPassword(input: unknown, request: FlowRequest) {
     if (code && PASSWORD_CODES.has(code)) await attempt.refund();
     throw inputError(error, 'newPassword') ?? unexpected(error, 'reset-password');
   }
+  await clearEndedSession(request);
   if (!email) throw new AppError('LINK_EXPIRED', LINK_EXPIRED, 400);
   return { email };
 }

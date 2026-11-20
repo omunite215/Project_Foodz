@@ -14,12 +14,34 @@ test.describe('The two-factor step (S2.9)', () => {
   }) => {
     await open(page, '/sign-in/two-factor?callbackUrl=%2Fmenu');
     await expect(page).toHaveTitle('Enter your code | Foodz');
+    await expect(page.getByRole('heading', { level: 1, name: 'Enter your code' })).toBeFocused();
     await expect(
       page.getByRole('main').getByText('This sign-in timed out. Please start again.'),
     ).toBeVisible();
     await expect(page.getByLabel('6-digit code')).toHaveCount(0);
     await page.getByRole('link', { name: 'Start again' }).click();
     await expect(page).toHaveURL(/\/sign-in\?callbackUrl=%2Fmenu$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeFocused();
+  });
+
+  test('the code step takes focus, and Cancel returns to sign-in with the email kept (S2.9, S7.6)', async ({
+    page,
+  }) => {
+    test.skip(!ADMIN_PASSWORD && !process.env.CI, 'Set SEED_ADMIN_PASSWORD to run this.');
+    await open(page, '/sign-in?callbackUrl=%2Fmenu');
+    await page.getByLabel('Email').fill(ADMIN_EMAIL);
+    await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    await expect(page).toHaveURL(/\/sign-in\/two-factor\?callbackUrl=%2Fmenu$/, {
+      timeout: 30_000,
+    });
+    await expect(page.getByRole('heading', { level: 1, name: 'Enter your code' })).toBeFocused();
+
+    await page.getByRole('link', { name: 'Cancel' }).click();
+    await expect(page).toHaveURL(/\/sign-in\?callbackUrl=%2Fmenu$/);
+    await expect(page.getByLabel('Email')).toHaveValue(ADMIN_EMAIL);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeFocused();
   });
 
   test('the seeded admin enters a code: a wrong one is refused, the right one signs in', async ({
@@ -38,7 +60,7 @@ test.describe('The two-factor step (S2.9)', () => {
     await expect(page).toHaveURL(/\/sign-in\/two-factor\?callbackUrl=%2Fmenu$/, {
       timeout: 30_000,
     });
-    await expect(page.getByRole('heading', { level: 1, name: 'Enter your code' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Enter your code' })).toBeFocused();
     const code = page.getByLabel('6-digit code');
     await expect(code).toHaveAttribute('autocomplete', 'one-time-code');
     await expect(code).toHaveAttribute('inputmode', 'numeric');

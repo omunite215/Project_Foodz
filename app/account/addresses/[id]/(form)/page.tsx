@@ -34,6 +34,7 @@ export default async function EditAddressPage({ params }: { params: Promise<{ id
             defaultKind={address.kind}
             firstAddress={false}
             canSave
+            draftOwner={actor.userId}
           />
         </div>
       ) : (

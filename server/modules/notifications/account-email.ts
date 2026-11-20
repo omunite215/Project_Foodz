@@ -6,8 +6,9 @@ import { actionEmail, type Email, noticeEmail, sendEmail } from '@/server/notifi
 import { decryptField, encryptField } from '@/server/security/field-encryption';
 
 /*
- * Account emails: confirm, reset, password changed, account deleted, and "someone tried to sign
- * up with your email". They cannot be switched off (S8.3).
+ * Account emails: confirm (after sign-up, or for a changed address), reset, password changed,
+ * account deleted, and "someone tried to sign up with your email". They cannot be switched off
+ * (S8.3).
  *
  * They go out from a background job with retries, like other notifications, so a slow mail
  * server never holds up a sign-up and a reset request for a real account takes as long as one
@@ -23,6 +24,8 @@ const ENCRYPTION_CONTEXT = 'jobs:account-email';
  */
 export const accountEmailSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('verify-email'), to: z.email(), url: z.url() }),
+  /** The confirm link for a new address, after "Change email" (S3.6). */
+  z.object({ kind: z.literal('verify-new-email'), to: z.email(), url: z.url() }),
   z.object({ kind: z.literal('reset-password'), to: z.email(), url: z.url() }),
   z.object({ kind: z.literal('password-changed'), to: z.email(), name: z.string().optional() }),
   z.object({ kind: z.literal('account-exists'), to: z.email() }),
@@ -56,6 +59,21 @@ export function renderAccountEmail(message: AccountEmail): Email {
           action: 'Confirm email',
           url: message.url,
           footer: ["If you didn't create a Foodz account, you can ignore this email."],
+        }),
+      };
+    case 'verify-new-email':
+      return {
+        to: message.to,
+        subject: 'Confirm your email for Foodz',
+        ...actionEmail({
+          heading: 'Confirm your new email',
+          message:
+            'Confirm this address to make it the email for your Foodz account. The link works for 24 hours.',
+          action: 'Confirm email',
+          url: message.url,
+          footer: [
+            "If you didn't ask to use this address for Foodz, you can ignore this email. Nothing changes unless the link is used.",
+          ],
         }),
       };
     case 'reset-password':

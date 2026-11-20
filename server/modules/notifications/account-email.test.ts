@@ -80,6 +80,24 @@ describe('account emails', () => {
     expect(email.html.toLowerCase()).not.toContain('click here');
   });
 
+  it('words the confirm email for a changed address as a change, not a new account (S3.6)', () => {
+    const email = renderAccountEmail({ ...confirm, kind: 'verify-new-email' });
+    expect(email.subject).toBe('Confirm your email for Foodz');
+    expect(email.text).toContain(
+      'Confirm this address to make it the email for your Foodz account. The link works for 24 hours.',
+    );
+    expect(email.text).toContain(
+      "If you didn't ask to use this address for Foodz, you can ignore this email. Nothing changes unless the link is used.",
+    );
+    expect(email.text).not.toContain("didn't create a Foodz account");
+    expect(email.text).toContain(confirm.url);
+    expect(email.html).toContain('>Confirm email</a>');
+    // The sign-up email keeps its own ending.
+    expect(renderAccountEmail(confirm).text).toContain(
+      "If you didn't create a Foodz account, you can ignore this email.",
+    );
+  });
+
   it('never carries the name typed at sign-up to an unconfirmed address', () => {
     const name = 'https://evil.example/claim-your-refund';
     // A name on a confirm or reset request is dropped by the schema itself.
@@ -89,6 +107,7 @@ describe('account emails', () => {
     expect(sealedConfirm).toEqual(confirm);
     for (const message of [
       confirm,
+      { ...confirm, kind: 'verify-new-email' as const },
       { kind: 'reset-password' as const, to: 'a@b.co', url: 'https://foodz.example/r' },
       { kind: 'password-changed' as const, to: 'a@b.co' },
       { kind: 'account-deleted' as const, to: 'a@b.co' },

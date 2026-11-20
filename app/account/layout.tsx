@@ -9,17 +9,30 @@ import { AccountProvider, ReloadFromBackForwardCache } from '@/components/accoun
 import { AccountNavBar, AccountSideNav } from '@/components/account/account-nav';
 import { DemoNotice } from '@/components/account/demo-notice';
 import { PageContainer } from '@/components/layout/page-container';
-import { authPageHref } from '@/lib/auth-links';
+import { authPageHref, sessionEndedHref } from '@/lib/auth-links';
 import { REQUEST_PATH_HEADER } from '@/lib/request-path';
+
+/** Set by the browser on a Server Action request (Next's own `next-action` header). */
+const SERVER_ACTION_HEADER = 'next-action';
 
 /**
  * Sends a signed-out visitor to sign in, coming back to the page they asked for (S2.6). Right
  * after deleting the account, Home (with its notice) is the place to be instead.
+ *
+ * A form sent after the session ended elsewhere lands here too: the action finds the session
+ * gone, clears its cookie, and the page is drawn again for the answer. The sign-in page then says
+ * why (S2.12), and the form keeps what was typed for the person's return.
  */
 async function toSignIn(): Promise<never> {
   if ((await readNotices()).flash === 'account-deleted') redirect('/');
-  const requested = (await headers()).get(REQUEST_PATH_HEADER) ?? '/account';
-  redirect(authPageHref('/sign-in', requested.startsWith('/account') ? requested : '/account'));
+  const requestHeaders = await headers();
+  const requested = requestHeaders.get(REQUEST_PATH_HEADER) ?? '/account';
+  const back = requested.startsWith('/account') ? requested : '/account';
+  redirect(
+    requestHeaders.has(SERVER_ACTION_HEADER)
+      ? sessionEndedHref(back)
+      : authPageHref('/sign-in', back),
+  );
 }
 
 async function loadAccount() {

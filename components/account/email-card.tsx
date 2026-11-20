@@ -3,7 +3,7 @@
 import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
 import { Check, Clock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { z } from 'zod';
 import { changeEmailAction, resendVerificationAction } from '@/server/modules/auth/actions';
 import { emailSchema } from '@/server/modules/auth/schema';
@@ -44,10 +44,12 @@ export function EmailStatus({ verified }: { verified: boolean }) {
 
 /**
  * "Resend link", resting 60 seconds after each send (S3.4). The countdown is part of the status
- * line under it, visible but never announced, so the button keeps its name and its width.
+ * line under it, visible but never announced, so the button keeps its name and its width. While
+ * it rests, the button is described by that line, and a press reads the line again.
  */
 function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
   const router = useRouter();
+  const statusId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [state, setState] = useState<{
     tone: 'success' | 'error' | 'neutral' | null;
@@ -90,13 +92,18 @@ function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
         variant="outline"
         size="touch"
         aria-disabled={busy || resting || undefined}
+        aria-describedby={resting && !busy && line ? statusId : undefined}
         className={cn(
           'border-brand-strong bg-white text-brand-strong hover:bg-brand-soft hover:text-brand-strong',
           resting && !busy && BLOCKED_BUTTON_CLASS,
         )}
         onClick={() => {
           void (async () => {
-            if (busy || resting) return;
+            if (busy) return;
+            if (resting) {
+              if (line) announce(line);
+              return;
+            }
             setBusy(true);
             const outcome = await callAction(() =>
               resendVerificationAction({ callbackUrl: '/account' }),
@@ -134,7 +141,7 @@ function ResendLink({ focusOnArrival }: { focusOnArrival: boolean }) {
       >
         Resend link
       </Button>
-      <StatusLine tone={state.tone} className="order-last mt-0 basis-full">
+      <StatusLine id={statusId} tone={state.tone} className="order-last mt-0 basis-full">
         {line}
       </StatusLine>
     </div>

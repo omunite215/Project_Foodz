@@ -2,24 +2,23 @@
 
 import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
 import { ChevronDown } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useId, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import { z } from 'zod';
 import { updateProfileAction } from '@/server/modules/account/actions';
 import { nameSchema, PHONE_ERROR } from '@/server/modules/account/schema';
 import { blurField, FieldShell, visibleError } from '@/components/forms/field-shell';
 import { FormAlert } from '@/components/forms/form-alert';
+import { SignInAgain } from '@/components/forms/sign-in-again';
 import { focusFirstInvalid, focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
 import { StatusLine } from '@/components/forms/status-line';
 import { SubmitButton } from '@/components/forms/submit-button';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
-import { authPageHref } from '@/lib/auth-links';
+import { forgetDraft, saveDraft, takeDraft, useUnsavedChanges } from '@/lib/form-draft';
 import { DEFAULT_PHONE_COUNTRY, parsePhone } from '@/lib/phone';
 import { compactCountry, type PhoneCountry } from '@/lib/phone-countries';
-import Link from 'next/link';
 import { useAccount } from './account-context';
 import { LockedLine, SettingsCard } from './settings-card';
 
@@ -32,6 +31,14 @@ const profileFields = z
   });
 
 const SESSION_ENDED = "You've been signed out. Sign in again to save your changes.";
+const DRAFT_RESTORED = 'We kept your changes. Press Save to keep them.';
+
+/** What a draft of this form may hold (S2.12). */
+const profileDraft = z.object({
+  name: z.string().max(60),
+  phone: z.string().max(40),
+  phoneCountry: z.string().max(8),
+});
 
 /**
  * The country code beside the phone number (design 4.2): a compact "US +1" like Figma's, over a
@@ -80,6 +87,7 @@ export function ProfileForm({
 }) {
   const account = useAccount();
   const router = useRouter();
+  const pathname = usePathname();
   const id = useId();
   const ids = { name: `${id}-name`, phone: `${id}-phone` };
   const formRef = useRef<HTMLFormElement>(null);
@@ -117,6 +125,7 @@ export function ProfileForm({
       busyRef.current = false;
       setBusy(false);
       if (outcome.ok) {
+        forgetDraft(pathname);
         const next = {
           name: outcome.data.name,
           phone: outcome.data.phoneDisplay ?? '',
@@ -135,10 +144,32 @@ export function ProfileForm({
         focusThenAnnounce(fieldError(error, 'name') ? ids.name : ids.phone);
         return;
       }
-      focusThenAnnounce(null, error.code === 'UNAUTHENTICATED' ? SESSION_ENDED : error.message);
+      if (error.code === 'UNAUTHENTICATED') {
+        // Kept for this person's return from signing in (S2.12).
+        saveDraft(pathname, account.id, value);
+        focusThenAnnounce(null, SESSION_ENDED);
+        return;
+      }
+      focusThenAnnounce(null, error.message);
     },
   }); // Re-render the fields when a submit is tried, so every error shows.
   const submitted = useStore(form.store, (formState) => formState.submissionAttempts > 0);
+  const unchanged = useStore(form.store, (formState) => formState.isDefaultValue);
+  useUnsavedChanges(!locked && !unchanged);
+
+  // Back from signing in after the session ended (S2.12): what was typed comes back, for the
+  // same person only.
+  const restoreDraft = useEffectEvent(() => {
+    if (locked) return;
+    const draft = takeDraft(pathname, account.id, profileDraft);
+    if (!draft) return;
+    form.reset(draft, { keepDefaultValues: true });
+    announce(DRAFT_RESTORED);
+  });
+  useEffect(() => {
+    const timer = setTimeout(restoreDraft, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <SettingsCard id="profile" title="Profile">
@@ -162,11 +193,7 @@ export function ProfileForm({
             variant={failure.code === 'UNAUTHENTICATED' ? 'info' : 'error'}
             className="mb-6"
             action={
-              failure.code === 'UNAUTHENTICATED' ? (
-                <Button asChild variant="outline" size="touch" className="bg-white">
-                  <Link href={authPageHref('/sign-in', '/account')}>Sign in</Link>
-                </Button>
-              ) : null
+              failure.code === 'UNAUTHENTICATED' ? <SignInAgain returnPath={pathname} /> : null
             }
           >
             {failure.code === 'UNAUTHENTICATED' ? SESSION_ENDED : failure.message}
@@ -274,22 +301,18 @@ export function ProfileForm({
             The demo account&apos;s profile can&apos;t be changed.
           </LockedLine>
         ) : (
-          <form.Subscribe selector={(state) => state.isDefaultValue}>
-            {(unchanged) => (
-              <>
-                <SubmitButton
-                  pending={busy}
-                  pendingLabel="Saving…"
-                  blocked={unchanged}
-                  onBlockedPress={() => announce('No changes to save.')}
-                  className="mt-8 w-full uppercase md:w-auto md:min-w-40"
-                >
-                  Save changes
-                </SubmitButton>
-                <StatusLine tone={saved ? 'success' : null}>{saved ? 'Saved' : null}</StatusLine>
-              </>
-            )}
-          </form.Subscribe>
+          <>
+            <SubmitButton
+              pending={busy}
+              pendingLabel="Saving…"
+              blocked={unchanged}
+              onBlockedPress={() => announce('No changes to save.')}
+              className="mt-8 w-full uppercase md:w-auto md:min-w-40"
+            >
+              Save changes
+            </SubmitButton>
+            <StatusLine tone={saved ? 'success' : null}>{saved ? 'Saved' : null}</StatusLine>
+          </>
         )}
       </form>
     </SettingsCard>

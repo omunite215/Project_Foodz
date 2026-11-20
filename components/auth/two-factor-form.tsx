@@ -3,7 +3,7 @@
 import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { z } from 'zod';
 import { verifyTwoFactorAction } from '@/server/modules/auth/actions';
 import { CheckboxRow } from '@/components/forms/choice-chips';
@@ -19,7 +19,7 @@ import { SubmitButton } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
-import { postAuthEvent } from '@/lib/auth-channel';
+import { postAuthEvent, requestNoticeFocus } from '@/lib/auth-channel';
 import { authPageHref, returnRoute } from '@/lib/auth-links';
 import { forgetEmail } from '@/lib/email-handoff';
 import { cn } from '@/lib/utils';
@@ -49,6 +49,18 @@ const codeSchema = z
 
 const TIMED_OUT = 'This sign-in timed out. Please start again.';
 
+/** The step's heading takes focus when the page opens (S7.6), as the email-link pages do. */
+function useHeadingFocus() {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+  return headingRef;
+}
+
+/** Back to sign-in from the code step: its heading takes focus there (S7.6). */
+const focusSignInOnArrival = () => requestNoticeFocus('/sign-in');
+
 /** "Start again": back to a fresh sign-in form, with the email kept for it (S2.9). */
 function StartAgain({
   callbackUrl,
@@ -64,16 +76,19 @@ function StartAgain({
       size="touch"
       className={cn(variant === 'outline' && 'bg-white')}
     >
-      <Link href={authPageHref('/sign-in', callbackUrl)}>Start again</Link>
+      <Link href={authPageHref('/sign-in', callbackUrl)} onClick={focusSignInOnArrival}>
+        Start again
+      </Link>
     </Button>
   );
 }
 
 /** The time-out state: no field, no Continue (design 3.4). */
 export function TwoFactorTimedOut({ callbackUrl }: { callbackUrl: string }) {
+  const headingRef = useHeadingFocus();
   return (
     <div>
-      <AuthTitle title="Enter your code" />
+      <AuthTitle title="Enter your code" headingRef={headingRef} />
       <FormAlert
         variant="error"
         className="mt-6 md:mt-10 xl:mt-12"
@@ -98,6 +113,7 @@ export function TwoFactorForm({
   canTrustDevice: boolean;
 }) {
   const router = useRouter();
+  const headingRef = useHeadingFocus();
   const id = useId();
   const codeId = `${id}-code`;
   const trustId = `${id}-trust`;
@@ -176,6 +192,7 @@ export function TwoFactorForm({
       <AuthTitle
         title="Enter your code"
         subtitle="Enter the 6-digit code from your authenticator app."
+        headingRef={headingRef}
       />
       <div className="mt-6 md:mt-10 xl:mt-12">
         {failure && failure.code !== 'INVALID_INPUT' ? (
@@ -305,7 +322,11 @@ export function TwoFactorForm({
             size="touch"
             className="mt-3 w-full text-neutral-2 hover:bg-neutral-7"
           >
-            <Link href={authPageHref('/sign-in', callbackUrl)} replace>
+            <Link
+              href={authPageHref('/sign-in', callbackUrl)}
+              replace
+              onClick={focusSignInOnArrival}
+            >
               Cancel
             </Link>
           </Button>

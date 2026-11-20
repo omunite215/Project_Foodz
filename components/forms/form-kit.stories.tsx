@@ -8,6 +8,7 @@ import { CheckboxRow, ChoiceChips } from './choice-chips';
 import { FieldShell, NewPasswordHint } from './field-shell';
 import { FormAlert } from './form-alert';
 import { PasswordInput } from './password-input';
+import { SignInAgain } from './sign-in-again';
 import { StatusLine } from './status-line';
 import { SubmitButton } from './submit-button';
 
@@ -113,6 +114,27 @@ export const Alerts: Story = {
       </FormAlert>
     </div>
   ),
+};
+
+/**
+ * The session ended under a form (S2.12): the reason, and "Sign in", which loads the sign-in page
+ * afresh with the same reason and comes back to the form.
+ */
+export const SessionEnded: Story = {
+  render: () => (
+    <div className="max-w-[524px]">
+      <FormAlert variant="info" action={<SignInAgain returnPath="/account" />}>
+        You&apos;ve been signed out. Sign in again to save your changes.
+      </FormAlert>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const signIn = within(canvasElement).getByRole('link', { name: 'Sign in' });
+    await expect(signIn).toHaveAttribute(
+      'href',
+      '/sign-in?callbackUrl=%2Faccount&notice=session-ended',
+    );
+  },
 };
 
 /** Idle, pending past 300 ms ("Signing in…"), and blocked with its reason beside it. */

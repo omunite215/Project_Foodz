@@ -2,12 +2,15 @@ import {
   expect,
   latestEmail,
   linkIn,
+  liveRegion,
   newPassword,
   open,
   signUp,
   test,
   uniqueEmail,
 } from './support';
+
+const PASSWORD_CHANGED = 'Password changed. Sign in with your new password.';
 
 /*
  * The emails go through the job queue (Inngest) to Mailpit; the links are read from Mailpit's API
@@ -120,6 +123,8 @@ test.describe('Email links (S3)', () => {
 
     await open(page, '/sign-in');
     await page.getByRole('link', { name: 'Forgot password?' }).click();
+    // The sign-up's email is not carried over after signing out (S2.2), so it is typed here.
+    await expect(page).toHaveTitle('Reset your password | Foodz');
     await page.getByLabel('Email').fill(account.email);
     await page.getByRole('button', { name: 'Send reset link' }).click();
     // The panel replaces the title block, so its heading is the page's one h1 (S7.7).
@@ -146,11 +151,11 @@ test.describe('Email links (S3)', () => {
     await page.getByLabel('New password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Save new password' }).click();
 
-    // Back on sign-in with the notice and the email filled in.
+    // Back on sign-in with the notice focused and read out, and the email filled in (S7.6).
     await expect(page).toHaveURL(/\/sign-in\?notice=password-changed/, { timeout: 30_000 });
-    await expect(
-      page.getByRole('main').getByText('Password changed. Sign in with your new password.'),
-    ).toBeVisible();
+    await expect(page.getByRole('main').getByText(PASSWORD_CHANGED)).toBeVisible();
+    await expect(page.locator(':focus')).toContainText(PASSWORD_CHANGED);
+    await expect(liveRegion(page)).toHaveText(PASSWORD_CHANGED);
     await expect(page.getByLabel('Email')).toHaveValue(account.email);
     await page.getByLabel('Password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Sign in' }).click();
@@ -163,5 +168,35 @@ test.describe('Email links (S3)', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'This link no longer works' }),
     ).toBeVisible();
+  });
+
+  test('a reset in the browser still signed in to that account lands signed out there (S3.11)', async ({
+    page,
+  }) => {
+    const account = await signUp(page);
+    await open(page, '/forgot-password');
+    // The welcome notice mentions "email" too, so the field is found by its role.
+    const email = page.getByRole('textbox', { name: 'Email' });
+    await email.fill(account.email);
+    await page.getByRole('button', { name: 'Send reset link' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Check your email' })).toBeFocused({
+      timeout: 30_000,
+    });
+    const link = linkIn(
+      await latestEmail(account.email, 'Reset your Foodz password'),
+      '/api/auth/reset-password/',
+    );
+    await page.goto(link);
+    await expect(page.getByRole('button', { name: 'Account menu for Maya' })).toBeVisible();
+    await page.getByLabel('New password', { exact: true }).fill(newPassword());
+    await page.getByRole('button', { name: 'Save new password' }).click();
+
+    // The page that says so is signed out too: no account menu, no welcome for the old session.
+    await expect(page).toHaveURL(/\/sign-in\?notice=password-changed/, { timeout: 30_000 });
+    await expect(page.locator('header').getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Account menu for / })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: /^Welcome, Maya\./ })).toHaveCount(0);
+    await expect(page.locator(':focus')).toContainText(PASSWORD_CHANGED);
+    await expect(email).toHaveValue(account.email);
   });
 });

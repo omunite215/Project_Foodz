@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { AxeBuilder } from '@axe-core/playwright';
-import { test as base, expect, type Page, type TestInfo } from '@playwright/test';
+import { type Browser, test as base, expect, type Page, type TestInfo } from '@playwright/test';
 import { config } from 'dotenv';
 
 // The local stack's settings (.env): demo password, seeded admin, Mailpit.
@@ -108,6 +108,55 @@ export async function signIn(page: Page, email: string, password: string, path =
     timeout: 30_000,
   });
 }
+
+/**
+ * The same account, signed in on a second device, signs this device out from its devices list
+ * (S5.7). This browser keeps its cookie, but the session behind it is gone.
+ */
+export async function endSessionElsewhere(
+  browser: Browser,
+  account: { email: string; password: string },
+) {
+  const other = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36',
+  });
+  const second = await other.newPage();
+  await signIn(second, account.email, account.password);
+  await open(second, '/account/security');
+  const devices = second.getByRole('region', { name: 'Signed-in devices' });
+  await expect(devices.getByText('This device')).toBeVisible();
+  const signOutOther = devices.getByRole('listitem').getByRole('button', { name: /^Sign out / });
+  await expect(signOutOther).toHaveCount(1);
+  await signOutOther.click();
+  await expect(devices.getByText('No other devices are signed in.')).toBeVisible();
+  await other.close();
+}
+
+/** Signs out from the header's account menu (the cart is empty, so no dialog asks first). */
+export async function signOutFromHeader(page: Page) {
+  await page.getByRole('button', { name: /^Account menu for / }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(page.locator('header').getByRole('link', { name: 'Sign in' })).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+/** The form drafts this tab keeps in sessionStorage (S2.12). */
+export const savedDrafts = (page: Page) =>
+  page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith('foodz.draft:')));
+
+/** The email carried between the sign-in forms (design 3.8). */
+const EMAIL_HANDOFF_KEY = 'foodz.auth.email';
+
+export const carriedEmail = (page: Page) =>
+  page.evaluate((key) => sessionStorage.getItem(key), EMAIL_HANDOFF_KEY);
+
+/** Puts an email in the hand-off, as a sign-in form would. */
+export const carryEmail = (page: Page, email: string) =>
+  page.evaluate(([key, value]) => sessionStorage.setItem(key!, value!), [EMAIL_HANDOFF_KEY, email]);
+
+export const SESSION_ENDED = "You've been signed out. Sign in again to save your changes.";
 
 /** WCAG 2.2 A/AA checks on the whole page. */
 export async function expectAccessible(page: Page) {

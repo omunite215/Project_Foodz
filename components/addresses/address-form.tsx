@@ -14,7 +14,6 @@ import {
   MapPinOff,
   RotateCcw,
 } from 'lucide-react';
-import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ComponentType, useEffect, useEffectEvent, useId, useRef, useState } from 'react';
@@ -35,6 +34,7 @@ import { LockedLine } from '@/components/account/settings-card';
 import { CheckboxRow, type Choice, ChoiceChips } from '@/components/forms/choice-chips';
 import { blurField, FieldShell, visibleError } from '@/components/forms/field-shell';
 import { FormAlert } from '@/components/forms/form-alert';
+import { SignInAgain } from '@/components/forms/sign-in-again';
 import { focusFirstInvalid, focusThenAnnounce, submitChecked } from '@/components/forms/feedback';
 import { SubmitButton } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { type ActionFailure, callAction, fieldError } from '@/lib/action-result';
 import { deliveryText } from '@/lib/account-text';
 import { announce } from '@/lib/announce';
+import { forgetDraft, saveDraft, takeDraft, useUnsavedChanges } from '@/lib/form-draft';
 import {
   distanceMeters,
   FAR_FROM_ADDRESS_M,
@@ -72,7 +73,7 @@ const NOTES_MAX = 200;
 const LABEL_MAX = 30;
 const NEEDS_CHECK = 'We need to check delivery before saving.';
 const SESSION_ENDED = "You've been signed out. Sign in again to save your changes.";
-const DRAFT_PREFIX = 'foodz.draft:';
+const DRAFT_RESTORED = 'We kept your changes. Press Save to keep them.';
 
 const fields = z
   .object({
@@ -121,26 +122,6 @@ const draftSchema = z.object({
   pin: z.object({ lat: z.number(), lng: z.number() }).nullable(),
 });
 
-function readDraft(key: string) {
-  try {
-    const raw = window.sessionStorage.getItem(key);
-    if (!raw) return null;
-    window.sessionStorage.removeItem(key);
-    const parsed = draftSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeDraft(key: string, draft: z.infer<typeof draftSchema>) {
-  try {
-    window.sessionStorage.setItem(key, JSON.stringify(draft));
-  } catch {
-    // Storage blocked: the person retypes after signing in.
-  }
-}
-
 type MapState = 'idle' | 'loading' | 'ready' | 'failed';
 
 /** Counter under a text field; announced once near and at the limit. */
@@ -169,6 +150,11 @@ export interface AddressFormProps {
   firstAddress: boolean;
   /** False for the shared demo accounts (U2): everything works except saving. */
   canSave: boolean;
+  /**
+   * The signed-in account. If the session ends before Save, what was typed is kept for this
+   * account only and comes back after it signs in again (S2.12).
+   */
+  draftOwner: string;
 }
 
 /**
@@ -182,6 +168,7 @@ export function AddressForm({
   defaultKind,
   firstAddress,
   canSave,
+  draftOwner,
 }: AddressFormProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -197,7 +184,6 @@ export function AddressForm({
     needsCheck: `${id}-needs-check`,
     locked: `${id}-locked`,
   };
-  const draftKey = `${DRAFT_PREFIX}${pathname}`;
 
   const savedPoint = address ? { lat: address.lat, lng: address.lng } : null;
   const [found, setFound] = useState<Found | null>(
@@ -253,6 +239,10 @@ export function AddressForm({
     onSubmit: ({ value }) => save(value),
   }); // Re-render the fields when a submit is tried, so every error shows.
   const submitted = useStore(form.store, (formState) => formState.submissionAttempts > 0);
+  const valuesUnchanged = useStore(form.store, (formState) => formState.isDefaultValue);
+  // The pick and the pin as the form opened: moving either is a change too.
+  const [opened] = useState(() => ({ found, pin }));
+  useUnsavedChanges(canSave && (!valuesUnchanged || found !== opened.found || pin !== opened.pin));
 
   // Load the map the first time there is a point to show (S7.9: never before).
   useEffect(() => {
@@ -288,9 +278,11 @@ export function AddressForm({
     announce(prefix ? `${prefix} ${text}` : text);
   }
 
-  // Back from signing in after the session ended (S2.12): what was typed comes back.
+  // Back from signing in after the session ended (S2.12): what was typed comes back, for the
+  // same person only.
   const restoreDraft = useEffectEvent(() => {
-    const draft = readDraft(draftKey);
+    if (!canSave) return;
+    const draft = takeDraft(pathname, draftOwner, draftSchema);
     if (!draft) return;
     form.reset(draft.values, { keepDefaultValues: true });
     setFound(draft.found);
@@ -300,7 +292,7 @@ export function AddressForm({
       setPinMoved(distanceMeters(draft.found.point, draft.pin) > 1);
       void runCheck(draft.pin, draft.found.line1);
     }
-    announce('We kept your changes. Press Save to keep them.');
+    announce(DRAFT_RESTORED);
   });
   useEffect(() => {
     const timer = setTimeout(restoreDraft, 0);
@@ -407,6 +399,7 @@ export function AddressForm({
     setBusy(false);
 
     if (outcome.ok) {
+      forgetDraft(pathname);
       setAddressStatus({ text: 'Address saved', focusId: outcome.data.id });
       router.push('/account/addresses');
       return;
@@ -428,7 +421,7 @@ export function AddressForm({
         return;
       }
       case 'UNAUTHENTICATED':
-        writeDraft(draftKey, { values: value, found, pin });
+        saveDraft(pathname, draftOwner, { values: value, found, pin });
         setFailure(error);
         focusThenAnnounce(null, SESSION_ENDED);
         return;
@@ -453,8 +446,6 @@ export function AddressForm({
   }
 
   const farFromAddress = found && pin && pinMoved ? distanceMeters(found.point, pin) : 0;
-  const signInAgain =
-    `/sign-in?${new URLSearchParams({ callbackUrl: pathname, notice: 'session-ended' }).toString()}` as Route;
 
   return (
     <form
@@ -472,13 +463,7 @@ export function AddressForm({
         <FormAlert
           variant={failure.code === 'UNAUTHENTICATED' ? 'info' : 'error'}
           className="mb-6"
-          action={
-            failure.code === 'UNAUTHENTICATED' ? (
-              <Button asChild variant="outline" size="touch" className="bg-white">
-                <Link href={signInAgain}>Sign in</Link>
-              </Button>
-            ) : null
-          }
+          action={failure.code === 'UNAUTHENTICATED' ? <SignInAgain returnPath={pathname} /> : null}
         >
           {failure.code === 'UNAUTHENTICATED' ? SESSION_ENDED : failure.message}
         </FormAlert>
