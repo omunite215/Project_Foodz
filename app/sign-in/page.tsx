@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getActor } from '@/server/auth/session';
 import { getAuthOptions } from '@/server/modules/account/service';
+import { signInReason } from '@/server/modules/auth/schema';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { SignInForm } from '@/components/auth/sign-in-form';
 import { returnRoute } from '@/lib/auth-links';
@@ -28,6 +29,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
     <AuthShell>
       <SignInForm
         callbackUrl={callbackUrl}
+        reason={signInReason(firstParam(params.reason))}
         notice={isNotice(notice) ? notice : null}
         googleError={firstParam(params.error) ?? null}
         google={getAuthOptions().google}

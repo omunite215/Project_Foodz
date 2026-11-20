@@ -9,6 +9,9 @@ export function MenuIntro({ status }: { status: Status | null }) {
         Korean, Thai and Vietnamese dishes, cooked to order. At your door in about 45 minutes.
       </p>
       {status ? <StoreStatus status={status} className="mt-6" /> : null}
+      <p className="mt-3 text-body-5 text-neutral-3">
+        Prices don&apos;t include tax. Your cart shows the full total before you check out.
+      </p>
     </div>
   );
 }

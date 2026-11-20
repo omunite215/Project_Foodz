@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { PrismaClient } from '@/server/db/generated/client';
 import { redis } from '@/server/redis';
+import { enforceRateLimit, resetRateLimit } from '@/server/security/rate-limit';
 import { seedCatalog } from '../../prisma/seeding';
 
 /*
@@ -40,8 +41,9 @@ beforeAll(async () => {
   await migrator.$transaction((tx) => seedCatalog(tx, { now: new Date() }), { timeout: 60_000 });
 }, 120_000);
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  await resetRateLimit('geo.photon', 'guests');
 });
 
 afterAll(async () => {
@@ -154,6 +156,19 @@ describe('the guest address search', () => {
     ]);
     const [url] = fetchSpy.mock.calls[0]!;
     expect(url instanceof URL ? url.origin : '').toBe('https://photon.komoot.io');
+  });
+
+  it('stops sending guest lookups out once the site-wide cap is reached', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => Response.json({ features: [] }));
+    for (let i = 0; i < 60; i++) await enforceRateLimit('geo.photon', 'guests');
+
+    newCaller();
+    expect(
+      (await guestAddressSearchAction({ query: '12 Peterborough' }))?.serverError,
+    ).toMatchObject({ code: 'UNAVAILABLE' });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('says when the search is down, refuses short queries, and is limited per network', async () => {

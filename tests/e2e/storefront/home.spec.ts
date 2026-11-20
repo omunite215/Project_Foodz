@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  cartButton,
   expectAccessible,
   expectNoSidewaysScroll,
   isPhone,
@@ -202,7 +203,11 @@ test.describe('Home', () => {
     await form.getByRole('button', { name: 'Add to cart' }).dblclick();
     await expect(form.getByText('2 dishes added to your cart.')).toBeVisible();
     await expect(liveRegion(page)).toContainText('2 dishes added to your cart');
-    await expect(page.locator('header').getByText('2 items in your cart')).toBeAttached();
+    await expect(cartButton(page)).toHaveAccessibleName('Cart, 2 items');
+    // The cart doesn't open by itself; "View cart" opens it (S1.4, D32).
+    await expect(page.getByRole('dialog', { name: 'Your cart' })).toHaveCount(0);
+    await form.getByRole('button', { name: 'View cart' }).click();
+    await expect(page.getByRole('dialog', { name: 'Your cart' })).toBeVisible();
     expect(await savedCart(page)).toMatchObject([{ quantity: 2 }]);
     await expect(page).toHaveURL(/\/$/);
   });

@@ -4,6 +4,7 @@ import { can } from '@/server/auth/roles';
 import type { UserActor } from '@/server/auth/session';
 import { type DbContext, runAs } from '@/server/db/context';
 import { AppError, demoReadOnly, forbidden, limitReached, unavailable } from '@/server/errors';
+import { enforceRateLimit } from '@/server/security/rate-limit';
 import { deliveryFigures } from '@/server/modules/cart/pricing';
 import {
   type AddressWrite,
@@ -177,8 +178,21 @@ export async function searchAddresses(
   return findPlaces(input);
 }
 
-/** The same search for a signed-out visitor checking an address in the cart (F3 U2). */
+/**
+ * The same search for a signed-out visitor checking an address in the cart (F3 U2). Besides the
+ * per-network limit, guest lookups share one site-wide cap (F3 security S6), so visitors can't
+ * push the site past Photon's fair use and get it blocked there. Over the cap, the search says
+ * it can't look addresses up right now, as when the service is down.
+ */
 export async function searchAddressesAsGuest(input: unknown): Promise<AddressSuggestion[]> {
+  try {
+    await enforceRateLimit('geo.photon', 'guests');
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'RATE_LIMITED') {
+      throw unavailable(SEARCH_UNAVAILABLE);
+    }
+    throw error;
+  }
   return findPlaces(input);
 }
 

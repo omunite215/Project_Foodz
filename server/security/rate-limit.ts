@@ -1,6 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
+import { networkOf } from '@/server/client-ip';
 import { AppError, rateLimited, unavailable } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { redis, waitUntilReady } from '@/server/redis';
@@ -202,6 +203,9 @@ const POLICIES = {
     duration: 60,
     message: 'Too many address checks from this network. Try again in {wait}.',
   },
+  // Lookups the site sends to the public Photon server for signed-out visitors, all together:
+  // its fair use is about one request a second, and going over could get the site blocked.
+  'geo.photon': { points: 60, duration: 60 },
   'address.write': { points: 30, duration: 600 },
   'account.update': { points: 20, duration: 600 },
   'account.devices': { points: 30, duration: 600 },
@@ -284,7 +288,8 @@ const noAttempt: Attempt = { consumed: 0, refund: async () => {} };
  * Consumes one point and returns a handle to give it back. Throws a 429 AppError when the caller
  * is over the limit, or a 503 when a fail-closed limiter is down.
  */
-export async function takeAttempt(policy: RateLimitPolicy, key: string): Promise<Attempt> {
+export async function takeAttempt(policy: RateLimitPolicy, callerKey: string): Promise<Attempt> {
+  const key = storedKey(callerKey);
   let result: RateLimiterRes;
   try {
     await waitUntilReady();
@@ -308,6 +313,14 @@ export async function takeAttempt(policy: RateLimitPolicy, key: string): Promise
       }
     },
   };
+}
+
+/**
+ * The key a counter is kept under. A per-network key (`ip:<address>`) counts the client's
+ * network, so an IPv6 client can't reset its limits by moving within its /64 (F3 security S4).
+ */
+function storedKey(key: string): string {
+  return key.startsWith('ip:') ? `ip:${networkOf(key.slice(3))}` : key;
 }
 
 /** Consumes one point; throws a 429 AppError when the caller is over the limit. */
@@ -360,7 +373,7 @@ export async function blockedFor(checks: readonly LimitCheck[]): Promise<AppErro
     checks.map(async ({ policy, key }) => {
       try {
         await waitUntilReady();
-        return { policy, state: await limiterFor(policy).get(key) };
+        return { policy, state: await limiterFor(policy).get(storedKey(key)) };
       } catch (error) {
         const refusal = outage(policy, error);
         if (refusal) throw refusal;
@@ -379,7 +392,7 @@ export async function blockedFor(checks: readonly LimitCheck[]): Promise<AppErro
 export async function resetRateLimit(policy: RateLimitPolicy, key: string) {
   try {
     await waitUntilReady();
-    await limiterFor(policy).delete(key);
+    await limiterFor(policy).delete(storedKey(key));
   } catch (error) {
     logger.warn({ err: error, policy }, 'could not reset a rate limit');
   }

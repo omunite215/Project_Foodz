@@ -25,6 +25,9 @@ import { Input } from '@/components/ui/input';
 import { type ActionFailure, callAction, fieldError, withoutFieldError } from '@/lib/action-result';
 import { postAuthEvent, requestNoticeFocus } from '@/lib/auth-channel';
 import { authPageHref, returnRoute } from '@/lib/auth-links';
+import { signInFor } from '@/lib/sign-in-reason';
+import type { SignInReason } from '@/server/modules/auth/schema';
+import { SignInReasonNotice } from './sign-in-reason';
 import { forgetEmail, recalledEmail, rememberEmail } from '@/lib/email-handoff';
 import { suggestEmail } from '@/lib/email-typo';
 import { AuthTitle } from './auth-title';
@@ -54,7 +57,16 @@ function TermsLink({ href, children }: { href: '/terms' | '/privacy'; children: 
  * (U1) and returns to where the person was, cart untouched. An email that already has an account
  * gets the same welcome words, without signing in (S1.5).
  */
-export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; google: boolean }) {
+export function SignUpForm({
+  callbackUrl,
+  reason = null,
+  google,
+}: {
+  callbackUrl: string;
+  /** Why she was sent to sign in (F3 B13), carried over from the sign-in page. */
+  reason?: SignInReason | null;
+  google: boolean;
+}) {
   const router = useRouter();
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -174,6 +186,7 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
         subtitle="It takes a minute: just your name, email and a password."
       />
       <div className="mt-6 md:mt-10 xl:mt-12">
+        {reason ? <SignInReasonNotice reason={reason} /> : null}
         {google ? (
           <>
             <GoogleButton
@@ -376,7 +389,7 @@ export function SignUpForm({ callbackUrl, google }: { callbackUrl: string; googl
         <p className="mt-6 text-center text-body-4 text-neutral-3">
           Already have an account?{' '}
           <Link
-            href={authPageHref('/sign-in', callbackUrl)}
+            href={signInFor('/sign-in', callbackUrl, reason)}
             onClick={() => rememberEmail(form.getFieldValue('email'))}
             className="inline-flex h-11 items-center font-medium text-brand-strong underline-offset-4 hover:underline"
           >

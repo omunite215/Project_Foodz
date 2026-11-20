@@ -18,6 +18,11 @@ export const ILLUSTRATIONS = {
   deliveryAddress: '/illustrations/delivery-address.svg',
   mobileInbox: '/illustrations/mobile-inbox.svg',
   mailSent: '/illustrations/mail-sent.svg',
+  // F3 states. Until the unDraw "Empty cart", "Searching" and favorites artwork is added
+  // (design, Illustrations table), they use shipped illustrations from the same set.
+  emptyCart: '/illustrations/order-food.svg',
+  searching: '/illustrations/page-eaten.svg',
+  favorites: '/illustrations/order-food.svg',
 } as const;
 
 export interface EmptyStateProps {

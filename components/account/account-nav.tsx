@@ -1,6 +1,14 @@
 'use client';
 
-import { Download, LogOut, type LucideIcon, MapPin, ShieldCheck, UserRound } from 'lucide-react';
+import {
+  Download,
+  Heart,
+  LogOut,
+  type LucideIcon,
+  MapPin,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -22,6 +30,7 @@ interface Section {
 
 const SECTIONS: readonly Section[] = [
   { href: '/account', label: 'Account', icon: UserRound },
+  { href: '/account/favorites', label: 'Favorites', icon: Heart },
   { href: '/account/addresses', label: 'Addresses', icon: MapPin },
   { href: '/account/security', label: 'Security', icon: ShieldCheck },
   { href: '/account/privacy', label: 'Privacy', longLabel: 'Privacy and data', icon: Download },
@@ -34,9 +43,19 @@ const isCurrent = (href: string, pathname: string) =>
 const isSubPage = (pathname: string) =>
   /^\/account\/(addresses\/[^/]+|privacy\/delete)\/?$/.test(pathname);
 
+/** Where each section sits in the phone bar: 2 + 2 + 1 under 360 px, 2 + 3 to 767, 5 from md. */
+const BAR_SPANS = [
+  'min-[360px]:col-span-3',
+  'min-[360px]:col-span-3',
+  'min-[360px]:col-span-2',
+  'min-[360px]:col-span-2',
+  'col-span-2',
+] as const;
+
 /**
- * The account sections below `lg`: the F1 cuisine-bar look, four segments (two rows under
- * 360 px). Hidden on sub-pages, which show their back link instead (design 4.1).
+ * The account sections below `lg`: the F1 cuisine-bar look, five segments (F3 design 1.2): two
+ * rows from 360 px, three below it, one row of five from `md`. Hidden on sub-pages, which show
+ * their back link instead (design 4.1).
  */
 export function AccountNavBar() {
   const pathname = usePathname();
@@ -44,17 +63,17 @@ export function AccountNavBar() {
 
   return (
     <nav aria-label="Account" className="mb-8 md:mb-10 lg:hidden">
-      <ul className="mx-auto grid grid-cols-2 gap-1 rounded-lg bg-white p-1.5 shadow-card min-[360px]:grid-cols-4 min-[360px]:gap-0 md:max-w-[672px]">
-        {SECTIONS.map((section) => {
+      <ul className="mx-auto grid grid-cols-2 gap-1 rounded-lg bg-white p-1.5 shadow-card min-[360px]:grid-cols-6 md:max-w-[672px] md:grid-cols-5">
+        {SECTIONS.map((section, index) => {
           const current = isCurrent(section.href, pathname);
           const Icon = section.icon;
           return (
-            <li key={section.href}>
+            <li key={section.href} className={cn(BAR_SPANS[index], 'md:col-span-1')}>
               <Link
                 href={section.href}
                 aria-current={current ? 'page' : undefined}
                 className={cn(
-                  'flex h-11 flex-row items-center justify-center gap-2 rounded-lg text-caption font-medium text-neutral-3 hover:bg-neutral-7 hover:text-neutral-1 focus-visible:-outline-offset-2 min-[360px]:h-14 min-[360px]:flex-col min-[360px]:gap-1 md:h-12 md:flex-row md:gap-2 md:text-body-5',
+                  'flex h-11 flex-row items-center justify-center gap-2 rounded-lg text-caption font-medium text-neutral-3 hover:bg-neutral-7 hover:text-neutral-1 focus-visible:-outline-offset-2 min-[360px]:text-body-5 md:h-12',
                   current && 'bg-brand-strong text-white hover:bg-brand-strong hover:text-white',
                 )}
               >

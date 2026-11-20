@@ -16,7 +16,10 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import { announce } from '@/lib/announce';
+import { openCart } from '@/lib/cart-dialog';
+import { cartFullText, lineFullText } from '@/lib/cart-text';
 import { useCartActions } from '@/lib/data/cart';
+import { useCartDishActions } from '@/lib/data/cart-dishes';
 import { CUISINE_LABELS, dishesAddedText, formatPrice, momentText } from '@/lib/format';
 import { useMotion } from '@/lib/motion';
 import {
@@ -37,6 +40,8 @@ const COOL_DOWN_MS = 1000;
 interface Status {
   tone: 'success' | 'error';
   text: string;
+  /** "View cart" after the message (F3 D32). */
+  viewCart?: boolean;
 }
 
 function errorText(errors: readonly unknown[]): string | null {
@@ -109,14 +114,18 @@ function TastePreview({
 export function TastePicker({
   dishes,
   closedUntil,
+  phone = null,
 }: {
   /** Orderable dishes, by cuisine. */
   dishes: DishCard[];
   /** Set when the store is closed: when it opens next. */
   closedUntil?: StoreMoment | null;
+  /** The store's number, for "Your cart is full". */
+  phone?: string | null;
 }) {
   const idPrefix = useId();
   const cart = useCartActions();
+  const cartDishes = useCartDishActions();
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -143,28 +152,52 @@ export function TastePicker({
       const checked = await checkDishes(lines.map((line) => line.dishId));
       const added: { name: string; quantity: number }[] = [];
       const soldOut: string[] = [];
+      let refused: string | null = null;
       for (const line of lines) {
-        const name = byId.get(line.dishId)?.title ?? 'A dish';
+        const dish = byId.get(line.dishId);
+        const name = dish?.title ?? 'A dish';
         // Without an answer (offline, slow), add anyway: checkout checks again.
         const current = checked?.get(line.dishId);
         if (checked && !current?.isAvailable) {
           soldOut.push(name);
           continue;
         }
-        cart.add({ menuItemId: line.dishId, quantity: line.quantity });
+        const outcome = cart.add({ menuItemId: line.dishId, quantity: line.quantity });
+        if (outcome.kind === 'lineFull') {
+          refused ??= lineFullText(name);
+          continue;
+        }
+        if (outcome.kind === 'cartFull') {
+          refused ??= cartFullText(outcome.limit, phone);
+          continue;
+        }
+        if (dish) {
+          cartDishes.remember({
+            id: dish.id,
+            title: dish.title,
+            slug: dish.slug,
+            image: dish.image,
+            priceCents: current?.priceCents ?? dish.priceCents,
+          });
+        }
         added.push({ name, quantity: line.quantity });
       }
 
       const count = added.reduce((total, line) => total + line.quantity, 0);
       const parts = [
         count > 0 ? dishesAddedText(count) : null,
+        refused,
         soldOutText(soldOut),
         count > 0 && closedUntil
           ? `We're closed now. Your cart will keep ${count === 1 ? 'it' : 'them'} until we open at ${momentText(closedUntil)}.`
           : null,
       ].filter((part): part is string => Boolean(part));
       const text = parts.map((part) => (part.endsWith('.') ? part : `${part}.`)).join(' ');
-      setStatus({ tone: count > 0 ? 'success' : 'error', text });
+      setStatus({
+        tone: count > 0 ? 'success' : 'error',
+        text,
+        viewCart: count > 0 || refused !== null,
+      });
       announce(text);
       if (count > 0) formApi.reset();
 
@@ -377,14 +410,22 @@ export function TastePicker({
         </Button>
         <p
           className={cn(
-            'mt-3 flex min-h-6 items-start gap-1.5 text-body-5',
+            'mt-3 flex flex-wrap items-center gap-x-1.5 text-body-5',
+            status?.viewCart ? 'min-h-11' : 'min-h-6',
             status?.tone === 'error' ? 'text-destructive' : 'text-brand-strong',
           )}
         >
-          {status?.tone === 'success' ? (
-            <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
+          {status?.tone === 'success' ? <Check className="size-4 shrink-0" aria-hidden /> : null}
+          <span>{status?.text}</span>
+          {status?.viewCart ? (
+            <button
+              type="button"
+              onClick={(event) => openCart(event.currentTarget)}
+              className="ml-2 inline-flex h-11 items-center font-medium text-brand-strong underline underline-offset-4"
+            >
+              View cart
+            </button>
           ) : null}
-          {status?.text}
         </p>
       </form>
 

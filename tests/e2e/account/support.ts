@@ -199,7 +199,7 @@ export async function addDishToCart(page: Page) {
     .locator('main')
     .getByRole('button', { name: /^Add to cart/ })
     .click();
-  await expect(page.locator('header').getByText('1 item in your cart')).toBeAttached({
+  await expect(page.locator('header').getByRole('button', { name: 'Cart, 1 item' })).toBeVisible({
     timeout: 10_000,
   });
 }
