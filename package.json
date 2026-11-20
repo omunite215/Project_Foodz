@@ -127,6 +127,9 @@
     "ssh2": false
   },
   "overrides": {
+    "@prisma/config": {
+      "effect": "3.22.5"
+    },
     "@tanstack/react-ranger": {
       "react": "$react"
     },
