@@ -201,10 +201,13 @@ export function PricePresets({
                 pressed ? { min: bounds.min, max: bounds.max } : { min: bounds.min, max: top },
               )
             }
+            // Same width pressed or not, so the presets never re-wrap and the sheet never
+            // jumps: the Check (16 + 8) and the 2 px border take the room of the wider padding.
             className={cn(
-              'inline-flex h-11 items-center gap-2 rounded-lg border border-input bg-white px-4 text-body-5 text-neutral-2 outline-none hover:bg-neutral-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
-              pressed &&
-                'border-2 border-brand-strong bg-brand-soft text-neutral-1 hover:bg-brand-soft',
+              'inline-flex h-11 items-center gap-2 rounded-lg bg-white text-body-5 text-neutral-2 outline-none hover:bg-neutral-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
+              pressed
+                ? 'border-2 border-brand-strong bg-brand-soft px-4 text-neutral-1 hover:bg-brand-soft'
+                : 'border border-input px-[29px]',
             )}
           >
             {pressed ? <Check className="size-4" aria-hidden /> : null}

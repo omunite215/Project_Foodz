@@ -19,9 +19,10 @@ export const ILLUSTRATIONS = {
   mobileInbox: '/illustrations/mobile-inbox.svg',
   mailSent: '/illustrations/mail-sent.svg',
   // F3 states. Until the unDraw "Empty cart", "Searching" and favorites artwork is added
-  // (design, Illustrations table), they use shipped illustrations from the same set.
+  // (design, Illustrations table), they use shipped illustrations from the same set. No
+  // results shows a cook rather than the 404 art, which would read as a broken page.
   emptyCart: '/illustrations/order-food.svg',
-  searching: '/illustrations/page-eaten.svg',
+  searching: '/illustrations/cooking.svg',
   favorites: '/illustrations/order-food.svg',
 } as const;
 

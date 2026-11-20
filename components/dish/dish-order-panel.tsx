@@ -176,11 +176,12 @@ export function DishOrderPanel({
       </>
     ) : null;
 
+  // Part of the sentence: the padding gives a 44 px target without adding leading.
   const viewCart = message?.viewCart ? (
     <button
       type="button"
       onClick={(event) => openCart(event.currentTarget)}
-      className="ml-2 inline-flex h-11 items-center font-medium text-brand-strong underline underline-offset-4"
+      className="-my-3 inline-block py-3 font-medium text-brand-strong underline underline-offset-4"
     >
       View cart
     </button>
@@ -243,7 +244,7 @@ export function DishOrderPanel({
           {message?.alert ? null : (
             <p
               className={cn(
-                'flex flex-wrap items-center gap-x-1.5',
+                'flex items-start gap-1.5',
                 message?.tone === 'success'
                   ? 'text-brand-strong'
                   : message?.tone === 'error'
@@ -252,14 +253,14 @@ export function DishOrderPanel({
               )}
             >
               {message?.tone === 'success' ? (
-                <Check className="size-4 shrink-0" aria-hidden />
+                <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
               ) : message?.tone === 'error' ? (
-                <CircleExclamationPoint className="size-4 shrink-0" aria-hidden />
+                <CircleExclamationPoint className="mt-0.5 size-4 shrink-0" aria-hidden />
               ) : null}
               <span>
                 {message ? <MessageText message={message} /> : (soldOutLine ?? closedText)}
+                {viewCart ? <> {viewCart}</> : null}
               </span>
-              {viewCart}
             </p>
           )}
         </div>

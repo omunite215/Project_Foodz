@@ -13,26 +13,31 @@ import { cn } from '@/lib/utils';
 export function OfferCountdown({
   endsAt,
   variant = 'outline',
+  size = 'responsive',
   className,
 }: {
   endsAt: string;
   /** `outline` on white; `white` on tinted panels such as the campaign banner. */
   variant?: 'outline' | 'white';
+  /** `responsive` grows at `xl` (cards, banners); `compact` keeps the small size (the cart). */
+  size?: 'responsive' | 'compact';
   className?: string;
 }) {
   const now = useMinuteClock();
   const text = offerTimeLeft(endsAt, now);
   if (!text) return null;
+  const compact = size === 'compact';
 
   return (
     <p
       className={cn(
-        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border bg-white px-2 text-body-5 font-semibold whitespace-nowrap text-brand-strong xl:text-body-4',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-white px-2 text-body-5 font-semibold whitespace-nowrap text-brand-strong',
+        compact ? 'h-7' : 'h-8 xl:text-body-4',
         variant === 'outline' ? 'border-brand-strong' : 'border-white',
         className,
       )}
     >
-      <Flame className="size-4 xl:size-5" aria-hidden />
+      <Flame className={cn('size-4', !compact && 'xl:size-5')} aria-hidden />
       <span className="sr-only">Offer </span>
       {/* The server's and the browser's clocks can straddle a minute. */}
       <span suppressHydrationWarning>{text}</span>

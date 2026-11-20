@@ -201,20 +201,16 @@ export function CartLineItem({
               href={line.href}
               replace
               onNavigate={onNavigate}
-              className="font-heading text-body-2 leading-tight text-neutral-2 underline-offset-4 [overflow-wrap:anywhere] hover:underline"
+              className="min-w-0 font-heading text-body-2 leading-tight text-neutral-2 underline-offset-4 [overflow-wrap:break-word] hover:underline"
             >
               {line.title}
             </Link>
           ) : (
-            <span className="font-heading text-body-2 leading-tight text-neutral-2 [overflow-wrap:anywhere]">
+            <span className="min-w-0 font-heading text-body-2 leading-tight text-neutral-2 [overflow-wrap:break-word]">
               {line.title}
             </span>
           )}
-          {line.soldOut ? (
-            <span className="pt-1 text-body-5 whitespace-nowrap text-neutral-3">
-              Not in your total
-            </span>
-          ) : lineTotal === null ? null : (
+          {line.soldOut || lineTotal === null ? null : (
             <span className="font-heading text-body-2 whitespace-nowrap text-brand-strong tabular-nums">
               {formatPrice(lineTotal)}
             </span>
@@ -235,11 +231,14 @@ export function CartLineItem({
           </p>
         ) : null}
         {line.soldOut || line.priceChange || line.droppedFlavors.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             {line.soldOut ? (
-              <span className="inline-flex h-6 items-center rounded-md bg-neutral-1 px-2 text-caption font-medium text-neutral-8">
-                Sold out today
-              </span>
+              <>
+                <span className="inline-flex h-6 items-center rounded-md bg-neutral-1 px-2 text-caption font-medium text-neutral-8">
+                  Sold out today
+                </span>
+                <span className="text-body-5 text-neutral-3">Not in your total</span>
+              </>
             ) : null}
             {line.priceChange ? (
               <span className="inline-flex min-h-6 items-center gap-1 rounded-md bg-tag-6-bg px-2 text-caption font-medium text-neutral-1">
@@ -274,7 +273,8 @@ export function CartLineItem({
             onRemove={onRemove}
           />
         )}
-        <div className="flex gap-2">
+        {/* gap-1: stepper, Edit and Remove stay on one row in a 262 px card at 320. */}
+        <div className="flex gap-1">
           {line.soldOut || line.flavorsOffered === null ? null : (
             <Button
               ref={editRef}

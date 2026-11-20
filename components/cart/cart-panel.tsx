@@ -49,7 +49,7 @@ import {
 } from './cart-notices';
 import { CheckoutBar } from './checkout-bar';
 import { setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
-import { DeliveryBlock } from './delivery-block';
+import { DeliveryBlock, useSavedAddresses } from './delivery-block';
 import { PriceBreakdown } from './price-breakdown';
 import { PromoSection } from './promo';
 import { useQuote } from './use-quote';
@@ -109,8 +109,18 @@ export function CartPanel({
   const cart = useCartActions();
   const dishes = useCartDishes();
   const dishActions = useCartDishActions();
-  const checked = useCheckedAddress();
+  const storedPoint = useCheckedAddress();
   const online = useOnline();
+  // Signed in with saved addresses, the saved default wins over an address checked before
+  // signing in (2.15, S2.6), and "Change" lists the saved ones. With none saved, a checked
+  // address still counts.
+  const addressBook = useSavedAddresses(signedIn);
+  const hasSaved = (addressBook.data?.addresses.length ?? 0) > 0;
+  const checked =
+    storedPoint && (!signedIn || (addressBook.isFetched && !hasSaved)) ? storedPoint : null;
+  useEffect(() => {
+    if (signedIn && hasSaved && storedPoint) setCheckedAddress(null);
+  }, [signedIn, hasSaved, storedPoint]);
 
   const [undo, setUndo] = useState<Undo | null>(null);
   const [editing, setEditing] = useState<ReadonlySet<string>>(new Set());

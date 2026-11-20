@@ -131,9 +131,30 @@ export function requestCartReopen() {
   }
 }
 
-export function takeCartReopen(): boolean {
+export type CartReopenStep = 'open' | 'drop' | 'keep';
+
+/**
+ * What to do with the reopen flag on a page: keep it while on the sign-in pages (the cart would
+ * cover the form), open the cart once she is back and signed in, and drop it if she came back
+ * without signing in.
+ */
+export function cartReopenStep({
+  signedIn,
+  onAuthPage,
+}: {
+  signedIn: boolean;
+  onAuthPage: boolean;
+}): CartReopenStep {
+  if (onAuthPage) return 'keep';
+  return signedIn ? 'open' : 'drop';
+}
+
+/** True once, when the cart should open again on this page. */
+export function takeCartReopen(where: { signedIn: boolean; onAuthPage: boolean }): boolean {
   const store = session();
   if (!store?.getItem(REOPEN_CART_KEY)) return false;
+  const step = cartReopenStep(where);
+  if (step === 'keep') return false;
   store.removeItem(REOPEN_CART_KEY);
-  return true;
+  return step === 'open';
 }

@@ -14,7 +14,11 @@ import type {
 import { CUISINES } from '@/server/modules/menu/urls';
 import { DishCard } from '@/components/dish/dish-card';
 import { useSlowPending } from '@/components/forms/submit-button';
-import { focusMenuSearch, MENU_SEARCH_ID } from '@/components/layout/search-link';
+import {
+  focusMenuSearch,
+  MENU_SEARCH_ID,
+  scrollMenuToolbarToTop,
+} from '@/components/layout/search-link';
 import { EmptyState } from '@/components/states/empty-state';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -43,7 +47,6 @@ import {
   withRange,
 } from '@/lib/menu-query';
 import { replaceAddress } from '@/lib/dialog-history';
-import { prefersReducedMotion } from '@/lib/motion';
 import { useScrollMemory } from '@/lib/scroll-memory';
 import { useOnline } from '@/lib/use-online';
 import { CuisinePanel, CuisineTabList, DishGrid } from './cuisine-menu';
@@ -85,8 +88,9 @@ function writeAddress(query: MenuQuery) {
   }
 }
 
+/** A link inside a sentence: the padding gives a 44 px target without adding leading. */
 const linkButton =
-  'inline-flex h-11 items-center font-medium text-brand-strong underline underline-offset-4';
+  '-my-3 inline-block py-3 font-medium text-brand-strong underline underline-offset-4';
 
 export function MenuBrowser({
   dishes,
@@ -369,10 +373,7 @@ export function MenuBrowser({
                     const value = event.target.value;
                     // Phones: the first keystroke brings the toolbar to the top, above the keyboard.
                     if (!typedOnce.current && window.matchMedia('(width < 64rem)').matches) {
-                      fieldRef.current?.closest('[data-menu-toolbar]')?.scrollIntoView({
-                        block: 'start',
-                        behavior: prefersReducedMotion() ? 'instant' : 'smooth',
-                      });
+                      scrollMenuToolbarToTop(event.target);
                     }
                     typedOnce.current = true;
                     setText(value);
@@ -384,7 +385,7 @@ export function MenuBrowser({
                       clearSearch();
                     }
                   }}
-                  className="h-12 w-full rounded-lg border border-input bg-white pr-14 pl-12 text-body-4 text-neutral-2 shadow-card outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid md:h-14 lg:h-15 lg:text-body-3 [&::-webkit-search-cancel-button]:appearance-none"
+                  className="h-12 w-full rounded-lg border border-input bg-white pr-14 pl-12 text-body-4 text-ellipsis placeholder-shown:pr-4 text-neutral-2 shadow-card outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid md:h-14 lg:h-15 lg:text-body-3 [&::-webkit-search-cancel-button]:appearance-none"
                 />
                 {text ? (
                   <Button
@@ -428,14 +429,15 @@ export function MenuBrowser({
         </div>
       </div>
 
-      <div className="mt-4 flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-1 text-body-5 text-neutral-3 md:mt-6 md:text-body-4">
+      <div className="mt-4 flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-1 text-body-5 text-neutral-3 md:mt-6 md:text-body-4 xl:mx-auto xl:w-full xl:max-w-[1168px]">
         <div className="min-w-0">{rowLeft}</div>
         {filterOn || text ? (
+          // -ml-3: when it wraps under the sentence, its word lines up with the text above.
           <Button
             type="button"
             variant="ghost"
             onClick={clearAll}
-            className="h-11 px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
+            className="-ml-3 h-11 px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
           >
             Clear all
           </Button>

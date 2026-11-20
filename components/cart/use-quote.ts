@@ -128,8 +128,17 @@ export function useQuote(
     return () => clearTimeout(timer);
   }, [retryAfter, refetch]);
 
+  // The answer kept from the last time the cart was open isn't current until the one asked for
+  // on opening is back (D10); later refreshes (the minute, the tab shown again) stay silent.
+  const [confirmedSinceOpen, setConfirmedSinceOpen] = useState(false);
+  if (!confirmedSinceOpen && query.isFetchedAfterMount) setConfirmedSinceOpen(true);
+  const reopening = !confirmedSinceOpen && query.isFetching;
+
   const waiting =
-    currentKey !== debouncedKey || query.isPlaceholderData || (query.isFetching && !query.data);
+    currentKey !== debouncedKey ||
+    query.isPlaceholderData ||
+    (query.isFetching && !query.data) ||
+    reopening;
   let status: QuoteStatus;
   if (!online) status = 'offline';
   else if (failure?.code === 'RATE_LIMITED') status = 'rateLimited';

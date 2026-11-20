@@ -26,8 +26,9 @@ export function OfferBadge({
     .join(', ');
 
   return (
-    <p className="inline-flex min-h-8 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md border border-brand-strong bg-white px-2 py-1 text-body-5 font-semibold text-brand-strong xl:text-body-4">
-      <Flame className="size-4 shrink-0 xl:size-5" aria-hidden />
+    <p className="inline-flex min-h-8 max-w-full items-start gap-1.5 rounded-md border border-brand-strong bg-white px-2 py-1 text-body-5 font-semibold text-brand-strong xl:text-body-4">
+      {/* Beside the first line, with the text wrapping next to it (never alone on a line). */}
+      <Flame className="mt-0.5 size-4 shrink-0 xl:size-5" aria-hidden />
       {/* The server's and the browser's clocks can straddle a minute. */}
       <span aria-hidden suppressHydrationWarning>
         <span className="tracking-wider">{code}</span>
