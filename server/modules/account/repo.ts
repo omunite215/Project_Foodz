@@ -115,13 +115,6 @@ export async function findPasswordHash(ctx: DbContext, userId: string) {
   return account?.password ?? null;
 }
 
-/** Orders placed but not yet delivered, cancelled or failed. */
-export function countOrdersInProgress(ctx: DbContext, userId: string) {
-  return db(ctx).order.count({
-    where: { userId, status: { in: ['PLACED', 'ACCEPTED', 'PREPARING', 'READY', 'PICKED_UP'] } },
-  });
-}
-
 /** Deliveries a partner is carrying right now. */
 export function countDeliveriesInProgress(ctx: DbContext, userId: string) {
   return db(ctx).delivery.count({
@@ -131,8 +124,9 @@ export function countDeliveriesInProgress(ctx: DbContext, userId: string) {
 
 /**
  * Removes a person while keeping order records for accounting (B10): sign-in methods, sessions,
- * two-factor, open tokens, addresses, favorites and notifications go; orders lose contact
- * details; the user row stays as an anonymous placeholder that orders still point to.
+ * two-factor, open tokens, addresses, favorites and notifications go; the user row stays as an
+ * anonymous placeholder that orders still point to. The orders lose their contact details
+ * through the orders module, in the same transaction (customers can't write orders, F4).
  */
 export async function anonymizeAccount(ctx: DbContext, userId: string, now: Date) {
   const tx = db(ctx);
@@ -144,22 +138,6 @@ export async function anonymizeAccount(ctx: DbContext, userId: string, now: Date
   await tx.address.deleteMany({ where: { userId } });
   await tx.favorite.deleteMany({ where: { userId } });
   await tx.notification.deleteMany({ where: { userId } });
-  await tx.order.updateMany({
-    where: { userId },
-    data: {
-      contactName: 'Deleted customer',
-      contactPhone: '',
-      addressText: 'Address removed',
-      note: null,
-    },
-  });
-  // Coordinates kept only to about 1 km, for delivery statistics.
-  await tx.$executeRaw`
-    UPDATE orders
-    SET address_lat = round(address_lat::numeric, 2),
-        address_lng = round(address_lng::numeric, 2),
-        location = NULL
-    WHERE user_id = ${userId}::uuid`;
   await tx.deliveryPartner.updateMany({
     where: { userId },
     data: {

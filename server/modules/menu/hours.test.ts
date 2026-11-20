@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidTimeZone, openState, storeStatusAt, weekdayAt } from './hours';
+import { isValidTimeZone, lastClosing, openState, storeStatusAt, weekdayAt } from './hours';
 import type { OpeningHours, StoreStatus } from './schema';
 
 const NEW_YORK = 'America/New_York';
@@ -232,5 +232,28 @@ describe('isValidTimeZone', () => {
 
   it.each(['Boston', '', 'America/Nowhere', '+05:00x'])('rejects %j', (zone) => {
     expect(isValidTimeZone(zone)).toBe(false);
+  });
+});
+
+describe('lastClosing: when the store last closed (F4 S3.5)', () => {
+  it('gives the closing a moment ago, today', () => {
+    // Thursday 22:01 in Boston: closed at 22:00.
+    expect(lastClosing(hours, NEW_YORK, at('2026-11-20T03:01:00Z'))).toMatchObject({
+      at: '2026-11-20T03:00:00.000Z',
+      time: '22:00',
+    });
+  });
+
+  it("gives yesterday's closing before today's opening", () => {
+    // Friday 09:00: closed since Thursday 22:00.
+    expect(lastClosing(hours, NEW_YORK, at('2026-11-20T14:00:00Z'))).toMatchObject({
+      at: '2026-11-20T03:00:00.000Z',
+      time: '22:00',
+    });
+  });
+
+  it('is null while open, and when the store was not open recently', () => {
+    expect(lastClosing(hours, NEW_YORK, at('2026-11-20T00:00:00Z'))).toBeNull();
+    expect(lastClosing({}, NEW_YORK, at('2026-11-20T03:01:00Z'))).toBeNull();
   });
 });

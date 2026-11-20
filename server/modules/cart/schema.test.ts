@@ -81,3 +81,40 @@ describe('quote input', () => {
     expect(quoteInput.safeParse({ lines }).success).toBe(true);
   });
 });
+
+const tipOf = (tip: unknown) => quoteInput.safeParse({ lines: [line()], tip });
+const tipMessage = (tip: unknown) => {
+  const result = tipOf(tip);
+  return result.success ? null : result.error.issues[0]?.message;
+};
+
+describe('the tip choice at checkout (F4 S4.3, S4.7)', () => {
+  it('defaults to no tip, so the cart is unchanged', () => {
+    expect(quoteInput.parse({ lines: [line()] }).tip).toEqual({ kind: 'none' });
+  });
+
+  it('takes 10, 15 or 20 % and amounts from $0.00 to $100.00 in cents', () => {
+    for (const percent of [10, 15, 20])
+      expect(tipOf({ kind: 'percent', percent }).success).toBe(true);
+    for (const cents of [0, 500, 550, 10_000])
+      expect(tipOf({ kind: 'amount', cents }).success).toBe(true);
+  });
+
+  it('refuses 12 %, negative tips, over $100.00 and fractions of a cent', () => {
+    expect(tipOf({ kind: 'percent', percent: 12 }).success).toBe(false);
+    expect(tipMessage({ kind: 'amount', cents: -300 })).toBe(
+      'Enter an amount in dollars and cents, like 5.50.',
+    );
+    expect(tipMessage({ kind: 'amount', cents: 555.5 })).toBe(
+      'Enter an amount in dollars and cents, like 5.50.',
+    );
+    expect(tipMessage({ kind: 'amount', cents: 10_001 })).toBe('Tips can be up to $100.00.');
+    expect(tipOf({ kind: 'percent', percent: 10, cents: 480 }).success).toBe(false);
+    expect(tipOf({ kind: 'amount', cents: '5' }).success).toBe(false);
+  });
+
+  it('takes the payment method, which changes no figure', () => {
+    expect(quoteInput.parse({ lines: [], method: 'cash' }).method).toBe('cash');
+    expect(quoteInput.safeParse({ lines: [], method: 'bitcoin' }).success).toBe(false);
+  });
+});

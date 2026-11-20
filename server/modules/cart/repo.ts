@@ -35,6 +35,7 @@ export function findDishes(ctx: DbContext, ids: string[]) {
       images: true,
       flavors: true,
       isAvailable: true,
+      prepMinutes: true,
     },
   });
 }

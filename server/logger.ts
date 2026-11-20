@@ -33,6 +33,10 @@ const SENSITIVE_KEYS = [
   'lng',
   'card',
   'licenseNumber',
+  // Checkout (F4): a PaymentIntent's client secret lets anyone holding it confirm the payment.
+  'clientSecret',
+  'contactName',
+  'kitchenNote',
 ] as const;
 
 /**

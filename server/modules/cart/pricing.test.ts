@@ -10,7 +10,12 @@ import {
   quote,
   type QuoteCalcInput,
   roundHalfUp,
+  arrivalWindow,
+  cashAllowed,
+  tipFor,
+  tipOptions,
 } from './pricing';
+import type { TipChoice } from './schema';
 
 // Store settings and prices as seeded (F3 U1: tax 7 %).
 const SETTINGS: PricingSettings = {
@@ -511,5 +516,149 @@ describe('promo rules, in the order they are checked (B6)', () => {
       retryAfterSeconds: 600,
     });
     expect(q.totalCents).toBe(5547);
+  });
+});
+
+// ------------------------------------------------------------------ checkout (F4)
+
+describe('the tip (F4 U1, S4.2, B14)', () => {
+  it('works a percentage out on the food before the promo, rounded half up once (T2 to T4, T8, T9)', () => {
+    expect(tipFor({ kind: 'percent', percent: 10 }, 4797)).toBe(480); // 479.7¢ up
+    expect(tipFor({ kind: 'percent', percent: 15 }, 4797)).toBe(720); // 719.55¢ up
+    expect(tipFor({ kind: 'percent', percent: 20 }, 4797)).toBe(959); // 959.4¢ down
+    expect(tipFor({ kind: 'percent', percent: 10 }, 3495)).toBe(350); // 349.5¢ up
+    expect(tipFor({ kind: 'percent', percent: 15 }, 6990)).toBe(1049); // 1,048.5¢ up
+  });
+
+  it('takes a typed amount as it is, and none as zero (T5)', () => {
+    expect(tipFor({ kind: 'amount', cents: 500 }, 4797)).toBe(500);
+    expect(tipFor({ kind: 'amount', cents: 0 }, 4797)).toBe(0);
+    expect(tipFor({ kind: 'none' }, 4797)).toBe(0);
+  });
+
+  it('offers each percentage with its amount for this cart (S4.1)', () => {
+    expect(tipOptions(4797)).toEqual([
+      { percent: 10, cents: 480 },
+      { percent: 15, cents: 720 },
+      { percent: 20, cents: 959 },
+    ]);
+  });
+
+  it('refuses a tip the browser could only have made up', () => {
+    expect(() => tipFor({ kind: 'percent', percent: 12 as 10 }, 4797)).toThrow(RangeError);
+    expect(() => tipFor({ kind: 'amount', cents: -1 }, 4797)).toThrow(RangeError);
+    expect(() => tipFor({ kind: 'amount', cents: 10_001 }, 4797)).toThrow(RangeError);
+    expect(() => tipFor({ kind: 'amount', cents: 5.5 }, 4797)).toThrow(RangeError);
+  });
+});
+
+const total = (lines: PricedLine[], tip: TipChoice, extra: Partial<QuoteCalcInput> = {}) => {
+  const subtotal = lines.reduce(
+    (sum, l) => sum + (l.status === 'ok' ? (l.unitPriceCents ?? 0) * l.quantity : 0),
+    0,
+  );
+  return quote({
+    lines,
+    promo: null,
+    delivery: PRIYA_WORK,
+    settings: SETTINGS,
+    tipCents: tipFor(tip, subtotal),
+    now: NOW,
+    ...extra,
+  });
+};
+const kbbq5 = coupon('KBBQ5', {
+  type: 'FIXED',
+  value: 500,
+  minSubtotalCents: 2500,
+  cuisines: ['KOREAN'],
+});
+const freeDelivery = coupon('FREEDELIVERY', { type: 'FREE_DELIVERY', value: 0 });
+const lookup = (c: CouponFacts) => ({
+  kind: 'lookup' as const,
+  code: c.code,
+  coupon: c,
+  customer: customer(PRIYA),
+});
+
+const TIPPED: [string, TipChoice, number, number][] = [
+  ['T1', { kind: 'none' }, 0, 5397],
+  ['T2', { kind: 'percent', percent: 10 }, 480, 5877],
+  ['T3', { kind: 'percent', percent: 15 }, 720, 6117],
+  ['T4', { kind: 'percent', percent: 20 }, 959, 6356],
+  ['T5', { kind: 'amount', cents: 500 }, 500, 5897],
+];
+
+describe('worked checkout totals T1 to T11 (Priya at 1.3 km unless named)', () => {
+  it.each(TIPPED)('%s: cart A with that tip', (_name, tip, tipCents, totalCents) => {
+    const q = total(cartA(), tip);
+    expect(q).toMatchObject({ subtotalCents: 4797, tax: { cents: 336 }, tipCents, totalCents });
+    expect(q.delivery.feeCents).toBe(264);
+  });
+
+  it('T6: KBBQ5 never makes the 15 % tip smaller: $55.82', () => {
+    const q = total(cartA(), { kind: 'percent', percent: 15 }, { promo: lookup(kbbq5) });
+    expect(q).toMatchObject({ tax: { cents: 301 }, tipCents: 720, totalCents: 5582 });
+  });
+
+  it('T7: FREEDELIVERY with 20 %: delivery free (was $2.64), $60.92', () => {
+    const q = total(cartA(), { kind: 'percent', percent: 20 }, { promo: lookup(freeDelivery) });
+    expect(q.promo).toMatchObject({ deliveryDiscountCents: 264, freeDelivery: true });
+    expect(q).toMatchObject({ tax: { cents: 336 }, tipCents: 959, totalCents: 6092 });
+  });
+
+  it('T8 and T9: Kimchi carts with 10 % and 15 %', () => {
+    expect(total([line('kimchi', 5)], { kind: 'percent', percent: 10 })).toMatchObject({
+      subtotalCents: 3495,
+      tax: { cents: 245 },
+      tipCents: 350,
+      totalCents: 4354,
+    });
+    const t9 = total([line('kimchi', 10)], { kind: 'percent', percent: 15 });
+    expect(t9).toMatchObject({ tax: { cents: 489 }, tipCents: 1049, totalCents: 8792 });
+    expect(cashAllowed(t9.totalCents)).toBe(true);
+  });
+
+  it('T10: 10 × Samgyeopsal is $270.03, over the cash limit (S5.2)', () => {
+    const q = total([line('samgyeopsal', 10)], { kind: 'none' });
+    expect(q).toMatchObject({ tax: { cents: 1749 }, totalCents: 27003 });
+    expect(cashAllowed(q.totalCents)).toBe(false);
+    expect(cashAllowed(10_000)).toBe(true);
+    expect(cashAllowed(10_001)).toBe(false);
+  });
+
+  it('T11: Maya at Harvard Square, 6.6 km: delivery $5.29, $56.62', () => {
+    const q = total(
+      cartA(),
+      { kind: 'none' },
+      {
+        delivery: { status: 'inside', distanceMeters: 6600 },
+      },
+    );
+    expect(q).toMatchObject({ delivery: { feeCents: 529 }, totalCents: 5662 });
+  });
+});
+
+describe('the arrival window (S3.1, B15)', () => {
+  it('is the longest prep + 10 + 3 per km rounded up, started on the next 5 minutes, 10 wide', () => {
+    // Pad Thai at 20 minutes to Priya (1.3 km): 20 + 10 + 4 = 34, so 35–45.
+    expect(arrivalWindow([20, 12], 13)).toEqual({ fromMinutes: 35, toMinutes: 45 });
+  });
+
+  it('keeps a start that already falls on 5 minutes', () => {
+    // 15 + 10 + ⌈3 × 3.3⌉ = 15 + 10 + 10 = 35.
+    expect(arrivalWindow([15], 33)).toEqual({ fromMinutes: 35, toMinutes: 45 });
+  });
+
+  it('rounds the kilometre part up, never down', () => {
+    // 3 × 4.3 = 12.9 → 13; 24 + 10 + 13 = 47 → 50–60.
+    expect(arrivalWindow([24], 43)).toEqual({ fromMinutes: 50, toMinutes: 60 });
+    // 3 × 0.1 = 0.3 → 1.
+    expect(arrivalWindow([12], 1)).toEqual({ fromMinutes: 25, toMinutes: 35 });
+    expect(arrivalWindow([12], 0)).toEqual({ fromMinutes: 25, toMinutes: 35 });
+  });
+
+  it('has no window without dishes', () => {
+    expect(arrivalWindow([], 13)).toBeNull();
   });
 });

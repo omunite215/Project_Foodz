@@ -46,6 +46,9 @@ export const env = createEnv({
 
     STRIPE_SECRET_KEY: z.string().startsWith('sk_').optional(),
     STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
+    // How long a card order waits for its payment (F4 B8). Local and CI may lower it to watch
+    // an expiry happen.
+    ORDER_PAYMENT_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
 
     FIELD_ENCRYPTION_KEY: z
       .string()

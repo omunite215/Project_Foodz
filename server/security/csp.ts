@@ -16,7 +16,15 @@ export interface CspOptions {
   reportUri?: string;
 }
 
-const STRIPE = ['https://js.stripe.com', 'https://hooks.stripe.com'];
+// Stripe.js and its card and bank-check frames (F4 B19). Stripe serves parts of Stripe.js from
+// subdomains of js.stripe.com. Browsers that honour 'strict-dynamic' ignore host sources in
+// script-src; older ones fall back to them.
+const STRIPE_SCRIPTS = ['https://js.stripe.com', 'https://*.js.stripe.com'];
+const STRIPE_FRAMES = [
+  'https://js.stripe.com',
+  'https://*.js.stripe.com',
+  'https://hooks.stripe.com',
+];
 const TURNSTILE = 'https://challenges.cloudflare.com';
 const MAP_TILES = 'https://tiles.openfreemap.org';
 const SENTRY = 'https://*.ingest.sentry.io';
@@ -30,6 +38,7 @@ export function buildCsp(options: CspOptions): string {
       "'self'",
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
+      ...STRIPE_SCRIPTS,
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     // Components set inline style attributes (positioning, animation); scripts stay nonce-only.
@@ -45,7 +54,7 @@ export function buildCsp(options: CspOptions): string {
       ...socketOrigins,
       ...(isDev ? ['ws:'] : []),
     ],
-    'frame-src': [...STRIPE, TURNSTILE],
+    'frame-src': [...STRIPE_FRAMES, TURNSTILE],
     'worker-src': ["'self'", 'blob:'],
     'manifest-src': ["'self'"],
     'media-src': ["'self'"],

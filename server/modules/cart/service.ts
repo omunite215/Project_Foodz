@@ -8,9 +8,12 @@ import { getStoreStatus } from '@/server/modules/menu/service';
 import { blockedFor, type LimitCheck, takeAttempts } from '@/server/security/rate-limit';
 import { codeHash, rememberCode, wasConfirmed } from './code-memory';
 import {
+  arrivalWindow,
+  cashAllowed,
   type CouponFacts,
   type CustomerFacts,
   type DeliveryPoint,
+  distanceTenths,
   evaluatePromo,
   isCodeVisibleTo,
   type PricedLine,
@@ -18,6 +21,8 @@ import {
   type PromoOutcome,
   type PromoRequest,
   quote,
+  tipFor,
+  tipOptions,
 } from './pricing';
 import { promoMessage } from './promo-text';
 import {
@@ -28,14 +33,17 @@ import {
   findRedemptions,
 } from './repo';
 import {
+  CASH_LIMIT_CENTS,
   type CartTooBigDetails,
   type CheckoutBlocker,
   cleanFlavor,
   cleanNote,
+  CLOSING_SOON_MINUTES,
   MAX_CART_ITEMS,
   MAX_CART_LINES,
   type ParsedQuoteInput,
   type Quote,
+  type QuoteArrival,
   type QuoteDelivery,
   type QuoteLine,
   type QuoteOffer,
@@ -308,6 +316,25 @@ export interface QuoteCaller {
   ip: string;
 }
 
+/** What checkout needs besides the quote itself to create the order (F4). */
+export interface CheckoutPricing {
+  quote: Quote;
+  /** The coupon behind an applied code, as the caller could see it. Null otherwise. */
+  coupon: {
+    id: string;
+    code: string;
+    usageLimit: number | null;
+    perUserLimit: number | null;
+    ownerUserId: string | null;
+  } | null;
+  /** Each priced dish's current title, by menu item id. */
+  titles: Map<string, string>;
+  /** The exact distance to the saved address, in metres (null when unknown). */
+  distanceMeters: number | null;
+  /** The store's hours and status at `now`. */
+  store: Awaited<ReturnType<typeof getStoreStatus>>;
+}
+
 /**
  * The whole price breakdown for a cart, as the caller (S2.2). Anyone may ask; a saved address
  * is used only when it is the caller's own.
@@ -318,6 +345,28 @@ export async function quoteCart(
   caller: QuoteCaller,
   now = new Date(),
 ): Promise<Quote> {
+  return (await priceCart(actor, input, caller, now)).quote;
+}
+
+/**
+ * The same breakdown for placing an order (F4 S8.1): priced again from the database, with the
+ * facts the order keeps.
+ */
+export async function priceCartForCheckout(
+  actor: Actor,
+  input: unknown,
+  caller: QuoteCaller,
+  now = new Date(),
+): Promise<CheckoutPricing> {
+  return priceCart(actor, input, caller, now);
+}
+
+async function priceCart(
+  actor: Actor,
+  input: unknown,
+  caller: QuoteCaller,
+  now: Date,
+): Promise<CheckoutPricing> {
   const parsed = quoteInput.parse(input);
   const userId = userIdOf(actor);
   const itemCount = parsed.lines.reduce((sum, line) => sum + line.quantity, 0);
@@ -368,11 +417,18 @@ export async function quoteCart(
     code = await checkCode(actor, caller.ip, parsed.code, coupon, customer);
   }
 
+  // The tip is worked out on the food before any promo (F4 U1).
+  const foodSubtotalCents = lines.reduce(
+    (sum, { priced }) =>
+      sum + (priced.status === 'ok' ? (priced.unitPriceCents ?? 0) * priced.quantity : 0),
+    0,
+  );
   const figures = quote({
     lines: lines.map((line) => line.priced),
     promo: code?.request ?? null,
     delivery: delivery.point,
     settings: pricing,
+    tipCents: tipFor(parsed.tip, foodSubtotalCents),
     now,
   });
 
@@ -431,7 +487,38 @@ export async function quoteCart(
   if (!store.isOpen) checkoutBlockers.push('closed');
   if (figures.delivery.status === 'outside') checkoutBlockers.push('outside');
 
-  return {
+  const prep = parsed.lines.flatMap((line, index) => {
+    const dish = dishes.get(line.menuItemId);
+    return dish && figures.lines[index]?.inSubtotal ? [dish.prepMinutes] : [];
+  });
+  let arrival: QuoteArrival = { status: 'noAddress' };
+  if (!store.isOpen) arrival = { status: 'closed' };
+  else if (delivery.point.status === 'inside') {
+    const window = arrivalWindow(prep, distanceTenths(delivery.point.distanceMeters));
+    if (window) {
+      arrival = {
+        status: 'ok',
+        ...window,
+        by: new Date(now.getTime() + window.toMinutes * 60_000).toISOString(),
+      };
+    }
+  }
+  const closesAt = store.closesAt ? Date.parse(store.closesAt.at) : null;
+  const closingSoon =
+    store.isOpen && closesAt !== null && closesAt - now.getTime() <= CLOSING_SOON_MINUTES * 60_000;
+
+  const appliedCoupon =
+    facts.coupon && figures.promo?.status === 'applied'
+      ? {
+          id: facts.coupon.id,
+          code: facts.coupon.code,
+          usageLimit: facts.coupon.usageLimit,
+          perUserLimit: facts.coupon.perUserLimit,
+          ownerUserId: facts.coupon.ownerUserId,
+        }
+      : null;
+
+  const result: Quote = {
     quotedAt: now.toISOString(),
     lines: quoteLines,
     itemCount: figures.itemCount,
@@ -450,6 +537,7 @@ export async function quoteCart(
     },
     tax: figures.tax,
     tipCents: figures.tipCents,
+    tipOptions: tipOptions(foodSubtotalCents),
     totalCents: figures.totalCents,
     totalKind: figures.totalKind,
     store: {
@@ -457,8 +545,19 @@ export async function quoteCart(
       isOpen: store.isOpen,
       opensAt: store.opensAt,
       closesAt: store.closesAt,
+      closingSoon,
     },
+    arrival,
+    cashAllowed: cashAllowed(figures.totalCents),
+    cashLimitCents: CASH_LIMIT_CENTS,
     offers: [...offers.values()].toSorted((a, b) => a.endsAt.localeCompare(b.endsAt)),
     checkoutBlockers,
+  };
+  return {
+    quote: result,
+    coupon: appliedCoupon,
+    titles: new Map(facts.dishes.map((dish) => [dish.id, dish.title])),
+    distanceMeters: delivery.point.status === 'unknown' ? null : delivery.point.distanceMeters,
+    store,
   };
 }

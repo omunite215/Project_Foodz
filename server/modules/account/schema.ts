@@ -83,6 +83,10 @@ export interface AccountDto {
   addressCount: number;
   /** Saved favorite dishes (F3), for the account menu and side nav. */
   favoriteCount: number;
+  /** Orders in the Orders list (failed attempts left out), for its skeleton (F4). */
+  orderCount: number;
+  /** Cards saved at Stripe, for the Saved cards skeleton (F4); 0 when unknown. */
+  savedCardCount: number;
   /** Signed-in devices; 1 for the shared demo accounts, which see only this device. */
   deviceCount: number;
   createdAt: string;
@@ -127,6 +131,39 @@ export interface AccountExport {
   devices: { device: string; signedInAt: string; lastActiveAt: string; thisDevice: boolean }[];
   /** Hearted dishes, most recently saved first (F3 S5.11). */
   favorites: { dish: string; savedAt: string }[];
+  /** Orders, newest first, with every amount (F4 S12.7). Failed payment attempts are left out. */
+  orders: {
+    number: string;
+    status: string;
+    createdAt: string;
+    placedAt: string | null;
+    deliveredAt: string | null;
+    cancelledAt: string | null;
+    lines: {
+      dish: string;
+      quantity: number;
+      unitPriceCents: number;
+      extras: string[];
+      note: string | null;
+    }[];
+    subtotalCents: number;
+    promoCode: string | null;
+    discountCents: number;
+    deliveryFeeCents: number;
+    deliveryDiscountCents: number;
+    taxCents: number;
+    tipCents: number;
+    totalCents: number;
+    refundedCents: number;
+    paymentMethod: 'card' | 'cash';
+    paymentStatus: string;
+    /** "Visa •••• 4242". */
+    card: string | null;
+    deliveredTo: string;
+    kitchenNote: string | null;
+  }[];
+  /** Saved cards: brand, last 4 and expiry only (F4 S6.14). */
+  savedCards: { brand: string; last4: string; expires: string }[];
 }
 
 /** A person as staff see them; personal fields are masked for demo staff (U4). */

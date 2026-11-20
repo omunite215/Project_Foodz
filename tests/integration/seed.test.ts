@@ -19,6 +19,7 @@ import { currentTermsVersion, getLegalPage } from '@/server/modules/content/serv
 import { redis } from '@/server/redis';
 import {
   coupons,
+  FAQ_CASH_ANSWER,
   FAQ_COUPON_ANSWER,
   FREE_DELIVERY_BAR,
   SEED_CORRECTIONS,
@@ -522,6 +523,69 @@ describe('F3 fixtures (local and CI only)', () => {
       { slug: 'bulgogi', isAvailable: true },
       { slug: 'naengmyeon', isAvailable: false },
     ]);
+  });
+});
+
+describe('F4 fixtures (local and CI only, B23)', () => {
+  it('gives Priya her profile phone, on every run', async () => {
+    const priya = await migrator.user.findUniqueOrThrow({
+      where: { email: 'second.customer@foodz.example' },
+      select: { phone: true },
+    });
+    expect(priya.phone).toBe('+16175550123');
+    const jordan = await migrator.user.findUniqueOrThrow({
+      where: { email: 'unconfirmed.customer@foodz.example' },
+      select: { phone: true },
+    });
+    expect(jordan.phone).toBeNull();
+  });
+
+  it('adds LASTONE with one use, and puts its use back on every run (S8.4)', async () => {
+    await migrator.coupon.update({ where: { code: 'LASTONE' }, data: { usedCount: 1 } });
+    await seedDatabase(migrator, {
+      ...config,
+      demoPassword: 'demo-password-2',
+      samplePassword: 'sample-password-2',
+    });
+    expect(
+      await migrator.coupon.findUniqueOrThrow({
+        where: { code: 'LASTONE' },
+        select: { type: true, value: true, usageLimit: true, usedCount: true },
+      }),
+    ).toEqual({ type: 'FIXED', value: 200, usageLimit: 1, usedCount: 0 });
+  });
+
+  it("keeps S1001's address, instructions, arrival window and timeline so its page renders", async () => {
+    const priya = await userIdOf('second.customer@foodz.example');
+    const order = await migrator.order.findFirstOrThrow({
+      where: { userId: priya, number: 'S1001' },
+      select: {
+        addressLabel: true,
+        addressLine1: true,
+        addressCity: true,
+        courierInstructions: true,
+        taxRateBps: true,
+        promoCode: true,
+        arrivalFromMinutes: true,
+        arrivalToMinutes: true,
+        events: { select: { type: true }, orderBy: { createdAt: 'asc' } },
+      },
+    });
+    expect(order).toEqual({
+      addressLabel: 'Work',
+      addressLine1: '1 Faneuil Hall Square',
+      addressCity: 'Boston, MA 02109',
+      courierInstructions: 'Front desk takes deliveries',
+      taxRateBps: 700,
+      promoCode: 'WELCOME10',
+      arrivalFromMinutes: 35,
+      arrivalToMinutes: 45,
+      events: [{ type: 'placed' }, { type: 'delivered' }],
+    });
+  });
+
+  it('says cash is for orders up to $100 in the FAQ', async () => {
+    expect((await faqHtml()).contentHtml).toContain(escapeHtml(FAQ_CASH_ANSWER));
   });
 });
 

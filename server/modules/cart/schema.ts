@@ -18,6 +18,20 @@ export const MAX_FLAVORS = 5;
 export const MAX_FLAVOR_LENGTH = 40;
 export const MAX_CODE_LENGTH = 32;
 
+// Checkout (F4).
+export const TIP_PERCENTS = [10, 15, 20] as const;
+export type TipPercent = (typeof TIP_PERCENTS)[number];
+/** Tips can be up to $100.00 (S4.3). */
+export const MAX_TIP_CENTS = 10_000;
+/** Cash on delivery for totals up to $100.00, tip included (U5). */
+export const CASH_LIMIT_CENTS = 10_000;
+/** B15: longest prep + 10 minutes for handover and pickup + 3 minutes per km. */
+export const ARRIVAL_HANDOVER_MINUTES = 10;
+export const ARRIVAL_MINUTES_PER_KM = 3;
+export const ARRIVAL_WINDOW_MINUTES = 10;
+/** "We stop taking orders at 10 pm." shows this long before closing (S3.3). */
+export const CLOSING_SOON_MINUTES = 30;
+
 const cents = z.int().min(0);
 const instant = z.iso.datetime();
 
@@ -94,6 +108,33 @@ export const promoCodeInput = z
   .transform(normalizeCode)
   .refine((code) => code.length <= MAX_CODE_LENGTH, 'Promo codes are 32 characters or fewer.');
 
+export const TIP_AMOUNT_ERROR = 'Enter an amount in dollars and cents, like 5.50.';
+export const TIP_LIMIT_ERROR = 'Tips can be up to $100.00.';
+
+/**
+ * The tip as chosen (S4.1 to S4.3, B14): no tip, 10/15/20 % of the food before the promo, or an
+ * amount in cents up to $100.00. The browser never sends a tip it worked out from a percentage.
+ */
+export const tipChoiceInput = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }).strict(),
+  z
+    .object({
+      kind: z.literal('percent'),
+      percent: z.literal(TIP_PERCENTS, 'Choose 10, 15 or 20 %, or type an amount.'),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('amount'),
+      cents: z.int(TIP_AMOUNT_ERROR).min(0, TIP_AMOUNT_ERROR).max(MAX_TIP_CENTS, TIP_LIMIT_ERROR),
+    })
+    .strict(),
+]);
+export type TipChoice = z.infer<typeof tipChoiceInput>;
+
+export const paymentMethodInput = z.enum(['cash', 'card']);
+export type PaymentMethodChoice = z.infer<typeof paymentMethodInput>;
+
 export const quoteInput = z
   .object({
     /** Lines in cart order. More than 25 lines or 50 items answers CART_TOO_BIG (S1.12). */
@@ -107,6 +148,10 @@ export const quoteInput = z
     /** The applied (or newly typed) code; checked again on every quote (S4.15). */
     code: promoCodeInput.optional(),
     delivery: deliveryTargetInput.default({ kind: 'default' }),
+    /** F4 checkout: the tip choice. The cart sends none (or leaves it out). */
+    tip: tipChoiceInput.default({ kind: 'none' }),
+    /** F4 checkout: the payment method chosen; it changes no figure. */
+    method: paymentMethodInput.optional(),
   })
   .strict();
 export type QuoteInput = z.input<typeof quoteInput>;
@@ -283,6 +328,23 @@ export const checkoutBlockerSchema = z.enum([
 ]);
 export type CheckoutBlocker = z.infer<typeof checkoutBlockerSchema>;
 
+/**
+ * When the order would arrive (S3.1): minutes from placing it, and the clock time of the end.
+ * noAddress: no deliverable address yet. closed: the store is closed.
+ */
+export const quoteArrivalSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('ok'),
+    fromMinutes: z.int().min(0),
+    toMinutes: z.int().min(0),
+    /** now + toMinutes: "by 7:45 pm" in the store's time zone. */
+    by: instant,
+  }),
+  z.object({ status: z.literal('noAddress') }),
+  z.object({ status: z.literal('closed') }),
+]);
+export type QuoteArrival = z.infer<typeof quoteArrivalSchema>;
+
 export const quoteSchema = z.object({
   quotedAt: instant,
   lines: z.array(quoteLineSchema),
@@ -297,8 +359,10 @@ export const quoteSchema = z.object({
     rateBps: z.int().min(0),
     cents,
   }),
-  /** Always 0 in the cart; the tip is chosen at checkout (F4). */
+  /** 0 in the cart; at checkout, the tip for the choice sent (F4 S4.2). */
   tipCents: cents,
+  /** The amount each percentage would add, from the food before the promo (F4 S4.1). */
+  tipOptions: z.array(z.object({ percent: z.literal(TIP_PERCENTS), cents })),
   /** subtotal − food discount + delivery fee − delivery discount + tax + tip. */
   totalCents: cents,
   /** beforeDelivery: no delivery fee is in the total (no address, or outside the area). */
@@ -308,7 +372,14 @@ export const quoteSchema = z.object({
     isOpen: z.boolean(),
     opensAt: storeMomentSchema.nullable(),
     closesAt: storeMomentSchema.nullable(),
+    /** Open, and closing within 30 minutes: "We stop taking orders at 10 pm." (F4 S3.3). */
+    closingSoon: z.boolean(),
   }),
+  /** F4 S3.1. */
+  arrival: quoteArrivalSchema,
+  /** Cash on delivery is allowed for this total (up to $100.00, tip included; F4 S5.2). */
+  cashAllowed: z.boolean(),
+  cashLimitCents: cents,
   /** Running campaigns with a public code (S4.10). Personal codes are never listed. */
   offers: z.array(quoteOfferSchema),
   /** Why checkout can't start yet (S1.17); empty when it can. */

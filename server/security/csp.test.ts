@@ -38,6 +38,28 @@ describe('buildCsp', () => {
     expect(directive(dev, 'script-src')).toContain("'unsafe-eval'");
   });
 
+  it('lets Stripe.js load from js.stripe.com and its subdomains, as a fallback to the nonce', () => {
+    const scripts = directive(csp, 'script-src');
+    expect(scripts).toEqual(
+      expect.arrayContaining(['https://js.stripe.com', 'https://*.js.stripe.com']),
+    );
+    // The nonce rule still comes first; host sources never replace it.
+    expect(scripts.indexOf("'nonce-abc123'")).toBeLessThan(
+      scripts.indexOf('https://js.stripe.com'),
+    );
+  });
+
+  it('lets the card fields and the bank check frame from Stripe, and nothing else new', () => {
+    expect(directive(csp, 'frame-src')).toEqual([
+      'https://js.stripe.com',
+      'https://*.js.stripe.com',
+      'https://hooks.stripe.com',
+      'https://challenges.cloudflare.com',
+    ]);
+    expect(directive(csp, 'connect-src')).toContain('https://api.stripe.com');
+    expect(csp).not.toMatch(/https:\/\/\*\.stripe\.com/);
+  });
+
   it('adds configured image and socket origins', () => {
     const custom = buildCsp({
       nonce: 'n',

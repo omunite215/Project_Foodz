@@ -56,11 +56,12 @@ beforeAll(async () => {
     partnerId = partner.id;
   });
 
-  orderOfA = await runAs(asCustomer(customerA), async (ctx) => {
+  // Checkout writes orders as the platform (F4); customers only read their own.
+  orderOfA = await runAsSystem('test checkout', async (ctx) => {
     const order = await db(ctx).order.create({ data: orderData(customerA, `A-${Date.now()}`) });
     return order.id;
   });
-  orderOfB = await runAs(asCustomer(customerB), async (ctx) => {
+  orderOfB = await runAsSystem('test checkout', async (ctx) => {
     const order = await db(ctx).order.create({ data: orderData(customerB, `B-${Date.now()}`) });
     return order.id;
   });
@@ -93,6 +94,18 @@ describe('row-level security on orders', () => {
         db(ctx).order.create({ data: orderData(customerB, `X-${Date.now()}`) }),
       ),
     ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('lets no customer create or change an order directly, not even their own (F4)', async () => {
+    await expect(
+      runAs(asCustomer(customerA), (ctx) =>
+        db(ctx).order.create({ data: orderData(customerA, `S-${Date.now()}`) }),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+    const changed = await runAs(asCustomer(customerA), (ctx) =>
+      db(ctx).order.updateMany({ where: { id: orderOfA }, data: { totalCents: 1 } }),
+    );
+    expect(changed.count).toBe(0);
   });
 
   it('returns nothing to anonymous requests', async () => {
