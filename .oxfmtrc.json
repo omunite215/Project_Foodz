@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "semi": true,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "endOfLine": "lf",
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    ".next",
+    "node_modules",
+    "coverage",
+    "playwright-report",
+    "test-results",
+    "storybook-static",
+    "package-lock.json",
+    "public",
+    "docs",
+    "design",
+    "server/db/generated",
+    "prisma/migrations"
+  ]
+}
