@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { SheetTitle } from '@/components/ui/sheet';
 import { announce } from '@/lib/announce';
 import {
+  CHECKOUT_REASONS,
   lineSuffix,
   linesLabel,
   removedSoldOutText,
@@ -203,6 +204,15 @@ export function CartPanel({
     lastSettled.current = view.currentKey;
     announce(totalAnnouncement(quote));
   }, [quote, view.status, view.answeredKey, view.currentKey]);
+
+  // A total that couldn't be worked out is said once, so the last total announced isn't left
+  // standing as if it were current (S2.12, S7.3). Each failure after "Try again" is said again.
+  const lastStatus = useRef(view.status);
+  useEffect(() => {
+    const before = lastStatus.current;
+    lastStatus.current = view.status;
+    if (view.status === 'failed' && before !== 'failed') announce(CHECKOUT_REASONS.failed);
+  }, [view.status]);
 
   // Unit prices shown now; they become the "last shown" ones once the cart closes (B8).
   const shownPrices = new Map(
