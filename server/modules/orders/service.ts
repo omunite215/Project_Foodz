@@ -36,6 +36,7 @@ import { blockedFor, type LimitCheck, takeAttempts } from '@/server/security/rat
 import { type OrderEffect, rememberPaymentNetwork, runEffects } from './effects';
 import { applyIntent, checkWithStripe, expireUnpaidOrder } from './payment-sync';
 import { changeReason, priceChanges } from './price-changes';
+import { shippingFor } from './state';
 import {
   addEvent,
   anonymizeOwnOrders,
@@ -46,6 +47,7 @@ import {
   findByAttemptKey,
   findCustomer,
   findOrderForPayment,
+  findOrderShipping,
   findOrderView,
   findPricingFacts,
   findRecentDuplicate,
@@ -314,11 +316,14 @@ async function startCardPayment(
         saveCard = true;
       }
     }
+    const snapshot = await runAs(actor, (ctx) => findOrderShipping(ctx, order.id));
+    const shipping = snapshot ? shippingFor(snapshot) : null;
     const intent = await gateway.createIntent({
       amountCents: order.totalCents,
       orderId: order.id,
       orderNumber: order.number,
       instance: await getInstanceTag(),
+      ...(shipping && { shipping }),
       customerId,
       paymentMethodId,
       saveCard,

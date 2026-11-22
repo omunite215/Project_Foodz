@@ -50,12 +50,28 @@ export interface IntentState {
   clientSecret: string | null;
 }
 
+/** Where the order is delivered and who takes it, from the order's own snapshot (S2.10). */
+export interface ShippingDetails {
+  name: string;
+  line1: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+}
+
 export interface CreateIntentInput {
   amountCents: number;
   orderId: string;
   orderNumber: string;
   /** This database's tag (B6): the webhook ignores events carrying another one. */
   instance: string;
+  /**
+   * A payment in USD on a Stripe account registered outside the US counts as an export there
+   * (India, for one), and the bank refuses it unless the PaymentIntent names the customer, their
+   * address and what was bought. The delivery address is that address.
+   */
+  shipping?: ShippingDetails;
   /** Set when paying with a saved card or saving a new one. */
   customerId?: string;
   /** A saved card, already checked to belong to `customerId`. */
@@ -282,16 +298,19 @@ function stripeGateway(stripe: Stripe): PaymentGateway {
               currency: 'usd',
               allowed_payment_method_types: ['card'],
               description: `Foodz order ${input.orderNumber}`,
-              shipping: {
-                name: 'Verification Customer',
-                address: {
-                  line1: '1 Faneuil Hall Square',
-                  city: 'Boston',
-                  state: 'MA',
-                  postal_code: '02109',
-                  country: 'US',
+              ...(input.shipping && {
+                shipping: {
+                  name: input.shipping.name,
+                  address: {
+                    line1: input.shipping.line1,
+                    ...(input.shipping.line2 && { line2: input.shipping.line2 }),
+                    ...(input.shipping.city && { city: input.shipping.city }),
+                    ...(input.shipping.state && { state: input.shipping.state }),
+                    ...(input.shipping.postalCode && { postal_code: input.shipping.postalCode }),
+                    country: 'US',
+                  },
                 },
-              },
+              }),
               metadata: {
                 orderId: input.orderId,
                 orderNumber: input.orderNumber,

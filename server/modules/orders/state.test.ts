@@ -8,6 +8,7 @@ import {
   isPayable,
   moneyFlag,
   type OrderPaymentFacts,
+  shippingFor,
   statusWord,
 } from './state';
 
@@ -210,5 +211,48 @@ describe('cancelling, paying and the words for each state', () => {
     expect(moneyFlag('PAID', 'OPEN')).toBe('disputed');
     expect(moneyFlag('PAID', 'LOST')).toBe('disputed');
     expect(moneyFlag('PAID', 'WON')).toBeNull();
+  });
+});
+
+describe('shippingFor (the PaymentIntent names who takes the order and where)', () => {
+  const snapshot = {
+    contactName: 'Priya',
+    addressLine1: '1 Faneuil Hall Square',
+    addressLine2: 'Apt 4',
+    addressCity: 'Boston, MA 02109',
+  };
+
+  it('splits the city line into city, state and ZIP', () => {
+    expect(shippingFor(snapshot)).toEqual({
+      name: 'Priya',
+      line1: '1 Faneuil Hall Square',
+      line2: 'Apt 4',
+      city: 'Boston',
+      state: 'MA',
+      postalCode: '02109',
+    });
+    expect(shippingFor({ ...snapshot, addressCity: 'Cambridge, MA 02138-1234' })).toMatchObject({
+      city: 'Cambridge',
+      state: 'MA',
+      postalCode: '02138-1234',
+    });
+  });
+
+  it('keeps a city line it cannot split whole, and leaves out what is missing', () => {
+    expect(shippingFor({ ...snapshot, addressLine2: null, addressCity: 'Boston' })).toEqual({
+      name: 'Priya',
+      line1: '1 Faneuil Hall Square',
+      city: 'Boston',
+    });
+    expect(shippingFor({ ...snapshot, addressLine2: '  ', addressCity: null })).toEqual({
+      name: 'Priya',
+      line1: '1 Faneuil Hall Square',
+    });
+  });
+
+  it('gives nothing without a street or a name', () => {
+    expect(shippingFor({ ...snapshot, addressLine1: null })).toBeNull();
+    expect(shippingFor({ ...snapshot, addressLine1: ' ' })).toBeNull();
+    expect(shippingFor({ ...snapshot, contactName: ' ' })).toBeNull();
   });
 });

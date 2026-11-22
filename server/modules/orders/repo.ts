@@ -395,6 +395,14 @@ export function findOrderForPayment(ctx: DbContext, orderId: string) {
   return db(ctx).order.findUnique({ where: { id: orderId }, select: paymentFields });
 }
 
+/** The name and delivery address kept on the order (S2.10), for the PaymentIntent's shipping. */
+export function findOrderShipping(ctx: DbContext, orderId: string) {
+  return db(ctx).order.findUnique({
+    where: { id: orderId },
+    select: { contactName: true, addressLine1: true, addressLine2: true, addressCity: true },
+  });
+}
+
 export function findOrderIdByIntent(ctx: DbContext, paymentIntentId: string) {
   return db(ctx).order.findUnique({
     where: { stripePaymentIntentId: paymentIntentId },
