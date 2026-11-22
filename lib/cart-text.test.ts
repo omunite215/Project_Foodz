@@ -111,11 +111,17 @@ describe('lines of the same dish (S7.2)', () => {
   });
 
   it('says which flavor was taken off (S3.4)', () => {
-    expect(droppedFlavorText(['Sesame oil'], 'Kimchi')).toBe(
+    expect(droppedFlavorText(['Sesame oil'], 'Kimchi', { noLonger: true })).toBe(
       "Sesame oil isn't offered for Kimchi any more, so we took it off.",
     );
-    expect(droppedFlavorText(['Garlic', 'Basil'], 'Pho')).toBe(
+    expect(droppedFlavorText(['Garlic', 'Basil'], 'Pho', { noLonger: true })).toBe(
       "Garlic and Basil aren't offered for Pho any more, so we took them off.",
+    );
+  });
+
+  it('never says "any more" for an extra the dish never offered (S1.16)', () => {
+    expect(droppedFlavorText(['Strawberry jam'], 'Gimbap')).toBe(
+      "Strawberry jam isn't offered for Gimbap, so we took it off.",
     );
   });
 });

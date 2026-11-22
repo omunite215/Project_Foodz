@@ -148,6 +148,7 @@ export function DishOrderPanel({
       slug: dish.slug,
       image: dish.image,
       priceCents: checked?.get(dish.id)?.priceCents ?? dish.priceCents,
+      flavorsOffered: dish.flavors,
     });
     setPhase('added');
     setMessage({

@@ -35,7 +35,7 @@ import {
   useCartActions,
   useCartMeta,
 } from '@/lib/data/cart';
-import { useCartDishActions, useCartDishes } from '@/lib/data/cart-dishes';
+import { useCartDishActions, useCartDishes, wereOffered } from '@/lib/data/cart-dishes';
 import { plural } from '@/lib/format';
 import { signInFor } from '@/lib/sign-in-reason';
 import { useOnline } from '@/lib/use-online';
@@ -129,7 +129,9 @@ export function CartPanel({
   const [dismissed, setDismissed] = useState<ReadonlySet<CartNoticeKind>>(new Set());
   const [removedCount, setRemovedCount] = useState(0);
   const [codeEnded, setCodeEnded] = useState<string | null>(null);
-  const [dropped, setDropped] = useState<ReadonlyMap<string, string[]>>(new Map());
+  const [dropped, setDropped] = useState<
+    ReadonlyMap<string, { flavors: string[]; wereOffered: boolean }>
+  >(new Map());
   /** Where focus goes once the next render is on screen (S7.1, design 2.7, 2.8). */
   const focusTarget = useRef<FocusTarget | null>(null);
   const focusAfter = (target: FocusTarget) => {
@@ -149,24 +151,34 @@ export function CartPanel({
   const baseRequest = { lines: lines.map(toQuoteLine), delivery };
 
   // Answers act on the cart as it is when they arrive.
-  const latest = useRef({ lines, cart, dishActions });
+  const latest = useRef({ lines, cart, dishActions, dishes });
   useEffect(() => {
-    latest.current = { lines, cart, dishActions };
+    latest.current = { lines, cart, dishActions, dishes };
   });
 
   /** What each answer says about the lines: names and photos, dishes gone, extras dropped. */
   const onAnswer = (answer: Quote) => {
     const now = latest.current;
+    // What the dishes offered before this answer: an extra taken off now was offered once, or
+    // never (an edited saved cart).
+    const before = now.dishes;
     now.dishActions.learn(
       answer.lines.flatMap((line) =>
         line.dish && line.unitPriceCents !== null
-          ? [{ id: line.menuItemId, ...line.dish, unitPriceCents: line.unitPriceCents }]
+          ? [
+              {
+                id: line.menuItemId,
+                ...line.dish,
+                unitPriceCents: line.unitPriceCents,
+                flavorsOffered: line.flavorsOffered,
+              },
+            ]
           : [],
       ),
     );
     const byKey = new Map(now.lines.map((line) => [line.key, line]));
     let gone = 0;
-    const newlyDropped = new Map<string, string[]>();
+    const newlyDropped = new Map<string, { flavors: string[]; wereOffered: boolean }>();
     for (const answered of answer.lines) {
       const line = byKey.get(answered.key);
       if (!line) continue;
@@ -174,7 +186,10 @@ export function CartPanel({
         now.cart.remove(line.id);
         gone += 1;
       } else if (answered.droppedFlavors.length > 0) {
-        newlyDropped.set(line.key, answered.droppedFlavors);
+        newlyDropped.set(line.key, {
+          flavors: answered.droppedFlavors,
+          wereOffered: wereOffered(before.get(line.menuItemId), answered.droppedFlavors),
+        });
         now.cart.edit(line.id, { flavors: answered.flavors, note: line.note });
       }
     }
@@ -266,7 +281,8 @@ export function CartPanel({
       unitCents,
       soldOut,
       priceChange,
-      droppedFlavors: dropped.get(line.key) ?? [],
+      droppedFlavors: dropped.get(line.key)?.flavors ?? [],
+      droppedWereOffered: dropped.get(line.key)?.wereOffered ?? false,
       flavorsOffered: answer ? answer.flavorsOffered : null,
     });
   }

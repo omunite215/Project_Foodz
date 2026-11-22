@@ -37,6 +37,8 @@ export interface CartLineView {
   /** "Now $13.99 (was $12.99)" (S3.3). */
   priceChange: { nowCents: number; wasCents: number } | null;
   droppedFlavors: readonly string[];
+  /** The dish offered the dropped extras once ("… any more"), rather than never (S1.16). */
+  droppedWereOffered?: boolean;
   /** What the dish offers, for the editor; null until the server has said. */
   flavorsOffered: readonly string[] | null;
 }
@@ -254,7 +256,9 @@ export function CartLineItem({
             {line.droppedFlavors.length > 0 ? (
               <p className="flex items-start gap-1.5 text-body-5 text-neutral-3">
                 <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-                {droppedFlavorText(line.droppedFlavors, title)}
+                {droppedFlavorText(line.droppedFlavors, title, {
+                  noLonger: line.droppedWereOffered,
+                })}
               </p>
             ) : null}
           </div>

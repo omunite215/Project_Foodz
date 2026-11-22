@@ -103,7 +103,12 @@ export const PriceDown: Story = {
 
 /** An extra the dish no longer offers was taken off (S3.4). */
 export const ExtraDropped: Story = {
-  args: { line: view(kimchi, { droppedFlavors: ['Sesame oil'] }) },
+  args: { line: view(kimchi, { droppedFlavors: ['Sesame oil'], droppedWereOffered: true }) },
+};
+
+/** An extra the dish never offered (an edited saved cart) was taken off: no "any more" (S1.16). */
+export const ExtraNeverOffered: Story = {
+  args: { line: view(gimbap, { droppedFlavors: ['Strawberry jam'] }) },
 };
 
 /** At 20, "+" is blocked and says why (S1.6). */

@@ -41,10 +41,19 @@ export const unitLabel = (quantity: number, unitCents: number) =>
 export const priceChangeText = (nowCents: number, wasCents: number) =>
   `Now ${formatPrice(nowCents)} (was ${formatPrice(wasCents)})`;
 
-/** "Sesame oil isn't offered for Kimchi any more, so we took it off." */
-export function droppedFlavorText(flavors: readonly string[], dish: string): string {
+/**
+ * "Sesame oil isn't offered for Kimchi any more, so we took it off." (S3.4). "Any more" only when
+ * the dish did offer it once (`noLonger`); an extra it never offered reads "Strawberry jam isn't
+ * offered for Gimbap, so we took it off." (S1.16).
+ */
+export function droppedFlavorText(
+  flavors: readonly string[],
+  dish: string,
+  { noLonger = false }: { noLonger?: boolean } = {},
+): string {
   const names = joinWords(flavors, 'and');
-  return `${names} ${flavors.length === 1 ? "isn't" : "aren't"} offered for ${dish} any more, so we took ${flavors.length === 1 ? 'it' : 'them'} off.`;
+  const one = flavors.length === 1;
+  return `${names} ${one ? "isn't" : "aren't"} offered for ${dish}${noLonger ? ' any more' : ''}, so we took ${one ? 'it' : 'them'} off.`;
 }
 
 export function joinWords(words: readonly string[], last: 'and' | 'or'): string {
