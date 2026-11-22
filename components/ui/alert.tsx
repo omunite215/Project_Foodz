@@ -14,7 +14,7 @@ const alertVariants = cva(
         error: 'bg-tag-4-bg [&>svg]:text-destructive',
         success: 'bg-brand-soft [&>svg]:text-brand-strong',
         info: 'bg-neutral-7 [&>svg]:text-neutral-3',
-        warning: 'bg-tag-6-bg [&>svg]:text-tag-6',
+        warning: 'bg-tag-6-bg [&>svg]:text-warning-strong',
       },
     },
     defaultVariants: {
