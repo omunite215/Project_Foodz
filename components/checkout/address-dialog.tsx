@@ -3,7 +3,7 @@
 import { X } from 'lucide-react';
 import { useRef } from 'react';
 import type { AddressDto, StoreArea } from '@/server/modules/addresses/schema';
-import { AddressForm } from '@/components/addresses/address-form';
+import { AddressForm, type AddressFormProps } from '@/components/addresses/address-form';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useDialogHistory } from '@/lib/dialog-history';
@@ -13,6 +13,9 @@ import { useDialogHistory } from '@/lib/dialog-history';
  * full screen on phones and a centred 560 px dialog from 768 px. Back closes it. Rendered outside
  * the checkout form, so its own form never sends checkout's.
  */
+
+/** Said with the delivery check when the dialog opens filled in (S2.5, design 2.8). */
+const PREFILLED_NOTE = 'Add the apartment and instructions, then save.';
 
 export interface AddressDialogProps {
   open: boolean;
@@ -25,6 +28,8 @@ export interface AddressDialogProps {
   onSaved: (address: AddressDto, edited: boolean) => void;
   /** Where focus goes when it closes (the opener). */
   returnFocus: () => void;
+  /** A new address that starts from the place checked in the cart (S2.5, D10). */
+  initial?: AddressFormProps['initial'];
 }
 
 export function AddressDialog({
@@ -36,6 +41,7 @@ export function AddressDialog({
   onClose,
   onSaved,
   returnFocus,
+  initial = null,
 }: AddressDialogProps) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const history = useDialogHistory('foodzAddress', open, onClose);
@@ -83,6 +89,7 @@ export function AddressDialog({
               firstAddress={firstAddress}
               canSave
               draftOwner={draftOwner}
+              initial={address || !initial ? null : { ...initial, note: PREFILLED_NOTE }}
               onSaved={(saved) => {
                 history.close();
                 onSaved(saved, address !== null);

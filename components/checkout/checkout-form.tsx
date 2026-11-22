@@ -38,6 +38,7 @@ import {
 } from '@/server/modules/orders/text';
 import { DemoNotice } from '@/components/account/demo-notice';
 import { PromoSection } from '@/components/cart/promo';
+import { UNPAID_ORDER_QUERY_KEY } from '@/components/cart/use-unpaid-order';
 import {
   quoteQueryKey,
   type QuoteRequest,
@@ -94,6 +95,7 @@ import {
   useKeepCartAsGuest,
 } from '@/lib/data/cart';
 import { useCartDishActions, useCartDishes } from '@/lib/data/cart-dishes';
+import { useCheckedAddress } from '@/lib/data/checked-address';
 import { clockAt } from '@/server/modules/orders/text';
 import { formatClock, formatPrice } from '@/lib/format';
 import { orderHref } from '@/lib/order-text';
@@ -102,6 +104,7 @@ import { DEFAULT_PHONE_COUNTRY } from '@/lib/phone';
 import type { PhoneCountry } from '@/lib/phone-countries';
 import { previousRoute } from '@/lib/route-memory';
 import { signInFor } from '@/lib/sign-in-reason';
+import { useHydrated } from '@/lib/use-hydrated';
 import { useMinuteClock } from '@/lib/use-minute-clock';
 import { useOnline } from '@/lib/use-online';
 import { cn } from '@/lib/utils';
@@ -200,6 +203,8 @@ function focusSoon(target: HTMLElement | null | undefined) {
   requestAnimationFrame(() => target?.focus());
 }
 
+const NO_CART_META = { code: null, addressId: null, placed: null };
+
 const COARSE_NARROW = '(pointer: coarse) and (width < 64rem)';
 const TEXT_TYPES = new Set(['text', 'tel', 'email', 'search', 'number', '']);
 
@@ -216,8 +221,14 @@ export function Checkout({
   const online = useOnline();
   const now = useMinuteClock();
   const cartOpen = useCartOpen();
-  const { lines, itemCount, isReady } = useCart();
-  const meta = useCartMeta();
+  // The cart lives in this browser and is ready on the first render there, but the server's
+  // HTML is drawn without it: both wait until the page has hydrated, so the two agree.
+  const hydrated = useHydrated();
+  const cartNow = useCart();
+  const { lines, itemCount } = cartNow;
+  const isReady = cartNow.isReady && hydrated;
+  const storedMeta = useCartMeta();
+  const meta = hydrated ? storedMeta : NO_CART_META;
   const cart = useCartActions();
   const dishes = useCartDishes();
   const dishActions = useCartDishActions();
@@ -285,6 +296,25 @@ export function Checkout({
     open: false,
     address: null,
   });
+  // The address she checked in the cart before signing in, offered once as her first one (S2.5).
+  const checked = useCheckedAddress();
+  const guestStart =
+    !demo && page.addresses.length === 0 && checked?.city
+      ? {
+          line1: checked.line1,
+          city: checked.city,
+          hasHouseNumber: checked.hasHouseNumber ?? true,
+          point: { lat: checked.lat, lng: checked.lng },
+        }
+      : null;
+  const offeredGuestStart = useRef(false);
+  const hasGuestStart = guestStart !== null;
+  useEffect(() => {
+    if (!hasGuestStart || offeredGuestStart.current) return;
+    offeredGuestStart.current = true;
+    dialogOpener.current = null;
+    setDialog({ open: true, address: null });
+  }, [hasGuestStart]);
   const [typing, setTyping] = useState(false);
   const [undo, setUndo] = useState<{ line: CartLine; title: string } | null>(null);
   const [removingCard, setRemovingCard] = useState<SavedCardDto | null>(null);
@@ -350,6 +380,7 @@ export function Checkout({
           writePlacedHere(here);
           setPlaced(here);
           cart.clear();
+          cart.setPlaced({ orderId: here.orderId, number: here.number });
         }
         writeAttempt(null);
       })();
@@ -784,6 +815,7 @@ export function Checkout({
       markClearCart(orderId);
     } else {
       cart.clear();
+      cart.setPlaced({ orderId, number });
     }
     goToOrder(orderId);
   };
@@ -817,7 +849,14 @@ export function Checkout({
     const status = outcome.data;
     if (status.kind === 'placed') placedNow(status.orderId, status.number, false);
     else if (status.kind === 'awaitingPayment') goToOrder(status.orderId);
-    else showNotSent();
+    else if (status.kind === 'failed') {
+      // The bank (or Stripe) said no while the page couldn't tell: the decline, as in S6.8.
+      showDecline(
+        status.decline?.code ?? null,
+        status.decline?.declineCode ?? null,
+        method === 'card' && !newCard ? cardChoice : null,
+      );
+    } else showNotSent();
   }
 
   // While the status panel shows: ask again every 10 s, and when back online (S7.3).
@@ -1006,19 +1045,21 @@ export function Checkout({
     }
     // Declined: the server learns it now, the attempt ends, a new press is a new attempt (U2).
     await callAction(() => orderStatusAction({ orderId, confirmed: true }));
+    showDecline(outcome.code, outcome.declineCode, saved);
+  }
+
+  /** A decline (design 2.18): everything stays but the card fields; the alert says why. */
+  function showDecline(code: string | null, declineCode: string | null, saved: string | null) {
     writeAttempt(null);
     backToForm();
     const card = saved ? page.savedCards.find((item) => item.id === saved) : null;
-    const text = declineMessage(
-      { code: outcome.code, declineCode: outcome.declineCode },
-      card?.label,
-    );
+    const text = declineMessage({ code, declineCode }, card?.label);
     const spokenText = card ? text.replace(card.label, card.spoken) : text;
     if (saved) setCardChoice(NEW_CARD);
     else fields.current?.clear();
     setPaymentAlert({ key: 'decline', variant: 'error', text });
     announce(spokenText);
-    if (outcome.code === 'incorrect_cvc' && !saved) {
+    if (code === 'incorrect_cvc' && !saved) {
       requestAnimationFrame(() => fields.current?.showCvcError(text));
     } else {
       focusSoon(paymentAlertRef.current);
@@ -1134,6 +1175,7 @@ export function Checkout({
       announce(text);
       focusSoon(pageNoticeRef.current);
       void queryClient.invalidateQueries({ queryKey: ['cart-quote'] });
+      void queryClient.invalidateQueries({ queryKey: UNPAID_ORDER_QUERY_KEY });
       return;
     }
     const text =
@@ -1435,6 +1477,7 @@ export function Checkout({
         store={store}
         firstAddress={page.addressCount === 0}
         draftOwner={draftOwner}
+        initial={dialog.address ? null : guestStart}
         onClose={() => setDialog((current) => ({ ...current, open: false }))}
         onSaved={(address, edited) => {
           setChosenId(address.id);
@@ -1449,7 +1492,10 @@ export function Checkout({
           if (opener?.isConnected) opener.focus();
           else
             requestAnimationFrame(() =>
-              addressGroupRef.current?.querySelector<HTMLInputElement>('input:checked')?.focus(),
+              (
+                addressGroupRef.current?.querySelector<HTMLInputElement>('input:checked') ??
+                document.querySelector<HTMLElement>('[data-add-address]')
+              )?.focus(),
             );
         }}
       />
