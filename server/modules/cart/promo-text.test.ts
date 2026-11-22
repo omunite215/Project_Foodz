@@ -36,7 +36,7 @@ describe('refusal sentences (S4 table)', () => {
       [
         'WELCOME10',
         { code: 'onHold', rule: 'R7', orderNumber: '1042' },
-        "WELCOME10 is on hold for your unpaid order 1042. It frees up if that order isn't paid within 15 minutes.",
+        "WELCOME10 is on hold for your unpaid order 1042. It frees up if you cancel that order, or if it isn't paid within 15 minutes.",
       ],
       [
         'KBBQ5',

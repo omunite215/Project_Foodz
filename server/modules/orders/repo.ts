@@ -185,6 +185,20 @@ export async function forceCouponUse(ctx: DbContext, couponId: string) {
   });
 }
 
+/**
+ * Locks a code's row until the commit and reads its limits, so a late payment's revive and a
+ * checkout taking the same code can't both count on the last use.
+ */
+export async function lockCouponLimits(ctx: DbContext, couponId: string) {
+  const rows = await db(ctx).$queryRaw<
+    { used_count: number; usage_limit: number | null; per_user_limit: number | null }[]
+  >`SELECT used_count, usage_limit, per_user_limit FROM coupons WHERE id = ${couponId}::uuid FOR UPDATE`;
+  const row = rows[0];
+  return row
+    ? { usedCount: row.used_count, usageLimit: row.usage_limit, perUserLimit: row.per_user_limit }
+    : null;
+}
+
 /** Gives a use back. */
 export async function returnCouponUse(ctx: DbContext, couponId: string) {
   await db(ctx).coupon.updateMany({
@@ -395,6 +409,14 @@ export function findOrderForPayment(ctx: DbContext, orderId: string) {
   return db(ctx).order.findUnique({ where: { id: orderId }, select: paymentFields });
 }
 
+/** The name and delivery address kept on the order (S2.10), for the PaymentIntent's shipping. */
+export function findOrderShipping(ctx: DbContext, orderId: string) {
+  return db(ctx).order.findUnique({
+    where: { id: orderId },
+    select: { contactName: true, addressLine1: true, addressLine2: true, addressCity: true },
+  });
+}
+
 export function findOrderIdByIntent(ctx: DbContext, paymentIntentId: string) {
   return db(ctx).order.findUnique({
     where: { stripePaymentIntentId: paymentIntentId },
@@ -469,6 +491,22 @@ export function findDueUnpaid(ctx: DbContext, before: Date, take: number) {
   return db(ctx).order.findMany({
     where: { status: 'PENDING_PAYMENT', expiresAt: { lte: before } },
     orderBy: { expiresAt: 'asc' },
+    take,
+    select: { id: true },
+  });
+}
+
+/** Card payments Foodz decided to give back and hasn't refunded yet, for the refund sweep. */
+export function findUnsettledRefunds(ctx: DbContext, before: Date, take: number) {
+  return db(ctx).order.findMany({
+    where: {
+      autoRefundReason: { not: null },
+      paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] },
+      stripePaymentIntentId: { not: null },
+      updatedAt: { lte: before },
+    },
+    // Newest first, so a refund that keeps failing can't hold back the ones behind it.
+    orderBy: { updatedAt: 'desc' },
     take,
     select: { id: true },
   });

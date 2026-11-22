@@ -223,6 +223,8 @@ export function StripeCardFields({
       }
       {
         stripeRef.current = stripe;
+        // No `fonts` (D14): Stripe.js fetches a font stylesheet from this page, which our CSP's
+        // connect-src refuses; the fields use the fallback stack in STYLE instead.
         const elements = stripe.elements({ locale: 'en' });
         const options = { style: STYLE, classes: CLASSES, disabled };
         const created: Elements = {
@@ -329,9 +331,17 @@ export function StripeCardFields({
     const errorId = `${idPrefix}-${field}-error`;
     return (
       <div key={field} className="min-w-0">
-        <p id={`${idPrefix}-${field}-label`} className="block text-body-4 text-neutral-3">
+        {/* Our visible label outside Stripe's frame; pressing it puts the caret in the field
+            (design 2.14), as a native label would. A pointer convenience only: Tab reaches the
+            frame itself, which carries Stripe's own accessible name. */}
+        {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+        <label
+          id={`${idPrefix}-${field}-label`}
+          onClick={() => elementsRef.current?.[field].focus()}
+          className="block text-body-4 text-neutral-3"
+        >
           {CARD_FIELD_LABELS[field]}
-        </p>
+        </label>
         <div
           data-stripe-field={field}
           data-invalid={state.shown ? 'true' : undefined}

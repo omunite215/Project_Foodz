@@ -120,7 +120,10 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
       setConfirmingSince(Date.now());
     } else {
       forgetConfirming(initial.id);
-      if (initial.status !== 'PENDING_PAYMENT' && takeClearCart(initial.id)) cart.clear();
+      if (initial.status !== 'PENDING_PAYMENT' && takeClearCart(initial.id)) {
+        cart.clear();
+        cart.setPlaced({ orderId: initial.id, number: initial.number });
+      }
     }
     if (isFresh) arrived(initial);
     setArrivalChecked(true);
@@ -140,7 +143,10 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
       setConfirming(false);
       setConfirmingSince(null);
       forgetConfirming(next.id);
-      if (takeClearCart(next.id)) cart.clear();
+      if (takeClearCart(next.id)) {
+        cart.clear();
+        cart.setPlaced({ orderId: next.id, number: next.number });
+      }
       arrived(next);
     }
   };

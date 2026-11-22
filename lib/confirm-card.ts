@@ -20,14 +20,24 @@ export type ConfirmOutcome =
   | { kind: 'unreachable' };
 
 /**
- * Stripe's answer in words of our own outcome. Only the bank's own answer (a card error, or a
- * bank check that failed) is a decline; anything else is never worded as one, and the server is
- * asked what became of the payment instead.
+ * Stripe's answer in words of our own outcome. A decline is the bank's own answer (a card error,
+ * or a bank check that failed), or Stripe saying the attempt is over (the PaymentIntent it sends
+ * back wants a new card). Anything else is never worded as one, and the server is asked what
+ * became of the payment instead.
  */
 export function outcomeFromError(
-  error: Pick<StripeError, 'type' | 'code' | 'decline_code'>,
+  error: Pick<StripeError, 'type' | 'code' | 'decline_code'> & {
+    payment_intent?: Pick<PaymentIntent, 'status'> | null;
+  },
 ): ConfirmOutcome {
-  if (error.type === 'card_error' || error.code === 'payment_intent_authentication_failure') {
+  const attemptOver =
+    error.payment_intent?.status === 'requires_payment_method' ||
+    error.payment_intent?.status === 'canceled';
+  if (
+    error.type === 'card_error' ||
+    error.code === 'payment_intent_authentication_failure' ||
+    attemptOver
+  ) {
     return { kind: 'declined', code: error.code ?? null, declineCode: error.decline_code ?? null };
   }
   return { kind: 'unreachable' };

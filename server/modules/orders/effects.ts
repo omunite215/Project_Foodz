@@ -134,6 +134,14 @@ export async function runEffects(effects: readonly OrderEffect[]) {
     (previous, effect) =>
       previous.then(() =>
         runEffect(effect).catch((error: unknown) => {
+          if (effect.kind === 'refund') {
+            // Money is held for an order that isn't coming until the refund sweep catches it.
+            logger.error(
+              { err: error, orderId: effect.orderId, alert: 'order-refund-not-queued' },
+              'refund not queued; the refund sweep will make it',
+            );
+            return;
+          }
           logger.error({ err: error, effect: effect.kind }, 'order follow-up failed');
         }),
       ),

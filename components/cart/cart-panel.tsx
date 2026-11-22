@@ -47,6 +47,7 @@ import {
   CartNotices,
   noticeText,
 } from './cart-notices';
+import { useUnpaidOrder } from './use-unpaid-order';
 import { CheckoutBar } from './checkout-bar';
 import { setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
 import { DeliveryBlock, useSavedAddresses } from './delivery-block';
@@ -118,6 +119,7 @@ export function CartPanel({
   // signing in (2.15, S2.6), and "Change" lists the saved ones. With none saved, a checked
   // address still counts.
   const addressBook = useSavedAddresses(signedIn);
+  const unpaidOrder = useUnpaidOrder(signedIn).data ?? null;
   const hasSaved = (addressBook.data?.addresses.length ?? 0) > 0;
   const checked =
     storedPoint && (!signedIn || (addressBook.isFetched && !hasSaved)) ? storedPoint : null;
@@ -277,6 +279,8 @@ export function CartPanel({
         ? 'lines'
         : null;
   const candidates: (CartNotice | null)[] = [
+    unpaidOrder ? { kind: 'unpaid', ...unpaidOrder } : null,
+    meta.placed && isReady && lines.length === 0 ? { kind: 'placed', ...meta.placed } : null,
     known && !known.store.isOpen
       ? { kind: 'closed', text: storeClosedText(known.store.opensAt) }
       : null,
@@ -455,9 +459,11 @@ export function CartPanel({
           notices={notices}
           onDismiss={(kind) => {
             if (kind === 'priceChanged') dishActions.acknowledgePrices(shownPrices);
+            if (kind === 'placed') cart.setPlaced(null);
             setDismissed((current) => new Set([...current, kind]));
           }}
           onRemoveSoldOut={removeSoldOut}
+          onNavigate={onNavigate}
         />
 
         {empty ? (

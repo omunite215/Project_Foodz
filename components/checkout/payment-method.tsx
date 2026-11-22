@@ -1,9 +1,10 @@
 'use client';
 
 import { Banknote, CreditCard, HandCoins, type LucideIcon } from 'lucide-react';
-import type { ReactNode, Ref } from 'react';
+import { type ReactNode, type Ref, useRef } from 'react';
 import { FormAlert } from '@/components/forms/form-alert';
 import { cashBoxText, type PayMethod } from '@/lib/checkout-text';
+import { useMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { RadioCard } from './radio-card';
 
@@ -91,6 +92,18 @@ export function PaymentMethod({
   card,
 }: PaymentMethodProps) {
   const choose = (value: string) => onMethod(value === 'card' ? 'card' : 'cash');
+  // A method she switches to: its block fades in from 4 px up (design Motion table).
+  const swapRef = useRef<HTMLDivElement>(null);
+  const shownMethod = useRef(method);
+  useMotion(
+    (motion) => {
+      const switched = shownMethod.current !== method;
+      shownMethod.current = method;
+      if (!switched || motion.reduced || !swapRef.current) return;
+      motion.from(swapRef.current, { y: -4, opacity: 0, duration: 0.15, ease: 'power2.out' });
+    },
+    { scope: swapRef, dependencies: [method] },
+  );
   return (
     <section aria-labelledby="payment-title">
       <h2 id="payment-title" className="text-body-2 font-semibold text-neutral-1">
@@ -130,18 +143,20 @@ export function PaymentMethod({
           </RadioCard>
         </div>
       </fieldset>
-      {method === 'cash' ? (
-        <p
-          className={cn(
-            'mt-4 flex items-start gap-3 rounded-xl bg-neutral-7 p-4 text-body-5 text-neutral-1 md:text-body-4',
-          )}
-        >
-          <HandCoins className="mt-0.5 size-5 shrink-0 text-neutral-3" aria-hidden />
-          <span>{cashBoxText(totalCents, tipCents)}</span>
-        </p>
-      ) : (
-        card
-      )}
+      <div ref={swapRef}>
+        {method === 'cash' ? (
+          <p
+            className={cn(
+              'mt-4 flex items-start gap-3 rounded-xl bg-neutral-7 p-4 text-body-5 text-neutral-1 md:text-body-4',
+            )}
+          >
+            <HandCoins className="mt-0.5 size-5 shrink-0 text-neutral-3" aria-hidden />
+            <span>{cashBoxText(totalCents, tipCents)}</span>
+          </p>
+        ) : (
+          card
+        )}
+      </div>
     </section>
   );
 }

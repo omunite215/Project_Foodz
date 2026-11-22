@@ -183,6 +183,20 @@ describe('the other order emails (design 6.2)', () => {
     expect(cash.text).toContain('You cancelled order 1042. Nothing was charged.');
   });
 
+  it('cancelled: names what is still to come back when part was refunded before (security S2)', () => {
+    const partly = renderOrderEmail(
+      'cancelled',
+      order({
+        status: 'CANCELLED',
+        payment: { ...order().payment, status: 'PARTIALLY_REFUNDED' },
+      }),
+      { ...options, refund: { amountCents: 5082, at: '2026-11-20T15:00:00Z' } },
+    );
+    expect(partly.text).toContain(
+      "You cancelled order 1042. We're refunding $50.82 to Visa •••• 4242. It can take 5 to 10 business days to appear.",
+    );
+  });
+
   it('refunded in full and in part, with the date in the store’s zone', () => {
     const full = renderOrderEmail('refunded', order(), {
       ...options,

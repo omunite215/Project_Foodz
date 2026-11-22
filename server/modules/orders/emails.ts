@@ -169,12 +169,14 @@ export function renderOrderEmail(
     case 'cancelled': {
       // D45: her own cancellation of a paid card order sends this email only, with the refund.
       const paidByCard = order.payment.method === 'card' && order.payment.status !== 'UNPAID';
+      // The amount promised at cancellation: less than the total when part was refunded before.
+      const refunding = options.refund ? formatPrice(options.refund.amountCents) : total;
       return notice(
         order,
         options,
         `Order ${order.number} is cancelled`,
         paidByCard
-          ? `You cancelled order ${order.number}. We're refunding ${total} to ${cardOf(order)}. ${REFUND_DELAY}`
+          ? `You cancelled order ${order.number}. We're refunding ${refunding} to ${cardOf(order)}. ${REFUND_DELAY}`
           : `You cancelled order ${order.number}. Nothing was charged.`,
       );
     }
