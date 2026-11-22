@@ -18,6 +18,7 @@ import {
   addEvent,
   allDishesAvailable,
   attemptKeyTaken,
+  countCustomerUses,
   findCustomer,
   findDueUnpaid,
   findEvents,
@@ -26,6 +27,7 @@ import {
   findRedemption,
   findUnsettledRefunds,
   forceCouponUse,
+  lockCouponLimits,
   lockCustomerOrders,
   lockOrder,
   type OrderPaymentRow,
@@ -34,7 +36,7 @@ import {
   setRedemptionStatus,
   updateOrder,
 } from './repo';
-import { decideExpiry, decideLatePayment, decidePayment } from './state';
+import { codeStillFits, decideExpiry, decideLatePayment, decidePayment } from './state';
 
 /*
  * One idempotent step for everything Stripe says about a payment (B6, B7): the webhook, the
@@ -75,6 +77,26 @@ async function releaseCode(ctx: DbContext, orderId: string) {
   if (!redemption || redemption.status === 'RELEASED') return;
   await setRedemptionStatus(ctx, orderId, 'RELEASED');
   await returnCouponUse(ctx, redemption.couponId);
+}
+
+/**
+ * The order's code as a late payment finds it (security S11). A use that was given back is read
+ * under the code's row lock; this customer's other uses are stable under the customer's order
+ * lock, which the payment step already holds.
+ */
+async function lateCodeFacts(ctx: DbContext, order: OrderPaymentRow) {
+  const redemption = await findRedemption(ctx, order.id);
+  if (!redemption) return null;
+  if (redemption.status !== 'RELEASED') {
+    return { released: false, customerUses: 0, perUserLimit: null, usedCount: 0, usageLimit: null };
+  }
+  const limits = await lockCouponLimits(ctx, redemption.couponId);
+  if (!limits) return null;
+  const customerUses =
+    limits.perUserLimit === null
+      ? 0
+      : await countCustomerUses(ctx, redemption.couponId, order.userId);
+  return { released: true, customerUses, ...limits };
 }
 
 /** U10: a revived order keeps its code at the price paid, even past the code's limit. */
@@ -168,11 +190,13 @@ async function decideAndApply(
         !order.attemptKey ||
         !(await attemptKeyTaken(ctx, order.userId, order.attemptKey, order.id));
       const account = await findCustomer(ctx, order.userId);
+      const code = await lateCodeFacts(ctx, order);
       const verdict = decideLatePayment({
         dishesAvailable: await allDishesAvailable(ctx, order.id),
         storeOpen: facts.storeOpen,
         attemptKeyFree: keyFree,
         accountActive: Boolean(account && !account.deletedAt && !account.banned),
+        codeFits: codeStillFits(code, order.status === 'FAILED' ? 'declined' : 'expired'),
       });
       if (verdict === 'revive') {
         await updateOrder(ctx, order.id, order.version, {

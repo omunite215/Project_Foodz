@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canCancel,
+  codeStillFits,
   decideExpiry,
   decideLatePayment,
   decidePayment,
@@ -130,6 +131,7 @@ describe('a late payment (U10, S9.5)', () => {
     storeOpen: true,
     attemptKeyFree: true,
     accountActive: true,
+    codeFits: true,
   };
 
   it('places the order after all when every dish is available, the store is open and the key is free', () => {
@@ -144,6 +146,43 @@ describe('a late payment (U10, S9.5)', () => {
 
   it('refunds in full when the account was deleted or suspended meanwhile (security S3)', () => {
     expect(decideLatePayment({ ...unchanged, accountActive: false })).toBe('refund');
+  });
+
+  it('refunds in full when its code no longer fits (security S11)', () => {
+    expect(decideLatePayment({ ...unchanged, codeFits: false })).toBe('refund');
+  });
+});
+
+describe('whether a late payment keeps its code (U10, security S11)', () => {
+  const released = {
+    released: true,
+    customerUses: 0,
+    perUserLimit: 1,
+    usedCount: 0,
+    usageLimit: 10,
+  };
+
+  it('keeps no code, or a use the order still holds, whatever the limits', () => {
+    expect(codeStillFits(null, 'declined')).toBe(true);
+    const held = { ...released, released: false, customerUses: 5, usedCount: 10 };
+    expect(codeStillFits(held, 'declined')).toBe(true);
+    expect(codeStillFits(held, 'expired')).toBe(true);
+  });
+
+  it('takes a use given back again only within the customer’s own limit', () => {
+    expect(codeStillFits(released, 'declined')).toBe(true);
+    expect(codeStillFits({ ...released, customerUses: 1 }, 'declined')).toBe(false);
+    expect(codeStillFits({ ...released, customerUses: 1 }, 'expired')).toBe(false);
+    expect(codeStillFits({ ...released, customerUses: 3, perUserLimit: null }, 'declined')).toBe(
+      true,
+    );
+  });
+
+  it('holds a declined attempt to the code’s overall limit; only the expiry race goes past it', () => {
+    const usedUp = { ...released, usedCount: 10 };
+    expect(codeStillFits(usedUp, 'declined')).toBe(false);
+    expect(codeStillFits(usedUp, 'expired')).toBe(true);
+    expect(codeStillFits({ ...usedUp, usageLimit: null }, 'declined')).toBe(true);
   });
 });
 

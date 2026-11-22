@@ -185,6 +185,20 @@ export async function forceCouponUse(ctx: DbContext, couponId: string) {
   });
 }
 
+/**
+ * Locks a code's row until the commit and reads its limits, so a late payment's revive and a
+ * checkout taking the same code can't both count on the last use.
+ */
+export async function lockCouponLimits(ctx: DbContext, couponId: string) {
+  const rows = await db(ctx).$queryRaw<
+    { used_count: number; usage_limit: number | null; per_user_limit: number | null }[]
+  >`SELECT used_count, usage_limit, per_user_limit FROM coupons WHERE id = ${couponId}::uuid FOR UPDATE`;
+  const row = rows[0];
+  return row
+    ? { usedCount: row.used_count, usageLimit: row.usage_limit, perUserLimit: row.per_user_limit }
+    : null;
+}
+
 /** Gives a use back. */
 export async function returnCouponUse(ctx: DbContext, couponId: string) {
   await db(ctx).coupon.updateMany({
