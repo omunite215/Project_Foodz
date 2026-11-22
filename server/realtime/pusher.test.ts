@@ -18,6 +18,7 @@ const notification = {
   title: 'Order on its way',
   body: 'Riley picked it up',
   link: null,
+  kind: 'general' as const,
 };
 
 beforeEach(() => {
@@ -54,6 +55,7 @@ describe('publish', () => {
       publish('private-ops', 'order.status-changed', {
         orderId: 'o1',
         status: 'READY',
+        version: 4,
         at: new Date().toISOString(),
       }),
     ).resolves.toBeUndefined();

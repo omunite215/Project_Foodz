@@ -24,6 +24,8 @@ export async function notify(input: NotifyInput): Promise<{ id: string }> {
     title: saved.title,
     body: saved.body,
     link: saved.link,
+    // F5 order notices pass their order and step here (contract: notification.created).
+    kind: 'general',
   });
 
   if (data.email) {

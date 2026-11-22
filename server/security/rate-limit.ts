@@ -183,6 +183,59 @@ const POLICIES = {
   'webhook.stripe': { points: 600, duration: 60 },
   // Price and availability re-checks before adding to the cart; about one per add.
   'menu.check': { points: 60, duration: 60 },
+  // The staff order board (F5 B8), per account. Reads cover the snapshot, refetched cards, the
+  // dish list and the detail; the board updates moves from events and refetches only new
+  // orders, orders that left, and money changes.
+  'board.read': { points: 120, duration: 60 },
+  'order.find': {
+    points: 60,
+    duration: 60,
+    message: 'Too many searches. Try again in {wait}.',
+  },
+  'order.move': {
+    points: 120,
+    duration: 60,
+    message: "You're moving orders very fast. Try again in {wait}.",
+  },
+  'order.undo': { points: 60, duration: 60 },
+  'order.move-back': {
+    points: 30,
+    duration: 3600,
+    message: "You've moved orders back many times this hour. Try again in {wait}.",
+  },
+  // A6.6: the 21st refusal in an hour is refused (an alert goes at the 6th).
+  'order.refuse': {
+    points: 20,
+    duration: 3600,
+    message: "You've refused 20 orders this hour. Ask an admin to take over.",
+  },
+  // A7.11: the 31st staff cancellation in an hour is refused (an alert goes at the 11th).
+  'order.staff-cancel': {
+    points: 30,
+    duration: 3600,
+    message: "You've cancelled 30 orders this hour. Ask an admin to take over.",
+  },
+  'order.handover': {
+    points: 30,
+    duration: 3600,
+    message: "You've marked many hand-overs this hour. Try again in {wait}.",
+  },
+  // "Order again" on the order page and the orders list (S7.5).
+  'order.reorder': { points: 30, duration: 60 },
+  // "86 it" from the board (KITCHEN, ADMIN).
+  'menu.availability': {
+    points: 60,
+    duration: 3600,
+    message: "You've changed dish availability many times this hour. Try again in {wait}.",
+  },
+  // Step-up codes before giving money back (A7.10); the two-factor lockout also applies.
+  'staff.step-up': {
+    points: 10,
+    duration: 600,
+    failClosed: true,
+    message: 'Too many wrong codes. Try again in {wait}.',
+    unavailableMessage: "We can't check codes right now. Please try again in a minute.",
+  },
   'contact.submit': { points: 3, duration: 600 },
   'support.create': { points: 5, duration: 3600 },
   'delivery.otp': { points: 5, duration: 900, failClosed: true },

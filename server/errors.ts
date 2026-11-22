@@ -33,6 +33,13 @@ export type AppErrorCode =
   | 'KITCHEN_STARTED'
   | 'PAYMENT_IN_PROGRESS'
   | 'ORDER_NOT_PAYABLE'
+  // The staff order board (F5). `details` per code: BoardRefusalDetails in board/schema.ts.
+  | 'ORDER_CHANGED'
+  | 'INVALID_STATE'
+  | 'UNDO_NOT_ALLOWED'
+  | 'STEP_UP_REQUIRED'
+  | 'STEP_UP_INVALID'
+  | 'STEP_UP_LOCKED'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'
