@@ -43,7 +43,7 @@
     "@tanstack/react-db": "1.0.0-rc.1.5",
     "@tanstack/react-form": "1.33.5",
     "@tanstack/react-pacer": "0.24.1",
-    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-query": "5.108.1",
     "@tanstack/react-ranger": "0.0.5",
     "@tanstack/react-store": "0.11.2",
     "@tanstack/react-table": "9.3.1",
