@@ -63,6 +63,7 @@ const account = await import('@/server/modules/account/actions');
 const service = await import('@/server/modules/orders/service');
 const sync = await import('@/server/modules/orders/payment-sync');
 const { keepSavedCard } = await import('@/server/modules/payments/service');
+const { logger } = await import('@/server/logger');
 
 let migrator: PrismaClient;
 let dish: Record<string, string> = {};
@@ -405,6 +406,47 @@ describe('cancelling until the kitchen accepts (U6, S12.5, S12.6)', () => {
       'cancelled',
       'refunded',
     ]);
+  });
+
+  it('refunds through the sweep when the refund job could not be queued, once (security S1)', async () => {
+    const maya = await customer(migrator);
+    const order = await paidCardOrder(maya);
+    const errors = vi.spyOn(logger, 'error');
+    mocks.send.mockImplementation(async (event) => {
+      if ((event as { name: string }).name === 'order.refund-requested') {
+        throw new Error('job queue unreachable');
+      }
+      return { ids: ['evt'] };
+    });
+    try {
+      const result = await orders.cancelOrderAction({ orderId: order.orderId });
+      expect(result?.data?.refund).toEqual({ amountCents: 5397, cardLabel: 'Visa •••• 4242' });
+      expect(errors).toHaveBeenCalledWith(
+        expect.objectContaining({ alert: 'order-refund-not-queued', orderId: order.orderId }),
+        expect.any(String),
+      );
+    } finally {
+      errors.mockRestore();
+      mocks.send.mockImplementation(async () => ({ ids: ['evt'] }));
+    }
+    const refundsOf = () => fake.refunds.filter((r) => r.paymentIntentId === order.intentId);
+    expect(refundsOf()).toEqual([]);
+
+    // Within five minutes the queue may still deliver it: the sweep leaves it alone.
+    await sync.sweepAutoRefunds();
+    expect(refundsOf()).toEqual([]);
+
+    expect(await sync.sweepAutoRefunds(later(6))).toBeGreaterThanOrEqual(1);
+    expect(refundsOf()).toEqual([
+      expect.objectContaining({ amountCents: 5397, reason: 'customer-cancel' }),
+    ]);
+    expect(await migrator.order.findUniqueOrThrow({ where: { id: order.orderId } })).toMatchObject({
+      status: 'CANCELLED',
+      paymentStatus: 'REFUNDED',
+      refundedCents: 5397,
+    });
+    await sync.sweepAutoRefunds(later(12));
+    expect(refundsOf()).toHaveLength(1);
   });
 
   it('refuses once the kitchen has started, with the store phone (S12.6)', async () => {

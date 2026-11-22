@@ -59,7 +59,7 @@ vi.mock('@/server/security/turnstile', async (importOriginal) => ({
 
 const { POST } = await import('@/app/api/webhooks/stripe/route');
 const { placeOrderAction, orderStatusAction } = await import('@/server/modules/orders/actions');
-const { expireUnpaidOrder, processAutoRefund } =
+const { expireUnpaidOrder, processAutoRefund, sweepAutoRefunds } =
   await import('@/server/modules/orders/payment-sync');
 
 let migrator: PrismaClient;
@@ -410,6 +410,42 @@ describe('a payment after the order expired (U10, S9.5)', () => {
     } finally {
       await migrator.menuItem.update({ where: { slug: 'pad-thai' }, data: { isAvailable: true } });
     }
+  });
+});
+
+describe('a refund whose job could not be queued (security S1)', () => {
+  it('is made by the sweep, though Stripe’s retry of the event changes nothing', async () => {
+    const { orderId, intentId } = await waitingOrder();
+    await expireUnpaidOrder(orderId, new Date(Date.now() + 16 * 60_000));
+    await migrator.menuItem.update({ where: { slug: 'pad-thai' }, data: { isAvailable: false } });
+    mocks.send.mockImplementation(async (event) => {
+      if ((event as { name: string }).name === 'order.refund-requested') {
+        throw new Error('job queue unreachable');
+      }
+      return { ids: ['evt'] };
+    });
+    try {
+      const paid = signedEvent('payment_intent.succeeded', intentObject(fake.succeed(intentId)));
+      expect((await deliver(paid.payload, paid.signature)).body.outcome).toBe('applied');
+      expect((await deliver(paid.payload, paid.signature)).body.outcome).toBe('duplicate');
+    } finally {
+      mocks.send.mockImplementation(async () => ({ ids: ['evt'] }));
+      await migrator.menuItem.update({ where: { slug: 'pad-thai' }, data: { isAvailable: true } });
+    }
+    expect(await orderOf(orderId)).toMatchObject({
+      paymentStatus: 'PAID',
+      autoRefundReason: 'late-payment',
+    });
+    expect(fake.refunds).toEqual([]);
+
+    await sweepAutoRefunds(new Date(Date.now() + 6 * 60_000));
+    expect(fake.refunds).toEqual([
+      expect.objectContaining({ paymentIntentId: intentId, amountCents: 5397 }),
+    ]);
+    expect(await orderOf(orderId)).toMatchObject({
+      paymentStatus: 'REFUNDED',
+      refundedCents: 5397,
+    });
   });
 });
 

@@ -23,6 +23,7 @@ import {
   findOrderForPayment,
   findOrderIdByIntent,
   findRedemption,
+  findUnsettledRefunds,
   forceCouponUse,
   lockOrder,
   type OrderPaymentRow,
@@ -515,6 +516,34 @@ export async function sweepUnpaidOrders(now = new Date()) {
       return (await expireUnpaidOrder(id, now)) === 'expired' ? done + 1 : done;
     } catch (error) {
       logger.warn({ err: error, orderId: id }, 'could not expire an unpaid order');
+      return done;
+    }
+  }, Promise.resolve(0));
+}
+
+/** How long the refund job has before the sweep steps in. */
+const REFUND_JOB_GRACE_MS = 5 * 60_000;
+
+/**
+ * Every 5 minutes: refunds Foodz decided on (cancellation, late payment, mismatch) whose job
+ * was never queued or never finished. processAutoRefund reads Stripe first and uses the same
+ * idempotency key as the job, so whichever runs second refunds nothing more.
+ */
+export async function sweepAutoRefunds(now = new Date()) {
+  const due = await runAsSystem('refund sweep', (ctx) =>
+    findUnsettledRefunds(ctx, new Date(now.getTime() - REFUND_JOB_GRACE_MS), 50),
+  );
+  return due.reduce<Promise<number>>(async (count, { id }) => {
+    const done = await count;
+    try {
+      if ((await processAutoRefund(id, now)) !== 'refunded') return done;
+      logger.warn({ orderId: id }, 'refund sweep settled a refund its job had not');
+      return done + 1;
+    } catch (error) {
+      logger.error(
+        { err: error, orderId: id, alert: 'order-refund-sweep' },
+        'refund sweep could not refund an order',
+      );
       return done;
     }
   }, Promise.resolve(0));

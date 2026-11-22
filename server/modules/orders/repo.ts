@@ -474,6 +474,22 @@ export function findDueUnpaid(ctx: DbContext, before: Date, take: number) {
   });
 }
 
+/** Card payments Foodz decided to give back and hasn't refunded yet, for the refund sweep. */
+export function findUnsettledRefunds(ctx: DbContext, before: Date, take: number) {
+  return db(ctx).order.findMany({
+    where: {
+      autoRefundReason: { not: null },
+      paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] },
+      stripePaymentIntentId: { not: null },
+      updatedAt: { lte: before },
+    },
+    // Newest first, so a refund that keeps failing can't hold back the ones behind it.
+    orderBy: { updatedAt: 'desc' },
+    take,
+    select: { id: true },
+  });
+}
+
 // ------------------------------------------------------------------ reading orders
 
 const viewFields = {
