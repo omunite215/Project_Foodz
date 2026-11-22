@@ -20,7 +20,13 @@ import { cn } from '@/lib/utils';
 
 /** Where the quote is (see useQuote). */
 export type QuoteStatus =
-  'loading' | 'ready' | 'updating' | 'failed' | 'rateLimited' | 'offline' | 'tooBig';
+  | 'loading'
+  | 'ready'
+  | 'updating'
+  | 'failed'
+  | 'rateLimited'
+  | 'offline'
+  | 'tooBig';
 
 /** A money figure: two decimals, tabular, never wrapped; discounts read "minus $4.80". */
 export function Money({
