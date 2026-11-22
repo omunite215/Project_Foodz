@@ -162,7 +162,12 @@ export function PromoSection({
   };
 
   /** What a code's answer means for the field, the message and the cart's code. */
-  const answer = (promo: QuotePromo | null, quoted: Quote, canAttach: boolean) => {
+  const answer = (
+    promo: QuotePromo | null,
+    quoted: Quote,
+    canAttach: boolean,
+    fromField: boolean,
+  ) => {
     if (!promo) return;
     switch (promo.status) {
       case 'applied':
@@ -178,7 +183,8 @@ export function PromoSection({
         say({
           tone: 'error',
           text: promo.message ?? PROMO_UNAVAILABLE,
-          invalid: true,
+          // An offer's Apply leaves the field empty; only a typed code marks it invalid (2.14).
+          invalid: fromField,
           signInCode: promo.reason?.code === 'signInRequired' ? promo.code : undefined,
         });
         return;
@@ -257,7 +263,7 @@ export function PromoSection({
           say({ tone: 'neutral', text: `${nextPromo.message ?? ''} ${storedCode} stays applied.` });
           return;
         }
-        answer(nextPromo, next.data, false);
+        answer(nextPromo, next.data, false, fromField);
         return;
       }
       const outcome = await fetchQuote({ ...request, code });
@@ -266,7 +272,7 @@ export function PromoSection({
         failed(outcome.error, code);
         return;
       }
-      answer(outcome.data.promo, outcome.data, true);
+      answer(outcome.data.promo, outcome.data, true, fromField);
     } finally {
       if (ticket === requestId.current) {
         setChecking(false);
@@ -346,7 +352,8 @@ export function PromoSection({
   useEffect(() => {
     if (!arrivedWith) return;
     clearPendingPromo();
-    void latest.current.check(arrivedWith);
+    // Back from sign-in, focus stays on the cart's heading rather than the emptied field.
+    void latest.current.check(arrivedWith, { fromField: false });
   }, [arrivedWith]);
 
   useEffect(() => {

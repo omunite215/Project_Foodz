@@ -143,7 +143,8 @@ export function useQuote(
   if (!online) status = 'offline';
   else if (failure?.code === 'RATE_LIMITED') status = 'rateLimited';
   else if (failure?.code === 'CART_TOO_BIG') status = 'tooBig';
-  else if (query.isError) status = 'failed';
+  // A retry after a failure reads as updating while it runs, not as the old failure.
+  else if (query.isError && !query.isFetching) status = 'failed';
   else if (!query.data) status = 'loading';
   else if (waiting) status = 'updating';
   else status = 'ready';

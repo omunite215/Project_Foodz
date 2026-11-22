@@ -405,7 +405,7 @@ export function DeliveryBlock({
                 onAction();
                 setChanging((open) => !open);
               }}
-              className="px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
+              className="px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong aria-expanded:bg-brand-soft aria-expanded:text-brand-strong"
             >
               Change<span className="sr-only"> delivery address</span>
             </Button>

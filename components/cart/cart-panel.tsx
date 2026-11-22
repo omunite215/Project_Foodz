@@ -113,8 +113,9 @@ export function CartPanel({
   const online = useOnline();
   // Signed in with saved addresses, the saved default wins over an address checked before
   // signing in (2.15, S2.6), and "Change" lists the saved ones. With none saved, a checked
-  // address still counts.
-  const addressBook = useSavedAddresses(signedIn);
+  // address still counts. The book is only needed to settle that, so it isn't fetched otherwise:
+  // server actions run one at a time and it would hold up the quote.
+  const addressBook = useSavedAddresses(signedIn && storedPoint !== null);
   const hasSaved = (addressBook.data?.addresses.length ?? 0) > 0;
   const checked =
     storedPoint && (!signedIn || (addressBook.isFetched && !hasSaved)) ? storedPoint : null;
@@ -198,13 +199,14 @@ export function CartPanel({
   const known = quote ?? view.lastQuote;
   const quoted = new Map<string, QuoteLine>((known?.lines ?? []).map((line) => [line.key, line]));
 
-  // The figures she just changed are announced once they settle (S7.3); opening is not.
-  const firstKey = useRef(view.currentKey);
-  const announced = useRef<string | null>(null);
+  // The figures she just changed are announced once they settle (S7.3); opening is not. Each
+  // settled request is compared with the one before it, so a change that puts the cart back the
+  // way it opened (an Undo, + then −) still ends on a total.
+  const lastSettled = useRef(view.currentKey);
   useEffect(() => {
     if (!quote || view.status !== 'ready' || view.answeredKey !== view.currentKey) return;
-    if (view.currentKey === firstKey.current || announced.current === view.currentKey) return;
-    announced.current = view.currentKey;
+    if (lastSettled.current === view.currentKey) return;
+    lastSettled.current = view.currentKey;
     announce(totalAnnouncement(quote));
   }, [quote, view.status, view.answeredKey, view.currentKey]);
 
