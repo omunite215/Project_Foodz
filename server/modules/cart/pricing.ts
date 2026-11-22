@@ -407,7 +407,8 @@ export function quote(input: QuoteCalcInput): QuoteFigures {
 
 /**
  * The tip for a choice (U1, B14): a percentage of the food before any promo, rounded half up
- * once, or a typed amount up to $100.00. The browser only says which choice was made.
+ * once, or a typed amount, both up to $100.00 (the orders table refuses more). The browser only
+ * says which choice was made.
  */
 export function tipFor(choice: TipChoice, foodSubtotalCents: number): number {
   assertCents(foodSubtotalCents, 'subtotal');
@@ -416,7 +417,7 @@ export function tipFor(choice: TipChoice, foodSubtotalCents: number): number {
       return 0;
     case 'percent':
       if (!TIP_PERCENTS.includes(choice.percent)) throw new RangeError('unknown tip percentage');
-      return roundHalfUp(foodSubtotalCents * choice.percent, 100);
+      return Math.min(roundHalfUp(foodSubtotalCents * choice.percent, 100), MAX_TIP_CENTS);
     case 'amount':
       assertCents(choice.cents, 'tip');
       if (choice.cents > MAX_TIP_CENTS) throw new RangeError('tip over the limit');

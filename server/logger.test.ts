@@ -1,5 +1,7 @@
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
+import pino from 'pino';
 import { describe, expect, it } from 'vitest';
-import { createLogger } from './logger';
+import { createLogger, logger, serializeError } from './logger';
 
 function capture(fields: Record<string, unknown>) {
   const lines: string[] = [];
@@ -34,6 +36,12 @@ describe('logger redaction', () => {
     'clientSecret',
     'contactName',
     'kitchenNote',
+    'addressLabel',
+    'addressLine1',
+    'addressLine2',
+    'addressCity',
+    'courierInstructions',
+    'note',
   ])('hides %s at the top level and in form input', (key) => {
     const line = capture({ [key]: SECRET, input: { [key]: SECRET } });
     expect(line[key]).toBe('[redacted]');
@@ -58,5 +66,89 @@ describe('logger redaction', () => {
     const line = capture({ err: error, flow: 'sign-in', errorCode: 'INVALID_TOKEN', policy: 'x' });
     expect(line).toMatchObject({ flow: 'sign-in', errorCode: 'INVALID_TOKEN', policy: 'x' });
     expect((line.err as { code?: string }).code).toBe('ECONNREFUSED');
+  });
+});
+
+/** The same shape as the pg adapter's DriverAdapterError: Postgres's fields on `cause`. */
+class AdapterError extends Error {
+  override name = 'DriverAdapterError';
+  override cause: Record<string, unknown>;
+  constructor(payload: Record<string, unknown>) {
+    super(String(payload.message));
+    this.cause = payload;
+  }
+}
+
+const ROW = `Failing row contains (Maya Lopez, +16175550123, 1 Faneuil Hall Square, ${SECRET}).`;
+const CHECK_MESSAGE = 'new row for relation "orders" violates check constraint "orders_tip_limit"';
+
+/** The pg adapter's error for a failed check: Postgres's `detail` holds the whole row. */
+const adapterErrorFor = () =>
+  new AdapterError({
+    kind: 'postgres',
+    code: '23514',
+    severity: 'ERROR',
+    message: CHECK_MESSAGE,
+    detail: ROW,
+    originalCode: '23514',
+    originalMessage: CHECK_MESSAGE,
+  });
+
+/** What Prisma 7 throws for a failed check constraint on an insert (P2039). */
+function checkViolation(adapterError = adapterErrorFor()) {
+  return new PrismaClientKnownRequestError(
+    `Database error. Code: \`23514\`. Message: \`${CHECK_MESSAGE}\``,
+    {
+      code: 'P2039',
+      clientVersion: '7.10.1',
+      meta: { modelName: 'Order', driverAdapterError: adapterError },
+    },
+  );
+}
+
+describe('logged errors (security S4)', () => {
+  it('keep the failing row Postgres reports out, and the code, model and message in', () => {
+    const line = capture({ err: checkViolation(), action: 'placeOrder' });
+    expect(JSON.stringify(line)).not.toContain(SECRET);
+    expect(JSON.stringify(line)).not.toContain('Failing row');
+    expect(line.err).toMatchObject({
+      type: 'PrismaClientKnownRequestError',
+      code: 'P2039',
+      message: expect.stringContaining('orders_tip_limit'),
+      meta: { modelName: 'Order' },
+    });
+    expect(line.err).toHaveProperty('stack');
+  });
+
+  it('keep them out however the error arrives', () => {
+    const adapterError = adapterErrorFor();
+    const wrapped = Object.assign(new Error('order write failed', { cause: checkViolation() }), {
+      original: checkViolation(),
+    });
+    const lines: string[] = [];
+    const log = createLogger({ write: (text: string) => lines.push(text) });
+    log.error({ err: adapterError }, 'adapter error');
+    log.error({ err: wrapped }, 'wrapped');
+    log.error(checkViolation(), 'as the first argument');
+    log.error({ err: new AggregateError([checkViolation()], 'several') }, 'aggregate');
+    expect(lines).toHaveLength(4);
+    for (const text of lines) {
+      expect(text).not.toContain(SECRET);
+      expect(text).not.toContain('Failing row');
+    }
+  });
+
+  it('leave non-errors and the original error untouched', () => {
+    const adapterError = adapterErrorFor();
+    capture({ err: checkViolation(adapterError) });
+    expect(adapterError.cause.detail).toBe(ROW);
+    expect(serializeError('not an error')).toBe('not an error');
+  });
+
+  it('are serialized this way by the shared logger the action wrapper uses', () => {
+    const serializers = (logger as unknown as Record<symbol, Record<string, unknown>>)[
+      pino.symbols.serializersSym
+    ];
+    expect(serializers?.err).toBe(serializeError);
   });
 });

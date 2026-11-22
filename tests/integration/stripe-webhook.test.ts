@@ -59,7 +59,7 @@ vi.mock('@/server/security/turnstile', async (importOriginal) => ({
 
 const { POST } = await import('@/app/api/webhooks/stripe/route');
 const { placeOrderAction, orderStatusAction } = await import('@/server/modules/orders/actions');
-const { expireUnpaidOrder, processAutoRefund } =
+const { expireUnpaidOrder, processAutoRefund, sweepAutoRefunds } =
   await import('@/server/modules/orders/payment-sync');
 
 let migrator: PrismaClient;
@@ -123,6 +123,19 @@ async function waitingOrder(code?: string) {
   const orderId = result.data!.orderId;
   return { who, orderId, intentId: fake.intentFor(orderId)!.id };
 }
+
+/** A declined attempt whose PaymentIntent stayed payable: the cancel call to Stripe was lost. */
+async function declinedOrder(code: string) {
+  const placed = await waitingOrder(code);
+  fake.down.add('cancelIntent');
+  const declined = fake.decline(placed.intentId);
+  await send('payment_intent.payment_failed', intentObject(declined));
+  expect((await orderOf(placed.orderId)).status).toBe('FAILED');
+  return placed;
+}
+
+const usesOf = async (code: string) =>
+  (await migrator.coupon.findUniqueOrThrow({ where: { code } })).usedCount;
 
 beforeAll(async () => {
   migrator = new PrismaClient({
@@ -410,6 +423,98 @@ describe('a payment after the order expired (U10, S9.5)', () => {
     } finally {
       await migrator.menuItem.update({ where: { slug: 'pad-thai' }, data: { isAvailable: true } });
     }
+  });
+});
+
+describe('a payment after its attempt was declined (security S11)', () => {
+  it('places it after all when the code still fits', async () => {
+    const code = `FITS${TAG}`;
+    addedCodes.push(code);
+    await migrator.coupon.create({ data: { code, type: 'FIXED', value: 200, perUserLimit: 1 } });
+    const { orderId, intentId } = await declinedOrder(code);
+    await send('payment_intent.succeeded', intentObject(fake.succeed(intentId)));
+    expect(await orderOf(orderId)).toMatchObject({ status: 'PLACED', paymentStatus: 'PAID' });
+    expect((await migrator.couponRedemption.findUniqueOrThrow({ where: { orderId } })).status).toBe(
+      'REDEEMED',
+    );
+    expect(await usesOf(code)).toBe(1);
+  });
+
+  it('refunds instead when she used the one-per-customer code again meanwhile', async () => {
+    const code = `ONCE${TAG}`;
+    addedCodes.push(code);
+    await migrator.coupon.create({ data: { code, type: 'FIXED', value: 200, perUserLimit: 1 } });
+    const { who, orderId, intentId } = await declinedOrder(code);
+    // The decline gave the code back, so her next order takes it.
+    const second = await placeOrderAction(
+      press(who, dish, { code, expectedTotalCents: 5183, allowDuplicate: true }),
+    );
+    expect(second?.data?.kind).toBe('placed');
+
+    await send('payment_intent.succeeded', intentObject(fake.succeed(intentId)));
+    expect(await orderOf(orderId)).toMatchObject({
+      status: 'FAILED',
+      paymentStatus: 'PAID',
+      autoRefundReason: 'late-payment',
+    });
+    expect(refundJobsFor(orderId)).toHaveLength(1);
+    expect((await migrator.couponRedemption.findUniqueOrThrow({ where: { orderId } })).status).toBe(
+      'RELEASED',
+    );
+    expect(await usesOf(code)).toBe(1);
+    expect(await eventsOf(orderId)).not.toContain('revived');
+  });
+
+  it('refunds instead when the code ran out meanwhile, unlike the expiry race (U10)', async () => {
+    const code = `GONE${TAG}`;
+    addedCodes.push(code);
+    await migrator.coupon.create({ data: { code, type: 'FIXED', value: 200, usageLimit: 1 } });
+    const { orderId, intentId } = await declinedOrder(code);
+    // Someone else takes the last use meanwhile.
+    await migrator.coupon.update({ where: { code }, data: { usedCount: 1 } });
+
+    await send('payment_intent.succeeded', intentObject(fake.succeed(intentId)));
+    expect(await orderOf(orderId)).toMatchObject({
+      status: 'FAILED',
+      autoRefundReason: 'late-payment',
+    });
+    expect(await usesOf(code)).toBe(1);
+  });
+});
+
+describe('a refund whose job could not be queued (security S1)', () => {
+  it('is made by the sweep, though Stripe’s retry of the event changes nothing', async () => {
+    const { orderId, intentId } = await waitingOrder();
+    await expireUnpaidOrder(orderId, new Date(Date.now() + 16 * 60_000));
+    await migrator.menuItem.update({ where: { slug: 'pad-thai' }, data: { isAvailable: false } });
+    mocks.send.mockImplementation(async (event) => {
+      if ((event as { name: string }).name === 'order.refund-requested') {
+        throw new Error('job queue unreachable');
+      }
+      return { ids: ['evt'] };
+    });
+    try {
+      const paid = signedEvent('payment_intent.succeeded', intentObject(fake.succeed(intentId)));
+      expect((await deliver(paid.payload, paid.signature)).body.outcome).toBe('applied');
+      expect((await deliver(paid.payload, paid.signature)).body.outcome).toBe('duplicate');
+    } finally {
+      mocks.send.mockImplementation(async () => ({ ids: ['evt'] }));
+      await migrator.menuItem.update({ where: { slug: 'pad-thai' }, data: { isAvailable: true } });
+    }
+    expect(await orderOf(orderId)).toMatchObject({
+      paymentStatus: 'PAID',
+      autoRefundReason: 'late-payment',
+    });
+    expect(fake.refunds).toEqual([]);
+
+    await sweepAutoRefunds(new Date(Date.now() + 6 * 60_000));
+    expect(fake.refunds).toEqual([
+      expect.objectContaining({ paymentIntentId: intentId, amountCents: 5397 }),
+    ]);
+    expect(await orderOf(orderId)).toMatchObject({
+      paymentStatus: 'REFUNDED',
+      refundedCents: 5397,
+    });
   });
 });
 

@@ -547,6 +547,9 @@ async function placeOrderOnce(
 
   const created = await runAsSystem('checkout', async (ctx) => {
     await lockCustomerOrders(ctx, actor.userId);
+    // Deleted or suspended while this press waited: account deletion holds the same lock (B21).
+    const stillCustomer = await findCustomer(ctx, actor.userId);
+    if (!stillCustomer || stillCustomer.banned || stillCustomer.deletedAt) throw unauthenticated();
     const facts = await findPricingFacts(ctx, {
       userId: actor.userId,
       addressId: input.addressId,
@@ -868,7 +871,10 @@ export async function cancelOrder(
   const result = await runAsSystem('cancel', async (ctx) => {
     const order = await lockOrder(ctx, orderId);
     if (!order || order.userId !== actor.userId) throw notFound();
-    const paidByCard = order.paymentMethod === 'CARD' && order.paymentStatus === 'PAID';
+    // A part refunded earlier (staff, from Stripe) still leaves the rest to give back.
+    const paidByCard =
+      order.paymentMethod === 'CARD' &&
+      (order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIALLY_REFUNDED');
     const refundCents = order.totalCents - order.refundedCents;
     if (order.status === 'CANCELLED') {
       // A double press cancels once (S12.6).
@@ -913,7 +919,13 @@ export async function cancelOrder(
       },
     });
     const effects: OrderEffect[] = [
-      { kind: 'email', orderId, email: 'cancelled', change: 'cancelled' },
+      {
+        kind: 'email',
+        orderId,
+        email: 'cancelled',
+        change: 'cancelled',
+        ...(paidByCard && { refundCents, at: now.toISOString() }),
+      },
     ];
     if (paidByCard) effects.push({ kind: 'refund', orderId });
     return { order, paidByCard, refundCents, effects };
@@ -1125,9 +1137,22 @@ export async function cancelUnpaidOrdersForDeletion(actor: UserActor, now = new 
   }, Promise.resolve());
 }
 
-/** Inside the deletion transaction: what still stops it. */
-export function ordersBlockingDeletion(ctx: DbContext, userId: string) {
-  return findBlockingOrders(ctx, userId);
+/**
+ * First thing in the deletion transaction: the customer's order lock, which checkout and every
+ * payment step take too, so no order or payment lands while the account is erased (B21).
+ */
+export function lockOrdersForDeletion(ctx: DbContext, userId: string) {
+  return lockCustomerOrders(ctx, userId);
+}
+
+/**
+ * What still stops a deletion: a placed order she can cancel, orders on their way, and a card
+ * payment the bank is still confirming (its order stays waiting until Stripe decides).
+ */
+export async function ordersBlockingDeletion(ctx: DbContext, userId: string) {
+  const blocking = await findBlockingOrders(ctx, userId);
+  const unpaid = await findUnpaid(ctx, userId);
+  return { ...blocking, paying: unpaid ? { id: unpaid.id, number: unpaid.number } : null };
 }
 
 /** Inside the deletion transaction: the caller's orders kept without their details. */

@@ -544,6 +544,17 @@ describe('the tip (F4 U1, S4.2, B14)', () => {
     ]);
   });
 
+  it('caps a percentage at the $100.00 tip limit, as the orders table does (security S4)', () => {
+    expect(tipFor({ kind: 'percent', percent: 20 }, 60_000)).toBe(10_000); // $120.00 capped
+    expect(tipFor({ kind: 'percent', percent: 10 }, 100_000)).toBe(10_000);
+    expect(tipFor({ kind: 'percent', percent: 20 }, 50_000)).toBe(10_000); // exactly the limit
+    expect(tipOptions(60_000)).toEqual([
+      { percent: 10, cents: 6000 },
+      { percent: 15, cents: 9000 },
+      { percent: 20, cents: 10_000 },
+    ]);
+  });
+
   it('refuses a tip the browser could only have made up', () => {
     expect(() => tipFor({ kind: 'percent', percent: 12 as 10 }, 4797)).toThrow(RangeError);
     expect(() => tipFor({ kind: 'amount', cents: -1 }, 4797)).toThrow(RangeError);

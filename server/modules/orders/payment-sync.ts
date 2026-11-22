@@ -18,12 +18,17 @@ import {
   addEvent,
   allDishesAvailable,
   attemptKeyTaken,
+  countCustomerUses,
+  findCustomer,
   findDueUnpaid,
   findEvents,
   findOrderForPayment,
   findOrderIdByIntent,
   findRedemption,
+  findUnsettledRefunds,
   forceCouponUse,
+  lockCouponLimits,
+  lockCustomerOrders,
   lockOrder,
   type OrderPaymentRow,
   returnCouponUse,
@@ -31,7 +36,7 @@ import {
   setRedemptionStatus,
   updateOrder,
 } from './repo';
-import { decideExpiry, decideLatePayment, decidePayment } from './state';
+import { codeStillFits, decideExpiry, decideLatePayment, decidePayment } from './state';
 
 /*
  * One idempotent step for everything Stripe says about a payment (B6, B7): the webhook, the
@@ -72,6 +77,26 @@ async function releaseCode(ctx: DbContext, orderId: string) {
   if (!redemption || redemption.status === 'RELEASED') return;
   await setRedemptionStatus(ctx, orderId, 'RELEASED');
   await returnCouponUse(ctx, redemption.couponId);
+}
+
+/**
+ * The order's code as a late payment finds it (security S11). A use that was given back is read
+ * under the code's row lock; this customer's other uses are stable under the customer's order
+ * lock, which the payment step already holds.
+ */
+async function lateCodeFacts(ctx: DbContext, order: OrderPaymentRow) {
+  const redemption = await findRedemption(ctx, order.id);
+  if (!redemption) return null;
+  if (redemption.status !== 'RELEASED') {
+    return { released: false, customerUses: 0, perUserLimit: null, usedCount: 0, usageLimit: null };
+  }
+  const limits = await lockCouponLimits(ctx, redemption.couponId);
+  if (!limits) return null;
+  const customerUses =
+    limits.perUserLimit === null
+      ? 0
+      : await countCustomerUses(ctx, redemption.couponId, order.userId);
+  return { released: true, customerUses, ...limits };
 }
 
 /** U10: a revived order keeps its code at the price paid, even past the code's limit. */
@@ -164,10 +189,14 @@ async function decideAndApply(
       const keyFree =
         !order.attemptKey ||
         !(await attemptKeyTaken(ctx, order.userId, order.attemptKey, order.id));
+      const account = await findCustomer(ctx, order.userId);
+      const code = await lateCodeFacts(ctx, order);
       const verdict = decideLatePayment({
         dishesAvailable: await allDishesAvailable(ctx, order.id),
         storeOpen: facts.storeOpen,
         attemptKeyFree: keyFree,
+        accountActive: Boolean(account && !account.deletedAt && !account.banned),
+        codeFits: codeStillFits(code, order.status === 'FAILED' ? 'declined' : 'expired'),
       });
       if (verdict === 'revive') {
         await updateOrder(ctx, order.id, order.version, {
@@ -273,6 +302,11 @@ export async function applyIntent(
 
   const result = await runAsSystem('stripe payment', async (ctx): Promise<StepResult> => {
     if (!(await startStep(ctx, options.event))) return { outcome: 'duplicate', effects: [] };
+    const owner = await findOrderForPayment(ctx, orderId);
+    if (!owner) return { outcome: 'unknown-order', effects: [] };
+    // Checkout and account deletion hold the same lock, so a payment never lands beside either
+    // (B21). Taken before the order row, in the same order as checkout, so they can't deadlock.
+    await lockCustomerOrders(ctx, owner.userId);
     const order = await lockOrder(ctx, orderId);
     if (!order || (order.stripePaymentIntentId && order.stripePaymentIntentId !== intent.id)) {
       return { outcome: 'unknown-order', effects: [] };
@@ -515,6 +549,34 @@ export async function sweepUnpaidOrders(now = new Date()) {
       return (await expireUnpaidOrder(id, now)) === 'expired' ? done + 1 : done;
     } catch (error) {
       logger.warn({ err: error, orderId: id }, 'could not expire an unpaid order');
+      return done;
+    }
+  }, Promise.resolve(0));
+}
+
+/** How long the refund job has before the sweep steps in. */
+const REFUND_JOB_GRACE_MS = 5 * 60_000;
+
+/**
+ * Every 5 minutes: refunds Foodz decided on (cancellation, late payment, mismatch) whose job
+ * was never queued or never finished. processAutoRefund reads Stripe first and uses the same
+ * idempotency key as the job, so whichever runs second refunds nothing more.
+ */
+export async function sweepAutoRefunds(now = new Date()) {
+  const due = await runAsSystem('refund sweep', (ctx) =>
+    findUnsettledRefunds(ctx, new Date(now.getTime() - REFUND_JOB_GRACE_MS), 50),
+  );
+  return due.reduce<Promise<number>>(async (count, { id }) => {
+    const done = await count;
+    try {
+      if ((await processAutoRefund(id, now)) !== 'refunded') return done;
+      logger.warn({ orderId: id }, 'refund sweep settled a refund its job had not');
+      return done + 1;
+    } catch (error) {
+      logger.error(
+        { err: error, orderId: id, alert: 'order-refund-sweep' },
+        'refund sweep could not refund an order',
+      );
       return done;
     }
   }, Promise.resolve(0));

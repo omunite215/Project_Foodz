@@ -82,8 +82,40 @@ export function decideLatePayment(facts: {
   storeOpen: boolean;
   /** No newer live order holds the same checkout key. */
   attemptKeyFree: boolean;
+  /** The customer's account is neither deleted nor suspended (B21). */
+  accountActive: boolean;
+  /** The order's code, if any, may still be used (codeStillFits). */
+  codeFits: boolean;
 }): 'revive' | 'refund' {
-  return facts.dishesAvailable && facts.storeOpen && facts.attemptKeyFree ? 'revive' : 'refund';
+  return facts.dishesAvailable &&
+    facts.storeOpen &&
+    facts.attemptKeyFree &&
+    facts.accountActive &&
+    facts.codeFits
+    ? 'revive'
+    : 'refund';
+}
+
+/**
+ * Whether a late payment's order may keep its code (U10, security S11). A use the order still
+ * holds is its own. A use given back must still fit the customer's own limit, so a code released
+ * by a decline and used again on a newer order never counts twice. A declined attempt must also
+ * fit the code's overall limit; only the expiry race keeps a code past it (U10).
+ */
+export function codeStillFits(
+  code: {
+    released: boolean;
+    /** Uses this customer holds or made on other orders. */
+    customerUses: number;
+    perUserLimit: number | null;
+    usedCount: number;
+    usageLimit: number | null;
+  } | null,
+  ended: 'declined' | 'expired',
+): boolean {
+  if (!code?.released) return true;
+  if (code.perUserLimit !== null && code.customerUses >= code.perUserLimit) return false;
+  return ended === 'expired' || code.usageLimit === null || code.usedCount < code.usageLimit;
 }
 
 /**

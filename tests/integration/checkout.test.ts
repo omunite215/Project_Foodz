@@ -250,6 +250,34 @@ describe('cash on delivery (S5)', () => {
     expect(order).toMatchObject({ tipCents: 1049, tipChoice: '15' });
   });
 
+  it('caps a 20 % tip on a big office order at $100.00, quote and order alike (security S4)', async () => {
+    const office = await customer(migrator);
+    const lines = [line(dish, 'samgyeopsal', 20), line(dish, 'gimbap', 10)];
+    const quoted = await quoteCartAction({
+      lines,
+      delivery: { kind: 'saved', addressId: office.addressId },
+      tip: { kind: 'percent', percent: 20 },
+      method: 'card',
+    });
+    expect(quoted?.data?.subtotalCents).toBeGreaterThan(50_000);
+    expect(quoted?.data?.tipCents).toBe(10_000);
+    expect(quoted?.data?.tipOptions.at(-1)).toEqual({ percent: 20, cents: 10_000 });
+
+    const result = await placeOrderAction(
+      press(office, dish, {
+        lines,
+        method: 'card',
+        card: { kind: 'new' },
+        tip: { kind: 'percent', percent: 20 },
+        expectedTotalCents: quoted.data!.totalCents,
+      }),
+    );
+    expect(result?.serverError).toBeUndefined();
+    expect(result?.data).toMatchObject({ kind: 'pay', totalCents: quoted.data!.totalCents });
+    const [order] = await ordersOf(office.userId);
+    expect(order).toMatchObject({ tipCents: 10_000, tipChoice: '20' });
+  });
+
   it('refuses cash over $100.00 with the total in the sentence (T10, S5.2)', async () => {
     const maya = await customer(migrator);
     const result = await placeOrderAction(
