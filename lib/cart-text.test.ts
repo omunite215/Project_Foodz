@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { QuoteDelivery } from '@/server/modules/cart/schema';
+import type { Quote, QuoteDelivery } from '@/server/modules/cart/schema';
 import {
   cartButtonLabel,
   cartFullText,
+  checkoutButtonState,
   codeEndedText,
   compareText,
   deliveryRowLabel,
@@ -14,6 +15,7 @@ import {
   noLongerAppliedText,
   noteSnippet,
   orderingOpensText,
+  outsideText,
   priceChangeText,
   promoAppliedText,
   shortfallText,
@@ -159,6 +161,25 @@ describe('delivery (design 2.15, 2.16)', () => {
       ),
     ).toBe('Delivery');
   });
+
+  it('says why an address outside the area is refused, with the edge in words (S2.8)', () => {
+    expect(
+      outsideText(
+        '1300 Hancock Street',
+        delivery({ status: 'outside', distanceKm: 11.4, feeCents: null }),
+      ),
+    ).toBe(
+      "We don't deliver to 1300 Hancock Street yet. It's about 11.4 km away, and we deliver within 8 km.",
+    );
+    expect(
+      outsideText(
+        'Quincy Center',
+        delivery({ status: 'outside', distanceKm: 8, edge: 'justOver' }),
+      ),
+    ).toBe(
+      "We don't deliver to Quincy Center yet. It's just over 8 km away, and we deliver within 8 km.",
+    );
+  });
 });
 
 describe('promo codes (design 2.10 to 2.13)', () => {
@@ -213,5 +234,111 @@ describe('promo codes (design 2.10 to 2.13)', () => {
     expect(tooManyCodesText(600)).toBe('Too many codes tried. You can try again in 10 minutes.');
     expect(tooManyCodesText(60)).toBe('Too many codes tried. You can try again in 1 minute.');
     expect(tooManyCodesText(45)).toBe('Too many codes tried. You can try again in 45 seconds.');
+  });
+});
+
+// ------------------------------------------------------------------ whole quotes
+
+const quoteOf = (fields: Partial<Quote>): Quote => ({
+  quotedAt: '2026-11-21T17:00:00.000Z',
+  lines: [],
+  itemCount: 3,
+  subtotalCents: 4797,
+  promo: null,
+  delivery: delivery({}),
+  tax: { rateBps: 700, cents: 336 },
+  tipCents: 0,
+  totalCents: 5547,
+  totalKind: 'final',
+  store: { timeZone: 'America/New_York', isOpen: true, opensAt: null, closesAt: null },
+  offers: [],
+  checkoutBlockers: [],
+  ...fields,
+});
+
+const noAddress = delivery({
+  kind: 'none',
+  address: null,
+  status: 'unknown',
+  distanceKm: null,
+  feeCents: null,
+});
+
+describe('the checkout button and its line (design 2.17)', () => {
+  const closedQuote = quoteOf({
+    store: {
+      timeZone: 'America/New_York',
+      isOpen: false,
+      opensAt: { at: '2026-11-22T17:00:00.000Z', weekday: 'sun', time: '12:00', day: 'today' },
+      closesAt: null,
+    },
+    checkoutBlockers: ['closed'],
+  });
+  const outsidePoint = delivery({
+    kind: 'point',
+    address: null,
+    status: 'outside',
+    distanceKm: 11.4,
+    feeCents: null,
+  });
+
+  it('shows the amount only when the total is final and nothing blocks it', () => {
+    expect(checkoutButtonState(quoteOf({}), 'ready', false)).toEqual({
+      reason: null,
+      label: 'Go to checkout · $55.47',
+      line: null,
+    });
+    expect(
+      checkoutButtonState(
+        quoteOf({ delivery: noAddress, totalKind: 'beforeDelivery', totalCents: 5133 }),
+        'ready',
+        false,
+      ).label,
+    ).toBe('Go to checkout');
+  });
+
+  it('blocks an address outside the area with its reason (S2.8)', () => {
+    const outside = quoteOf({
+      delivery: outsidePoint,
+      totalKind: 'beforeDelivery',
+      totalCents: 5133,
+      checkoutBlockers: ['outside'],
+    });
+    expect(checkoutButtonState(outside, 'ready', false)).toEqual({
+      reason: 'outside',
+      label: 'Go to checkout',
+      line: 'Choose an address we deliver to.',
+    });
+  });
+
+  it('keeps saying when ordering opens while a total updates (F12)', () => {
+    expect(checkoutButtonState(closedQuote, 'ready', false).label).toBe('Ordering opens at 12 pm');
+    expect(checkoutButtonState(closedQuote, 'updating', false)).toEqual({
+      reason: 'updating',
+      label: 'Ordering opens at 12 pm',
+      line: null,
+    });
+    expect(checkoutButtonState(closedQuote, 'updating', true).line).toBe('Updating your total…');
+  });
+
+  it('gives the outside reason on the line when the store is closed too', () => {
+    const both = quoteOf({
+      ...closedQuote,
+      delivery: outsidePoint,
+      checkoutBlockers: ['closed', 'outside'],
+    });
+    expect(checkoutButtonState(both, 'ready', false)).toEqual({
+      reason: 'closed',
+      label: 'Ordering opens at 12 pm',
+      line: 'Choose an address we deliver to.',
+    });
+  });
+
+  it('says a failed total failed, never as current', () => {
+    expect(checkoutButtonState(null, 'failed', false)).toEqual({
+      reason: 'failed',
+      label: 'Go to checkout',
+      line: "We couldn't update your total. Your cart is safe.",
+    });
   });
 });

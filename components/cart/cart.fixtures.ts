@@ -136,6 +136,18 @@ export const quoteQ5: Quote = {
   totalCents: 5133,
 };
 
+/** A guest checked an address outside the area (S2.8). */
+export const quoteGuestOutside: Quote = {
+  ...quoteQ1,
+  delivery: {
+    ...quoteQ1.delivery,
+    kind: 'point',
+    status: 'outside',
+    distanceKm: 11.4,
+  },
+  checkoutBlockers: ['outside'],
+};
+
 /** Dana's saved address is now outside the area. */
 export const quoteOutside: Quote = {
   ...quoteQ2,
@@ -158,6 +170,13 @@ export const quoteClosed: Quote = {
     closesAt: null,
   },
   checkoutBlockers: ['closed'],
+};
+
+/** Closed, and the address checked is outside the area: the line still says why (S2.8). */
+export const quoteClosedOutside: Quote = {
+  ...quoteGuestOutside,
+  store: quoteClosed.store,
+  checkoutBlockers: ['closed', 'outside'],
 };
 
 export const offersFixture = offers;

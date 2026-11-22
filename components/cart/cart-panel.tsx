@@ -4,7 +4,7 @@ import { Trash2, X } from 'lucide-react';
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import { type Ref, useEffect, useId, useRef, useState } from 'react';
-import type { DeliveryTargetInput, Quote, QuoteLine } from '@/server/modules/cart/schema';
+import type { Quote, QuoteLine } from '@/server/modules/cart/schema';
 import { dishHref } from '@/server/modules/menu/urls';
 import { EmptyState } from '@/components/states/empty-state';
 import {
@@ -48,7 +48,7 @@ import {
   noticeText,
 } from './cart-notices';
 import { CheckoutBar } from './checkout-bar';
-import { setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
+import { deliveryTarget, setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
 import { DeliveryBlock, useSavedAddresses } from './delivery-block';
 import { PriceBreakdown } from './price-breakdown';
 import { PromoSection } from './promo';
@@ -144,13 +144,7 @@ export function CartPanel({
   const emptyCartRef = useRef<HTMLButtonElement>(null);
 
   // ---------------------------------------------------------------- the quote
-  const delivery: DeliveryTargetInput = checked
-    ? { kind: 'point', lat: checked.lat, lng: checked.lng }
-    : signedIn
-      ? meta.addressId
-        ? { kind: 'saved', addressId: meta.addressId }
-        : { kind: 'default' }
-      : { kind: 'none' };
+  const delivery = deliveryTarget({ checked, signedIn, addressId: meta.addressId });
   const baseRequest = { lines: lines.map(toQuoteLine), delivery };
 
   // Answers act on the cart as it is when they arrive.

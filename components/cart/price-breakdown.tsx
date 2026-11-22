@@ -6,6 +6,7 @@ import {
   discountLabel,
   discountText,
   feeRangeText,
+  type QuoteStatus,
   taxRateText,
 } from '@/lib/cart-text';
 import { formatPrice } from '@/lib/format';
@@ -18,15 +19,7 @@ import { cn } from '@/lib/utils';
  * Reused by F4's checkout summary.
  */
 
-/** Where the quote is (see useQuote). */
-export type QuoteStatus =
-  | 'loading'
-  | 'ready'
-  | 'updating'
-  | 'failed'
-  | 'rateLimited'
-  | 'offline'
-  | 'tooBig';
+export type { QuoteStatus } from '@/lib/cart-text';
 
 /** A money figure: two decimals, tabular, never wrapped; discounts read "minus $4.80". */
 export function Money({

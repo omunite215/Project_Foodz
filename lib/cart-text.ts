@@ -176,6 +176,24 @@ export function deliveryRowLabel(delivery: QuoteDelivery, checkedLabel?: string 
 export const feeRangeText = ({ minCents, maxCents }: QuoteDelivery['feeRange']) =>
   `${formatPrice(minCents)} to ${formatPrice(maxCents)}`;
 
+/**
+ * The outside box (S2.8, design 2.15 B and C): "We don't deliver to 1300 Hancock Street yet. It's
+ * about 11.4 km away, and we deliver within 8 km." At the edge: "It's just over 8 km away".
+ */
+export function outsideText(
+  place: string,
+  delivery: Pick<QuoteDelivery, 'distanceKm' | 'edge' | 'radiusKm'>,
+): string {
+  const distance =
+    delivery.edge === 'justOver'
+      ? `just over ${delivery.radiusKm} km`
+      : delivery.distanceKm === null
+        ? null
+        : `about ${delivery.distanceKm.toFixed(1)} km`;
+  const away = distance ? ` It's ${distance} away, and we` : ' We';
+  return `We don't deliver to ${place} yet.${away} deliver within ${delivery.radiusKm} km.`;
+}
+
 /** "Total $55.47" or "Total before delivery $51.33", announced once a change settles. */
 export const totalAnnouncement = (quote: Pick<Quote, 'totalCents' | 'totalKind'>) =>
   `${quote.totalKind === 'final' ? 'Total' : 'Total before delivery'} ${formatPrice(quote.totalCents)}`;
@@ -256,3 +274,67 @@ export const CHECKOUT_REASONS: Record<Exclude<CheckoutReason, 'closed' | 'loadin
   soldOut: 'Remove sold-out dishes to check out.',
   outside: 'Choose an address we deliver to.',
 };
+
+/** Where the cart's quote is (see useQuote in components/cart). */
+export type QuoteStatus =
+  | 'loading'
+  | 'ready'
+  | 'updating'
+  | 'failed'
+  | 'rateLimited'
+  | 'offline'
+  | 'tooBig';
+
+type CheckoutQuote = Pick<Quote, 'totalCents' | 'totalKind' | 'store' | 'checkoutBlockers'>;
+
+/** Why checkout can't start now, the first that applies (design 2.17). Null: it can. */
+export function checkoutReason(
+  quote: Pick<Quote, 'checkoutBlockers'> | null,
+  status: QuoteStatus,
+): CheckoutReason | null {
+  if (status === 'offline') return 'offline';
+  if (status === 'updating') return 'updating';
+  if (status === 'loading') return 'loading';
+  if (status === 'failed' || status === 'tooBig') return 'failed';
+  if (status === 'rateLimited') return 'rateLimited';
+  const blockers = quote?.checkoutBlockers ?? [];
+  if (blockers.includes('soldOut')) return 'soldOut';
+  if (blockers.includes('closed')) return 'closed';
+  if (blockers.includes('outside')) return 'outside';
+  if (blockers.includes('empty')) return 'soldOut';
+  return null;
+}
+
+export interface CheckoutButtonState {
+  reason: CheckoutReason | null;
+  /** "Go to checkout · $55.47", "Go to checkout" or "Ordering opens at 12 pm". */
+  label: string;
+  /** The reserved line under the button; null leaves it empty. */
+  line: string | null;
+}
+
+/**
+ * The checkout button and the line under it (design 2.17). While the store is closed the button
+ * keeps saying when ordering opens, also while a new total is on its way; the line then carries
+ * any other reason, such as an address outside the area (S2.8).
+ */
+export function checkoutButtonState(
+  quote: CheckoutQuote | null,
+  status: QuoteStatus,
+  slow: boolean,
+): CheckoutButtonState {
+  const reason = checkoutReason(quote, status);
+  const closed = quote && !quote.store.isOpen ? orderingOpensText(quote.store.opensAt) : null;
+  const final = reason === null && status === 'ready' && quote?.totalKind === 'final';
+  const label =
+    closed ??
+    (final && quote ? `Go to checkout · ${formatPrice(quote.totalCents)}` : 'Go to checkout');
+  let line: string | null;
+  if (reason === null) line = null;
+  else if (reason === 'closed') {
+    line = quote?.checkoutBlockers.includes('outside') ? CHECKOUT_REASONS.outside : null;
+  } else if (reason === 'loading' || reason === 'updating') {
+    line = slow ? CHECKOUT_REASONS.updating : null;
+  } else line = CHECKOUT_REASONS[reason];
+  return { reason, label, line };
+}

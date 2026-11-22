@@ -24,8 +24,8 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
-import { distanceText } from '@/lib/cart-text';
-import type { CheckedAddress } from '@/lib/data/checked-address';
+import { distanceText, outsideText } from '@/lib/cart-text';
+import { afterAddressCheck, type CheckedAddress } from '@/lib/data/checked-address';
 import { cn } from '@/lib/utils';
 
 /*
@@ -213,12 +213,13 @@ type CheckState =
 
 function GuestAddressCheck({
   initialText = '',
-  onInside,
+  onChecked,
   onAction,
 }: {
   /** The address checked before, when "Change" opened this: shown selected, to type over. */
   initialText?: string;
-  onInside: (address: CheckedAddress, message: string) => void;
+  /** A check came back, inside the area or not: the cart quotes that point from now on. */
+  onChecked: (address: CheckedAddress, deliverable: boolean) => void;
   onAction: () => void;
 }) {
   const id = useId();
@@ -248,12 +249,10 @@ function GuestAddressCheck({
       return;
     }
     announce(outcome.data.message);
-    if (outcome.data.deliverable) {
-      setState({ kind: 'idle' });
-      onInside({ line1: item.line1, lat: item.lat, lng: item.lng }, outcome.data.message);
-    } else {
-      setState({ kind: 'outside', text: outcome.data.message });
-    }
+    setState(
+      outcome.data.deliverable ? { kind: 'idle' } : { kind: 'outside', text: outcome.data.message },
+    );
+    onChecked({ line1: item.line1, lat: item.lat, lng: item.lng }, outcome.data.deliverable);
   }
 
   const tryAnother = () => {
@@ -368,7 +367,15 @@ export function DeliveryBlock({
   const focusPointChange = useRef(false);
   const [changing, setChanging] = useState(false);
   const [checking, setChecking] = useState(false);
+  /** What the address field opens with: the checked address for "Change", empty for another. */
+  const [checkText, setCheckText] = useState('');
   const delivery = quote?.delivery ?? null;
+
+  const openCheck = (text: string) => {
+    onAction();
+    setCheckText(text);
+    setChecking(true);
+  };
 
   useEffect(() => {
     if (!focusPointChange.current || !pointChangeRef.current) return;
@@ -413,7 +420,7 @@ export function DeliveryBlock({
         />
         {outside && !changing ? (
           <OutsideBox
-            text={`We don't deliver to ${address.line1} yet. It's about ${delivery.distanceKm?.toFixed(1) ?? '?'} km away, and we deliver within ${delivery.radiusKm} km.`}
+            text={outsideText(address.line1, delivery)}
             action={
               <Button
                 type="button"
@@ -444,30 +451,48 @@ export function DeliveryBlock({
   } else if (checked && !checking) {
     // Drawn at once, before the quote for it is back (the distance follows with it).
     const quoted = delivery?.kind === 'point' ? delivery : null;
+    const outside = quoted?.status === 'outside';
     body = (
-      <AddressRow
-        icon={MapPin}
-        label="Your address"
-        line1={checked.line1}
-        distance={quoted?.status === 'inside' ? distanceText(quoted) : null}
-        outside={quoted?.status === 'outside'}
-        action={
-          <Button
-            ref={pointChangeRef}
-            type="button"
-            variant="ghost"
-            size="touch"
-            aria-expanded={false}
-            onClick={() => {
-              onAction();
-              setChecking(true);
-            }}
-            className="px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
-          >
-            Change<span className="sr-only"> delivery address</span>
-          </Button>
-        }
-      />
+      <>
+        <AddressRow
+          icon={MapPin}
+          label="Your address"
+          line1={checked.line1}
+          distance={quoted?.status === 'inside' ? distanceText(quoted) : null}
+          outside={outside}
+          action={
+            <Button
+              ref={pointChangeRef}
+              type="button"
+              variant="ghost"
+              size="touch"
+              aria-expanded={false}
+              onClick={() => openCheck(checked.line1)}
+              className="px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
+            >
+              Change<span className="sr-only"> delivery address</span>
+            </Button>
+          }
+        />
+        {outside && quoted ? (
+          // The checked address is outside the area (S2.8): it stays the cart's address, so
+          // checkout stays blocked until she picks one we deliver to.
+          <OutsideBox
+            text={outsideText(checked.line1, quoted)}
+            action={
+              <Button
+                type="button"
+                variant="outline"
+                size="touch"
+                className="mt-3 bg-white"
+                onClick={() => openCheck('')}
+              >
+                Choose another address
+              </Button>
+            }
+          />
+        ) : null}
+      </>
     );
   } else if (!delivery && !checking) {
     body = <span aria-hidden className="mt-3 block h-16 rounded-lg bg-neutral-7" />;
@@ -485,10 +510,7 @@ export function DeliveryBlock({
               size="touch"
               aria-expanded={false}
               aria-controls={`${id}-check`}
-              onClick={() => {
-                onAction();
-                setChecking(true);
-              }}
+              onClick={() => openCheck('')}
               className="mt-3 bg-white"
             >
               <MapPin className="size-4" aria-hidden />
@@ -499,12 +521,17 @@ export function DeliveryBlock({
         <div id={`${id}-check`}>
           {checking ? (
             <GuestAddressCheck
-              initialText={checked?.line1}
+              initialText={checkText}
               onAction={onAction}
-              onInside={(address) => {
-                focusPointChange.current = true;
-                onCheck(address);
-                setChecking(false);
+              onChecked={(address, deliverable) => {
+                // Inside or outside, the checked address replaces the earlier one everywhere:
+                // the quote, the breakdown, checkout and this tab's storage (S2.8).
+                const next = afterAddressCheck(address, deliverable);
+                onCheck(next.keep);
+                if (next.closeCheck) {
+                  focusPointChange.current = true;
+                  setChecking(false);
+                }
               }}
             />
           ) : null}
