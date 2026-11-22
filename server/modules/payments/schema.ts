@@ -122,4 +122,9 @@ export type StripeEventEnvelope = z.infer<typeof stripeEventSchema>;
 
 /** What the webhook answered, for its own tests and logs. */
 export type WebhookOutcome =
-  'applied' | 'unchanged' | 'duplicate' | 'ignored-type' | 'other-instance' | 'unknown-order';
+  | 'applied'
+  | 'unchanged'
+  | 'duplicate'
+  | 'ignored-type'
+  | 'other-instance'
+  | 'unknown-order';

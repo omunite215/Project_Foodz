@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cartReopenStep,
   parsePendingFavorite,
   PENDING_FAVORITE_MS,
   pendingFavoriteStep,
@@ -20,6 +21,15 @@ describe('sign-in links with a reason (B13)', () => {
     );
     expect(signInFor('/sign-in', '/', 'promo')).toBe('/sign-in?reason=promo');
     expect(signInFor('/sign-in', 'https://evil.example', null)).toBe('/sign-in');
+  });
+});
+
+describe('the cart opening again after signing in for a code (S4.8)', () => {
+  it('waits on the sign-in pages, opens once signed in, and is dropped otherwise', () => {
+    expect(cartReopenStep({ onAuthPage: true, signedIn: false })).toBe('keep');
+    expect(cartReopenStep({ onAuthPage: true, signedIn: true })).toBe('keep');
+    expect(cartReopenStep({ onAuthPage: false, signedIn: true })).toBe('open');
+    expect(cartReopenStep({ onAuthPage: false, signedIn: false })).toBe('drop');
   });
 });
 

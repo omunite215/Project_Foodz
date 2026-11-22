@@ -18,10 +18,14 @@ import { formatPrice, plural } from './format';
 
 /** What the tip tiles hold in this tab: a preset, or "Other" with what she typed beside it. */
 export type TipTile =
-  { kind: 'none' } | { kind: 'percent'; percent: TipPercent } | { kind: 'other' };
+  | { kind: 'none' }
+  | { kind: 'percent'; percent: TipPercent }
+  | { kind: 'other' };
 
 export type TipAmount =
-  { kind: 'empty' } | { kind: 'ok'; cents: number } | { kind: 'error'; message: string };
+  | { kind: 'empty' }
+  | { kind: 'ok'; cents: number }
+  | { kind: 'error'; message: string };
 
 /**
  * "5", "5.0", "5.00" and "$5" are $5.00; "5.5" is $5.50; "0" is no tip. More than two decimals,

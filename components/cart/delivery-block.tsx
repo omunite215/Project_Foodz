@@ -10,7 +10,7 @@ import {
   MapPinOff,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   guestAddressSearchAction,
   guestDeliveryCheckAction,
@@ -108,6 +108,20 @@ const linkButton =
 
 // ------------------------------------------------------------------ saved addresses
 
+/** The signed-in customer's address book (the cart's picker and its choice of address). */
+export function useSavedAddresses(enabled = true) {
+  return useQuery({
+    queryKey: ['account', 'addresses'],
+    queryFn: async () => {
+      const outcome = await callAction(() => listAddressesAction());
+      if (!outcome.ok) throw new Error(outcome.error.message);
+      return outcome.data;
+    },
+    staleTime: 30_000,
+    enabled,
+  });
+}
+
 function SavedAddressPicker({
   chosenId,
   onPick,
@@ -121,15 +135,7 @@ function SavedAddressPicker({
   onNavigate: () => void;
   listId: string;
 }) {
-  const book = useQuery({
-    queryKey: ['account', 'addresses'],
-    queryFn: async () => {
-      const outcome = await callAction(() => listAddressesAction());
-      if (!outcome.ok) throw new Error(outcome.error.message);
-      return outcome.data;
-    },
-    staleTime: 30_000,
-  });
+  const book = useSavedAddresses();
   const addresses = book.data?.addresses ?? [];
 
   return (
@@ -206,19 +212,28 @@ type CheckState =
   | { kind: 'failed'; limited: boolean };
 
 function GuestAddressCheck({
+  initialText = '',
   onInside,
   onAction,
 }: {
+  /** The address checked before, when "Change" opened this: shown selected, to type over. */
+  initialText?: string;
   onInside: (address: CheckedAddress, message: string) => void;
   onAction: () => void;
 }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [picked, setPicked] = useState<AddressSuggestion | null>(null);
   const [state, setState] = useState<CheckState>({ kind: 'idle' });
   const slow = useSlowPending(state.kind === 'checking', 150);
   const hintId = `${id}-hint`;
+
+  // Opened by "Check your address" or "Change", whose button is gone: focus moves into the field.
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
 
   async function checkPoint(item: AddressSuggestion) {
     onAction();
@@ -348,9 +363,18 @@ export function DeliveryBlock({
   const id = useId();
   const listId = `${id}-list`;
   const changeRef = useRef<HTMLButtonElement>(null);
+  const pointChangeRef = useRef<HTMLButtonElement>(null);
+  /** An address was just checked: its row's "Change" takes the focus once drawn. */
+  const focusPointChange = useRef(false);
   const [changing, setChanging] = useState(false);
   const [checking, setChecking] = useState(false);
   const delivery = quote?.delivery ?? null;
+
+  useEffect(() => {
+    if (!focusPointChange.current || !pointChangeRef.current) return;
+    focusPointChange.current = false;
+    pointChangeRef.current.focus();
+  });
 
   const done = () => {
     setChanging(false);
@@ -358,20 +382,7 @@ export function DeliveryBlock({
   };
 
   let body: React.ReactNode;
-  if (!delivery) {
-    body = checked ? (
-      <AddressRow
-        icon={MapPin}
-        label="Your address"
-        line1={checked.line1}
-        distance={null}
-        outside={false}
-        action={null}
-      />
-    ) : (
-      <span aria-hidden className="mt-3 block h-16 rounded-lg bg-neutral-7" />
-    );
-  } else if (delivery.kind === 'saved' && delivery.address) {
+  if (delivery?.kind === 'saved' && delivery.address) {
     const outside = delivery.status === 'outside';
     const address = delivery.address;
     body = (
@@ -430,16 +441,19 @@ export function DeliveryBlock({
         ) : null}
       </>
     );
-  } else if (delivery.kind === 'point' && checked && !checking) {
+  } else if (checked && !checking) {
+    // Drawn at once, before the quote for it is back (the distance follows with it).
+    const quoted = delivery?.kind === 'point' ? delivery : null;
     body = (
       <AddressRow
         icon={MapPin}
         label="Your address"
         line1={checked.line1}
-        distance={delivery.status === 'inside' ? distanceText(delivery) : null}
-        outside={delivery.status === 'outside'}
+        distance={quoted?.status === 'inside' ? distanceText(quoted) : null}
+        outside={quoted?.status === 'outside'}
         action={
           <Button
+            ref={pointChangeRef}
             type="button"
             variant="ghost"
             size="touch"
@@ -455,6 +469,8 @@ export function DeliveryBlock({
         }
       />
     );
+  } else if (!delivery && !checking) {
+    body = <span aria-hidden className="mt-3 block h-16 rounded-lg bg-neutral-7" />;
   } else {
     body = (
       <>
@@ -483,8 +499,10 @@ export function DeliveryBlock({
         <div id={`${id}-check`}>
           {checking ? (
             <GuestAddressCheck
+              initialText={checked?.line1}
               onAction={onAction}
               onInside={(address) => {
+                focusPointChange.current = true;
                 onCheck(address);
                 setChecking(false);
               }}

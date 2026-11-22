@@ -40,7 +40,8 @@ export interface PricedLine {
 
 /** Inside or outside comes from the database (ST_DWithin on the exact distance). */
 export type DeliveryPoint =
-  { status: 'unknown' } | { status: 'inside' | 'outside'; distanceMeters: number };
+  | { status: 'unknown' }
+  | { status: 'inside' | 'outside'; distanceMeters: number };
 
 /** A coupon as stored. */
 export interface CouponFacts {

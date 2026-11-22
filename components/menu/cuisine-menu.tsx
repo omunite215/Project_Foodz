@@ -86,7 +86,9 @@ export function CuisineTabList({
   const shownIndex = useRef<number | null>(null);
   const index = CUISINES.indexOf(selected);
 
-  // The pill is placed by CSS (so it is right before any script runs); this slides it there.
+  // CSS places the pill's slot under the selected tab (right before any script runs); the tween
+  // only moves the pill inside that slot, from the old tab back to zero. The two never drive the
+  // same element, so the slot always follows `--tab`.
   useMotion(
     (motion) => {
       const previous = shownIndex.current;
@@ -94,11 +96,11 @@ export function CuisineTabList({
       const triggers = listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]');
       if (previous === null || previous === index || !pillRef.current || !triggers) return;
       const step = (triggers[1]?.offsetLeft ?? 0) - (triggers[0]?.offsetLeft ?? 0);
-      motion.from(pillRef.current, {
-        x: (previous - index) * step,
-        duration: 0.3,
-        ease: 'power2.out',
-      });
+      motion.fromTo(
+        pillRef.current,
+        { x: (previous - index) * step },
+        { x: 0, duration: 0.3, ease: 'power2.out', clearProps: 'transform' },
+      );
     },
     { scope: listRef, dependencies: [index] },
   );
@@ -111,11 +113,16 @@ export function CuisineTabList({
         className="relative h-auto w-full gap-0 rounded-lg bg-white p-1.5 shadow-card group-data-horizontal/tabs:h-auto md:w-[672px] md:gap-9"
       >
         <span
-          ref={pillRef}
           aria-hidden
           style={{ '--tab': index }}
-          className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-0.75rem)/3)] translate-x-[calc(var(--tab)*100%)] rounded-lg bg-brand-strong md:w-[196px] md:translate-x-[calc(var(--tab)*232px)]"
-        />
+          className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-0.75rem)/3)] translate-x-[calc(var(--tab)*100%)] md:w-[196px] md:translate-x-[calc(var(--tab)*232px)]"
+        >
+          <span
+            ref={pillRef}
+            data-tab-pill
+            className="block size-full rounded-lg bg-brand-strong"
+          />
+        </span>
         {CUISINES.map((cuisine) => (
           <TabsTrigger
             key={cuisine}

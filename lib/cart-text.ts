@@ -239,7 +239,14 @@ export const tooManyCodesText = (seconds: number | null) =>
 // ------------------------------------------------------------------ the checkout button (design 2.17)
 
 export type CheckoutReason =
-  'updating' | 'failed' | 'rateLimited' | 'offline' | 'soldOut' | 'closed' | 'outside' | 'loading';
+  | 'updating'
+  | 'failed'
+  | 'rateLimited'
+  | 'offline'
+  | 'soldOut'
+  | 'closed'
+  | 'outside'
+  | 'loading';
 
 export const CHECKOUT_REASONS: Record<Exclude<CheckoutReason, 'closed' | 'loading'>, string> = {
   updating: 'Updating your total…',

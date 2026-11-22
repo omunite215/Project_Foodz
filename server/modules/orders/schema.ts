@@ -233,7 +233,13 @@ export interface Decline {
 }
 
 export type TimelineKind =
-  'placed' | 'revived' | 'cancelled' | 'expired' | 'refunded' | 'disputeOpened' | 'disputeClosed';
+  | 'placed'
+  | 'revived'
+  | 'cancelled'
+  | 'expired'
+  | 'refunded'
+  | 'disputeOpened'
+  | 'disputeClosed';
 
 export interface OrderView {
   id: string;

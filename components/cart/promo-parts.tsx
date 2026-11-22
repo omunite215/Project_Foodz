@@ -99,7 +99,7 @@ export function PromoMessageLine({
                   href={signInHref}
                   replace
                   onClick={onSignIn}
-                  className="inline-flex h-11 items-center font-medium text-brand-strong underline underline-offset-4"
+                  className="-my-3 inline-block py-3 font-medium text-brand-strong underline underline-offset-4"
                 >
                   Sign in
                 </Link>
@@ -370,7 +370,7 @@ export function CartOffers({
                 {offer.description ? (
                   <p className="text-body-5 text-neutral-3">{offer.description}</p>
                 ) : null}
-                <OfferCountdown endsAt={offer.endsAt} className="mt-2" />
+                <OfferCountdown endsAt={offer.endsAt} size="compact" className="mt-2" />
                 {reason ? <p className="mt-1 text-body-5 text-neutral-3">{reason}</p> : null}
               </div>
               {appliedCode === offer.code ? (

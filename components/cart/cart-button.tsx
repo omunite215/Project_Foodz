@@ -4,6 +4,7 @@ import { ShoppingBag } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { isAuthPage } from '@/lib/auth-links';
 import { closeCart, openCart, takeCartOpener, useCartOpen } from '@/lib/cart-dialog';
 import { cartButtonLabel } from '@/lib/cart-text';
 import { useCart } from '@/lib/data/cart';
@@ -56,20 +57,23 @@ export function CartButton({
     latest.current = { open, history };
   });
 
-  // A new page closes the cart without stepping back (its entry was replaced), and the cart
-  // opens again on return from signing in for it (B1, S4.8).
+  // A new page closes the cart without stepping back (its entry was replaced).
   const shownPath = useRef(pathname);
   useEffect(() => {
-    if (pathname !== shownPath.current) {
-      shownPath.current = pathname;
-      if (latest.current.open) {
-        leftPage.current = true;
-        latest.current.history.forget();
-        closeCart();
-      }
+    if (pathname === shownPath.current) return;
+    shownPath.current = pathname;
+    if (latest.current.open) {
+      leftPage.current = true;
+      latest.current.history.forget();
+      closeCart();
     }
-    if (takeCartReopen()) openCart(null);
   }, [pathname]);
+
+  // The cart opens again once she is back from signing in for it (B1, S4.8): never over the
+  // sign-in form, and not at all if she comes back without signing in.
+  useEffect(() => {
+    if (takeCartReopen({ signedIn, onAuthPage: isAuthPage(pathname) })) openCart(null);
+  }, [pathname, signedIn]);
 
   /** A link inside the cart replaces its history entry and leaves the page. */
   const navigating = () => {

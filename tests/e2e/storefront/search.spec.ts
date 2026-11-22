@@ -4,6 +4,21 @@ import { expectAccessible, expectNoSidewaysScroll, isPhone, liveRegion, open } f
 const searchField = (page: Page) => page.getByRole('searchbox', { name: 'Search the menu' });
 const panelLinks = (page: Page) => page.getByRole('tabpanel').getByRole('link');
 
+/** How far the green pill is from the selected tab, in px (0 when it sits right under it). */
+const pillOffset = (page: Page) =>
+  page.getByRole('tablist', { name: 'Cuisine' }).evaluate((list) => {
+    const pill = list.querySelector('[data-tab-pill]')?.getBoundingClientRect();
+    const tab = list.querySelector('[role="tab"][aria-selected="true"]')?.getBoundingClientRect();
+    if (!pill || !tab) return Number.POSITIVE_INFINITY;
+    return Math.max(Math.abs(pill.left - tab.left), Math.abs(pill.width - tab.width));
+  });
+
+/** Where the menu toolbar's top edge is on screen, in whole px. */
+const toolbarTop = (page: Page) =>
+  page
+    .locator('[data-menu-toolbar]')
+    .evaluate((element) => Math.round(element.getBoundingClientRect().top));
+
 test.describe('Menu search and filters', () => {
   test('results follow her words across cuisines and stay in the address (S6.1, S6.2, S6.13)', async ({
     page,
@@ -74,6 +89,42 @@ test.describe('Menu search and filters', () => {
       'aria-selected',
       'true',
     );
+  });
+
+  test('the green pill follows the selected tab, also after a search switches tabs (5.4)', async ({
+    page,
+  }) => {
+    await open(page, '/menu');
+    await expect.poll(() => pillOffset(page)).toBeLessThan(2);
+    for (const name of [/^Thai,/, /^Vietnamese,/, /^Korean,/]) {
+      await page.getByRole('tab', { name }).click();
+      await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
+      await expect.poll(() => pillOffset(page)).toBeLessThan(2);
+    }
+
+    // "curry" has no Korean dishes, so the search moves to Thai by itself.
+    await searchField(page).fill('curry');
+    await expect(page.getByRole('tab', { name: /^Thai,/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect.poll(() => pillOffset(page)).toBeLessThan(2);
+    await page.getByRole('tab', { name: /^Korean,/ }).click();
+    await expect.poll(() => pillOffset(page)).toBeLessThan(2);
+  });
+
+  test('on phones the first keystroke and the header search link bring the toolbar to the top (S6.16)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isPhone(testInfo), 'The toolbar sticks to the top below 1024 px only.');
+    await open(page, '/menu');
+    await searchField(page).fill('p');
+    await expect.poll(() => toolbarTop(page)).toBe(0);
+
+    await open(page, '/blog');
+    await page.locator('header').getByRole('link', { name: 'Search the menu' }).click();
+    await expect(searchField(page)).toBeFocused();
+    await expect.poll(() => toolbarTop(page)).toBe(0);
   });
 
   test('nothing found shows ideas; a typo offers a close match; her words stay text (S6.5, S6.7)', async ({

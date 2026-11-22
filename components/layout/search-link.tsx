@@ -8,14 +8,25 @@ import { prefersReducedMotion } from '@/lib/motion';
 /** The menu's search field and its toolbar (design 5.3). */
 export const MENU_SEARCH_ID = 'menu-search';
 
+/**
+ * Brings the menu toolbar around `element` to the top of the screen. Not `scrollIntoView`: that
+ * stops short by the page's `scroll-padding-top`, which is there to keep focused cards clear of
+ * the sticky toolbar.
+ */
+export function scrollMenuToolbarToTop(element: Element) {
+  const toolbar = element.closest('[data-menu-toolbar]');
+  if (!toolbar) return;
+  window.scrollTo({
+    top: toolbar.getBoundingClientRect().top + window.scrollY,
+    behavior: prefersReducedMotion() ? 'instant' : 'smooth',
+  });
+}
+
 /** Focuses the menu's search field and brings its toolbar to the top of the screen. */
 export function focusMenuSearch(): boolean {
   const field = document.getElementById(MENU_SEARCH_ID);
   if (!(field instanceof HTMLInputElement)) return false;
-  field.closest('[data-menu-toolbar]')?.scrollIntoView({
-    block: 'start',
-    behavior: prefersReducedMotion() ? 'instant' : 'smooth',
-  });
+  scrollMenuToolbarToTop(field);
   field.focus({ preventScroll: true });
   return true;
 }

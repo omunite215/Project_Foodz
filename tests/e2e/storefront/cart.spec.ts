@@ -256,6 +256,9 @@ test.describe('Cart', () => {
       'Gimbap',
       'Kimchi',
     ]);
+    // The edited cart's total is announced once it settles; messages that arrive together are
+    // read together, so let it come before emptying the cart.
+    await expect(liveRegion(page)).toHaveText(/^Total before delivery \$\d+\.\d\d$/);
 
     await dialog.getByRole('button', { name: 'Empty cart' }).click();
     const confirm = page.getByRole('alertdialog', { name: 'Remove all 2 items from your cart?' });
@@ -280,6 +283,162 @@ test.describe('Cart', () => {
     await expect(dialog).toBeHidden();
     await expect(view).toBeFocused();
     await expect(page).toHaveURL(/\/menu\/gimbap$/);
+  });
+
+  test('R5 "Sign in" leaves the cart closed on the sign-in page and reopens it on return (S4.8)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    test.skip(!DEMO_PASSWORD, 'Needs the demo password from .env.');
+    await addDish(page, 'gimbap');
+    await addDish(page, 'kimchi');
+    const dialog = await openCart(page);
+    const field = await promoField(dialog);
+    await field.fill('WELCOME10');
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(
+      dialog.getByText(
+        "Sign in to use WELCOME10. It's one per customer, so we need to know it's you.",
+      ),
+    ).toBeVisible();
+    await dialog.getByRole('link', { name: 'Sign in' }).click();
+
+    await expect(page).toHaveURL(/\/sign-in\?callbackUrl=%2Fmenu%2Fkimchi&reason=promo$/);
+    await expect(page.getByText('Sign in to use WELCOME10.', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Email')).toBeVisible();
+    await expect(cartDialog(page)).toBeHidden();
+
+    await page.getByLabel('Email').fill(ACCOUNTS.demo);
+    await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/menu\/kimchi$/, { timeout: 30_000 });
+    // Back on the page with the cart open, and the code checked again as her: it applies, or
+    // says why not (R6 once used, R7 while an order holds it).
+    const back = cartDialog(page);
+    await expect(back).toBeVisible();
+    await expect(
+      back
+        .getByRole('button', { name: 'Remove WELCOME10' })
+        .or(back.getByText(/^(You've already used WELCOME10|WELCOME10 is on hold)/)),
+    ).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('on phones an offer\'s "Apply" shows its answer: a refusal, then the compare card (S4.7, S4.10)', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    await addDish(page, 'pad-thai');
+    let dialog = await openCart(page);
+    await dialog
+      .getByRole('region', { name: 'Offers' })
+      .getByRole('button', { name: 'Apply KBBQ5' })
+      .click();
+    await expect(
+      dialog.getByText('KBBQ5 is for Korean dishes. Add a Korean dish to use it.'),
+    ).toBeVisible();
+
+    // Two Gimbap make KBBQ5 work; FREEDELIVERY then asks which one to keep.
+    await page.keyboard.press('Escape');
+    await addDish(page, 'gimbap');
+    dialog = await openCart(page);
+    await dialog.getByRole('button', { name: 'Increase Gimbap' }).click();
+    await expect(priceValue(dialog, 'Subtotal')).toHaveText('$47.97');
+    const offers = dialog.getByRole('region', { name: 'Offers' });
+    await offers.getByRole('button', { name: 'Apply KBBQ5' }).click();
+    await expect(dialog.getByText('KBBQ5 applied. You save $5.00.')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove KBBQ5' })).toBeVisible();
+    if (isPhone(testInfo)) {
+      // Folded away again, the next answer still shows.
+      const disclosure = dialog.getByRole('button', { name: 'Use a different code' });
+      await disclosure.click();
+      await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    }
+    await offers.getByRole('button', { name: 'Apply FREEDELIVERY' }).click();
+    const compare = dialog.getByRole('region', { name: 'One promo code per order' });
+    await expect(compare.getByRole('button', { name: 'Keep KBBQ5' })).toBeVisible();
+    await expect(compare.getByRole('button', { name: 'Use FREEDELIVERY' })).toBeVisible();
+  });
+
+  test('a code crossing its minimum is announced together with the new total (S4.6, S7.3)', async ({
+    page,
+  }) => {
+    await addDish(page, 'gimbap');
+    const dialog = await openCart(page);
+    const field = await promoField(dialog);
+    await field.fill('KBBQ5');
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(dialog.getByText('Not applied yet')).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Increase Gimbap' }).click();
+    await expect(liveRegion(page)).toContainText('KBBQ5 applied. You save $5.00.');
+    await expect(liveRegion(page)).toContainText(/Total( before delivery)? \$\d+\.\d\d/);
+
+    await dialog.getByRole('button', { name: 'Decrease Gimbap' }).click();
+    await expect(liveRegion(page)).toContainText('KBBQ5 is no longer applied.');
+    await expect(liveRegion(page)).toContainText(/Total( before delivery)? \$\d+\.\d\d/);
+  });
+
+  test('checking an address moves focus with her: into the field, then to "Change" (2.15 B)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await addDish(page, 'kimchi');
+    const dialog = await openCart(page);
+    const delivery = dialog.getByRole('region', { name: 'Delivery' });
+    await delivery.getByRole('button', { name: 'Check your address' }).click();
+    const field = delivery.getByRole('combobox', { name: 'Your address' });
+    await expect(field).toBeFocused();
+
+    await field.pressSequentially('Peterborough Street', { delay: 25 });
+    const options = dialog
+      .getByRole('listbox', { name: 'Address suggestions' })
+      .getByRole('option');
+    await expect(options.filter({ hasText: /Boston/ }).first()).toBeVisible({ timeout: 20_000 });
+    const index = (await options.allInnerTexts()).findIndex((text) => /Boston/.test(text));
+    for (let step = 0; step <= index; step++) await field.press('ArrowDown');
+    await field.press('Enter');
+    const change = delivery.getByRole('button', { name: 'Change delivery address' });
+    await expect(change).toBeFocused({ timeout: 15_000 });
+    await expect(priceValue(dialog, /^Delivery to your address/)).toContainText('$');
+
+    // "Change" opens the field again with her address in it, selected.
+    await change.click();
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue(/Peterborough Street/);
+    expect(
+      await field.evaluate((element) => {
+        const input = element as HTMLInputElement;
+        return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+      }),
+    ).toBe(true);
+  });
+
+  test('after signing in, her saved default address beats one checked as a guest (S2.6)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    test.skip(!DEMO_PASSWORD, 'Needs the demo password from .env.');
+    await addDish(page, 'gimbap');
+    // An address checked in the cart before signing in (kept in this tab only).
+    await page.evaluate(() =>
+      sessionStorage.setItem(
+        'foodz.cart.point',
+        JSON.stringify({ line1: 'Peterborough Street', lat: 42.3449, lng: -71.0986 }),
+      ),
+    );
+    let dialog = await openCart(page);
+    await expect(priceValue(dialog, /^Delivery to your address/)).toContainText('$');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await signIn(page, ACCOUNTS.demo, DEMO_PASSWORD);
+    dialog = await openCart(page);
+    await expect(priceValue(dialog, 'Delivery to Home · 4.3 km')).toHaveText('$4.14');
+    await dialog.getByRole('button', { name: 'Change delivery address' }).click();
+    await expect(
+      dialog.getByRole('group', { name: 'Deliver to' }).getByRole('radio', { name: /Home/ }),
+    ).toBeChecked();
+    await expect(dialog.getByRole('link', { name: 'Manage addresses' })).toBeVisible();
   });
 
   test('fits a 320 px screen without sideways scrolling, and has no accessibility violations (S7.10)', async ({

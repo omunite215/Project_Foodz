@@ -27,6 +27,7 @@ import {
   tooManyCodesText,
 } from '@/lib/cart-text';
 import { useCartActions } from '@/lib/data/cart';
+import { prefersReducedMotion } from '@/lib/motion';
 import {
   clearPendingPromo,
   readPendingPromo,
@@ -47,13 +48,38 @@ import {
 import { fetchQuote, type QuoteRequest, quoteQueryKey, requestKey } from './use-quote';
 
 /*
- * Promo codes in the cart (F3 S4, design 2.10 to 2.14). The first check is on Apply, Enter or
- * leaving the field; after the first answer it checks again 400 ms after typing stops. Only the
- * newest answer shows. A refused code is never sent again (each unknown code spends a guessing
- * point); the cart's own code is sent in every quote only while it is applied or not applied yet.
+ * Promo codes in the cart (F3 S4, design 2.10 to 2.14). A code is checked on Apply, Enter or
+ * leaving the field, never while typing. Only the newest answer shows. A refused code is never
+ * sent again (each unknown code spends a guessing point); the cart's own code is sent in every
+ * quote only while it is applied or not applied yet.
  */
 
 const PROMO_OFFLINE = "You're offline. We'll check the code when you're back online.";
+
+/**
+ * Scrolls the cart (its body, or the whole panel on short screens) the least needed to show
+ * `element`. Not `scrollIntoView`, which may also scroll the page behind the dialog.
+ */
+function scrollIntoCart(element: HTMLElement) {
+  let scroller = element.parentElement;
+  while (scroller) {
+    const { overflowY } = getComputedStyle(scroller);
+    if (/auto|scroll/.test(overflowY) && scroller.scrollHeight > scroller.clientHeight) break;
+    scroller = scroller.parentElement;
+  }
+  if (!scroller || scroller === document.documentElement || scroller === document.body) return;
+  const box = element.getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  const margin = 12;
+  let by = 0;
+  if (box.top < view.top + margin) by = box.top - view.top - margin;
+  else if (box.bottom > view.bottom - margin) {
+    by = Math.min(box.bottom - view.bottom + margin, box.top - view.top - margin);
+  }
+  if (by !== 0) {
+    scroller.scrollBy({ top: by, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
+  }
+}
 
 // ------------------------------------------------------------------ the section and its logic
 
@@ -108,6 +134,8 @@ export function PromoSection({
   const slowChecking = useSlowPending(checking);
 
   const requestId = useRef(0);
+  /** An offer's Apply was pressed: its answer is brought into view once it is drawn. */
+  const revealAnswer = useRef(false);
   const inFlight = useRef<string | null>(null);
   const lastChecked = useRef<string | null>(null);
   const waitingOnline = useRef<string | null>(null);
@@ -330,6 +358,19 @@ export function PromoSection({
     latest.current.followQuote(quote, storedCode);
   }, [quote, storedCode]);
 
+  /** Scrolls the field, its message and the compare card into view in the cart. */
+  const showField = () => {
+    const field = document.getElementById(fieldId);
+    if (field) scrollIntoCart(field);
+  };
+
+  // An offer's answer shows under the field, which can be above the offers on screen.
+  useEffect(() => {
+    if (!revealAnswer.current || checking || (!message && !compare)) return;
+    revealAnswer.current = false;
+    showField();
+  });
+
   const focusField = () => {
     setExpanded(true);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -498,6 +539,11 @@ export function PromoSection({
           offers={quote?.offers ?? []}
           appliedCode={storedPromo?.status === 'applied' ? storedCode : null}
           onApply={(code) => {
+            // Below md the field, its answer, "Checking…" and the compare card are folded away
+            // until opened: an offer's Apply opens them (2.14).
+            setExpanded(true);
+            revealAnswer.current = true;
+            requestAnimationFrame(showField);
             void check(code, { fromField: false });
           }}
         />
