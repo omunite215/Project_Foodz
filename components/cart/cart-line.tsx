@@ -88,7 +88,8 @@ export function QuantityStepper({
       {quantity <= 1 ? (
         <button
           type="button"
-          aria-label={`Remove ${title}${suffix}`}
+          // Not "Remove Gimbap": the line's own Remove button follows with that name (S7.2).
+          aria-label={`Decrease to 0 and remove ${title}${suffix}`}
           onClick={onRemove}
           className={cn(stepButton, 'rounded-l-lg text-destructive')}
         >

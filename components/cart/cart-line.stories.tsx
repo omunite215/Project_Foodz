@@ -69,8 +69,20 @@ export const Normal: Story = {
   },
 };
 
-/** At 1 the minus is a bin named "Remove Gimbap". */
-export const One: Story = { args: { line: view(gimbap, { quantity: 1 }) } };
+/**
+ * At 1 the minus is a bin, "Decrease to 0 and remove Gimbap": a name of its own, so it isn't
+ * mistaken for the line's "Remove Gimbap" right after it.
+ */
+export const One: Story = {
+  args: { line: view(gimbap, { quantity: 1 }) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole('button', { name: 'Decrease to 0 and remove Gimbap' }),
+    ).toBeVisible();
+    await expect(canvas.getAllByRole('button', { name: 'Remove Gimbap' })).toHaveLength(1);
+  },
+};
 
 /** Sold out today: not in the total, only "Remove" left (S3.1). */
 export const SoldOut: Story = { args: { line: view(kimchi, { soldOut: true }) } };

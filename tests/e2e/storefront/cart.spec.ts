@@ -105,8 +105,11 @@ test.describe('Cart', () => {
 
     const quantity = dialog.getByRole('group', { name: 'Quantity, Gimbap' });
     await expect(quantity.getByText('Gimbap, quantity 1')).toBeAttached();
-    // At 1, the minus removes the line and says so.
-    await expect(quantity.getByRole('button', { name: 'Remove Gimbap' })).toBeVisible();
+    // At 1, the minus removes the line and says so, with a name apart from the line's Remove.
+    await expect(
+      quantity.getByRole('button', { name: 'Decrease to 0 and remove Gimbap' }),
+    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove Gimbap', exact: true })).toHaveCount(1);
     await dialog.getByRole('button', { name: 'Increase Gimbap' }).click();
     await expect(quantity.getByText('Gimbap, quantity 2')).toBeAttached();
     await expect(dialog.getByText('2 × $12.99')).toBeVisible();
