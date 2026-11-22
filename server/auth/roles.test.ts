@@ -23,6 +23,21 @@ const MATRIX: [Permission, Role[]][] = [
   [{ staff: ['assign-role'] }, ['admin']],
   [{ user: ['ban'] }, ['admin']],
   [{ user: ['impersonate'] }, []],
+  [{ user: ['get'] }, ['admin']],
+  [
+    { account: ['update-own'] },
+    ['customer', 'partner', 'kitchen', 'support', 'content_editor', 'admin'],
+  ],
+  [
+    { account: ['export-own'] },
+    ['customer', 'partner', 'kitchen', 'support', 'content_editor', 'admin'],
+  ],
+  // Staff accounts are removed by an admin, which also protects the last admin.
+  [{ account: ['delete-own'] }, ['customer', 'partner']],
+  [
+    { address: ['manage-own'] },
+    ['customer', 'partner', 'kitchen', 'support', 'content_editor', 'admin'],
+  ],
 ];
 
 describe('permission matrix', () => {

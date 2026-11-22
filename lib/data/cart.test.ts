@@ -1,6 +1,12 @@
 import { DbClient, type StorageApi, type StorageEventApi } from '@tanstack/react-db';
 import { describe, expect, it, vi } from 'vitest';
-import { cartActions, cartCollection, cartLineId, MAX_LINE_QUANTITY } from './cart';
+import {
+  cartActions,
+  cartCollection,
+  cartLineId,
+  cartSessionCheck,
+  MAX_LINE_QUANTITY,
+} from './cart';
 
 const RAMEN = '0196a1b2-0000-7000-8000-000000000001';
 const PHO = '0196a1b2-0000-7000-8000-000000000002';
@@ -208,5 +214,37 @@ describe('cart', () => {
     one.insert({ id: 'x', menuItemId: RAMEN, flavors: [], quantity: 1 });
 
     expect(other.size).toBe(0);
+  });
+});
+
+describe('cart and sessions (S5.10)', () => {
+  it('never touches a guest cart', () => {
+    expect(cartSessionCheck(null, null, true)).toEqual({ emptyCart: false, owner: null });
+  });
+
+  it('keeps a guest cart on sign-in and ties it to the session', () => {
+    expect(cartSessionCheck(null, 'session-a', true)).toEqual({
+      emptyCart: false,
+      owner: 'session-a',
+    });
+  });
+
+  it('keeps the cart while the same session lasts', () => {
+    expect(cartSessionCheck('session-a', 'session-a', true)).toEqual({
+      emptyCart: false,
+      owner: 'session-a',
+    });
+  });
+
+  it('empties the cart once the session has ended', () => {
+    expect(cartSessionCheck('session-a', null, true)).toEqual({ emptyCart: true, owner: null });
+    expect(cartSessionCheck('session-a', 'session-b', true)).toEqual({
+      emptyCart: true,
+      owner: 'session-b',
+    });
+  });
+
+  it('has nothing to empty in an empty cart', () => {
+    expect(cartSessionCheck('session-a', null, false)).toEqual({ emptyCart: false, owner: null });
   });
 });

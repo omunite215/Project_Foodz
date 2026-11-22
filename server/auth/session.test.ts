@@ -39,7 +39,10 @@ describe('requirePermission', () => {
 
   it('refuses staff without two-factor, and allows them once it is on', async () => {
     signedIn({ role: 'kitchen', twoFactorEnabled: false });
-    await expect(requirePermission(readOrders)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(requirePermission(readOrders)).rejects.toMatchObject({
+      code: 'TWO_FACTOR_REQUIRED',
+      message: 'Set up two-factor sign-in to use staff tools.',
+    });
 
     signedIn({ role: 'kitchen', twoFactorEnabled: true });
     await expect(requirePermission(readOrders)).resolves.toMatchObject({ role: 'kitchen' });
@@ -55,9 +58,12 @@ describe('requirePermission', () => {
 
   it('never lets a demo account write, even with two-factor on', async () => {
     signedIn({ role: 'admin', isDemo: true, twoFactorEnabled: true });
-    await expect(requirePermission({ user: ['ban'] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(requirePermission({ user: ['ban'] })).rejects.toMatchObject({
+      code: 'DEMO_READ_ONLY',
+      message: "Demo accounts can't change this.",
+    });
     await expect(requirePermission({ user: ['ban'] }, { write: true })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+      code: 'DEMO_READ_ONLY',
     });
   });
 

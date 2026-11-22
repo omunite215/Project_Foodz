@@ -37,6 +37,9 @@ export default defineConfig({
           include: ['tests/integration/**/*.test.ts'],
           globalSetup: ['tests/integration/global-setup.ts'],
           setupFiles: ['tests/integration/setup-env.ts'],
+          // Better Auth loads `next/headers.js` itself to set cookies from Server Actions; running
+          // it through Vite lets the tests' stand-in for the browser receive those cookies.
+          server: { deps: { inline: ['better-auth'] } },
           testTimeout: 30_000,
           hookTimeout: 120_000,
           fileParallelism: false,

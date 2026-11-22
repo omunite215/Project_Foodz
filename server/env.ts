@@ -1,5 +1,6 @@
 import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
+import { clientIpOptInRefused, clientIpWarning } from './client-ip';
 
 const bool = z
   .enum(['true', 'false', '1', '0'])
@@ -35,6 +36,9 @@ export const env = createEnv({
 
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
+    TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Test-only: take the client address from X-Forwarded-For without a proxy (server/client-ip.ts).
+    CLIENT_IP_FROM_HEADER: bool,
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
 
@@ -76,3 +80,10 @@ export const env = createEnv({
   skipValidation: process.env.SKIP_ENV_VALIDATION === '1',
   emptyStringAsUndefined: true,
 });
+
+// Checked when the server starts (instrumentation.ts imports this file).
+if (clientIpOptInRefused(process.env)) {
+  throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused on Vercel production.');
+}
+const ipWarning = clientIpWarning(process.env);
+if (ipWarning) console.warn(ipWarning);

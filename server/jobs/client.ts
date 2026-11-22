@@ -29,3 +29,8 @@ export const uploadReceived = eventType('upload.received', {
 export const notificationEmailRequested = eventType('notification.email-requested', {
   schema: z.object({ notificationId: z.uuid() }),
 });
+
+/** An account email (confirm, reset, ...). The payload is encrypted: it holds an address and a link. */
+export const accountEmailRequested = eventType('account.email-requested', {
+  schema: z.object({ sealed: z.string().min(1).max(8000) }),
+});

@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { REQUEST_PATH_HEADER } from '@/lib/request-path';
 import { buildCsp, originOf, permissionsPolicy } from '@/server/security/csp';
 
 // Runs before every page request. Authorization is NOT decided here (that happens in the
@@ -41,12 +42,22 @@ export function proxy(request: NextRequest) {
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('x-request-id', requestId);
   requestHeaders.set('content-security-policy', csp);
+  // The page asked for, so a signed-out visit to /account… can return there after sign-in.
+  requestHeaders.set(REQUEST_PATH_HEADER, requestedPath(request.nextUrl));
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('content-security-policy', csp);
   response.headers.set('permissions-policy', permissionsPolicy(request.nextUrl.pathname));
   response.headers.set('x-request-id', requestId);
   return response;
+}
+
+/** The requested path and query, without the router's own cache-busting parameter. */
+function requestedPath(url: URL) {
+  const search = new URLSearchParams(url.search);
+  search.delete('_rsc');
+  const query = search.toString();
+  return query ? `${url.pathname}?${query}` : url.pathname;
 }
 
 function isDecodable(pathname: string) {

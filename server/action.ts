@@ -3,7 +3,7 @@ import { createSafeActionClient } from 'next-safe-action';
 import { z } from 'zod';
 import { getActor, requirePermission } from '@/server/auth/session';
 import type { Permission } from '@/server/auth/roles';
-import { AppError, unauthenticated } from '@/server/errors';
+import { AppError, demoReadOnly, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { requestInfo } from '@/server/request';
 import { enforceRateLimit, type RateLimitPolicy } from '@/server/security/rate-limit';
@@ -12,13 +12,20 @@ const metadataSchema = z.object({
   name: z.string(),
   rateLimit: z.custom<RateLimitPolicy>().optional(),
   permission: z.custom<Permission>().optional(),
-  /** Set false for permission-gated actions that only read data (demo accounts may run them). */
+  /**
+   * With `permission`: set false for actions that only read (demo accounts may run them).
+   * Without it: set true for self-service actions that change the caller's own data, which the
+   * shared demo accounts may not do.
+   */
   write: z.boolean().optional(),
 });
 
 export interface ActionError {
   code: AppError['code'] | 'INTERNAL';
   message: string;
+  fieldErrors?: Record<string, string[]>;
+  retryAfterSeconds?: number;
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -29,7 +36,7 @@ export interface ActionError {
 const base = createSafeActionClient<undefined, ActionError, typeof metadataSchema>({
   defineMetadataSchema: () => metadataSchema,
   handleServerError(error, { metadata }) {
-    if (error instanceof AppError) return { code: error.code, message: error.message };
+    if (error instanceof AppError) return error.toJSON();
     logger.error({ err: error, action: metadata?.name }, 'action failed');
     return { code: 'INTERNAL', message: 'Something went wrong. Please try again.' };
   },
@@ -60,6 +67,7 @@ export const userAction = base.use(async ({ next, metadata }) => {
     ? await requirePermission(metadata.permission, { write: metadata.write })
     : await getActor();
   if (actor.kind !== 'user') throw unauthenticated();
+  if (!metadata.permission && metadata.write && actor.isDemo) throw demoReadOnly();
   await enforceRateLimit(metadata.rateLimit ?? 'action.default', `user:${actor.userId}`);
   return next({ ctx: { actor } });
 });
