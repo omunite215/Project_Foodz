@@ -164,6 +164,9 @@ export async function expectAccessiblePage(page: Page) {
         .map((animation) => animation.finished.catch(() => undefined)),
     ),
   );
+  // Figures dim to 75 % while a new total is on its way (F3 2.18); a quote refreshed on the
+  // minute or on focus can land mid-check, so measure them settled.
+  await expect(page.locator('#main .opacity-75')).toHaveCount(0, { timeout: 15_000 });
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .exclude('.__PrivateStripeElement-input')
