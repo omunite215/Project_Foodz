@@ -4,27 +4,25 @@ import { Heart, ShoppingBag, TicketPercent } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
 import type { SignInReason } from '@/server/modules/auth/schema';
 import { FormAlert } from '@/components/forms/form-alert';
-import { pendingFavoriteStep, readPendingFavorite, readPendingPromo } from '@/lib/sign-in-reason';
+import {
+  pendingFavoriteStep,
+  readPendingFavorite,
+  readPendingPromo,
+  reasonNoticeText,
+} from '@/lib/sign-in-reason';
 
 /*
- * Why she was sent to sign in (F3 design 1.3, B13). The server draws a sentence from a fixed
- * list, so it never shifts the form; this tab then names the dish or the code from its own
- * storage, never from the address. A forged link keeps the plain sentence and saves nothing.
+ * Why she was sent to sign in or to create an account (F3 design 1.3, B13). The server draws a
+ * sentence from a fixed list, so it never shifts the form; this tab then names the dish or the
+ * code from its own storage, never from the address. A forged link keeps the plain sentence and
+ * saves nothing.
  */
-
-const SERVER_TEXT: Record<SignInReason, string> = {
-  checkout: 'Sign in to check out. Your cart is saved.',
-  promo: 'Sign in to use your promo code.',
-  favorite: 'Sign in to save this dish to your favorites.',
-};
 
 const ICONS = { checkout: ShoppingBag, promo: TicketPercent, favorite: Heart } as const;
 
-function namedText(reason: SignInReason): string | null {
-  if (reason === 'promo') {
-    const code = readPendingPromo();
-    return code ? `Sign in to use ${code}.` : null;
-  }
+/** The code or dish this tab kept for the return, while it is still waiting. */
+function keptName(reason: SignInReason): string | null {
+  if (reason === 'promo') return readPendingPromo();
   if (reason === 'favorite') {
     const pending = readPendingFavorite();
     if (!pending) return null;
@@ -34,24 +32,31 @@ function namedText(reason: SignInReason): string | null {
       onAuthPage: true,
       now: Date.now(),
     });
-    return step === 'keep' ? `Sign in to save ${pending.title} to your favorites.` : null;
+    return step === 'keep' ? pending.title : null;
   }
   return null;
 }
 
 const noUpdates = () => () => {};
 
-export function SignInReasonNotice({ reason }: { reason: SignInReason }) {
+export function SignInReasonNotice({
+  reason,
+  page = '/sign-in',
+}: {
+  reason: SignInReason;
+  /** The sign-up page asks her to create an account, not to sign in. */
+  page?: '/sign-in' | '/sign-up';
+}) {
   // The server's sentence first; the browser's own record names the dish or code after hydration.
-  const named = useSyncExternalStore(
+  const name = useSyncExternalStore(
     noUpdates,
-    () => namedText(reason),
+    () => keptName(reason),
     () => null,
   );
 
   return (
     <FormAlert variant="info" icon={ICONS[reason]} className="mb-6">
-      {named ?? SERVER_TEXT[reason]}
+      {reasonNoticeText(reason, page, name)}
     </FormAlert>
   );
 }

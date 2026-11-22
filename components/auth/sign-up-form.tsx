@@ -186,7 +186,7 @@ export function SignUpForm({
         subtitle="It takes a minute: just your name, email and a password."
       />
       <div className="mt-6 md:mt-10 xl:mt-12">
-        {reason ? <SignInReasonNotice reason={reason} /> : null}
+        {reason ? <SignInReasonNotice reason={reason} page="/sign-up" /> : null}
         {google ? (
           <>
             <GoogleButton
