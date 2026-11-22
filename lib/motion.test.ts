@@ -141,6 +141,29 @@ describe('createMotion', () => {
     media.revert();
   });
 
+  it('skips an element that is not on the page without a "target not found" warning', () => {
+    stubMotionPreference('no-preference');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const scope = box();
+    const badge = document.createElement('span');
+    badge.dataset.cartBadge = '';
+    scope.append(badge);
+
+    const media = createMotion((motion) => {
+      // A badge that went away with the last item, a ref not drawn yet, an empty list.
+      finish(motion.fromTo('[data-missing]', { scale: 1.25 }, { scale: 1, duration: 0.3 }));
+      finish(motion.from(null, { opacity: 0, duration: 0.2 }));
+      finish(motion.to([], { opacity: 0, duration: 0.2 }));
+      // Selector text still finds what is inside the scope.
+      finish(motion.fromTo('[data-cart-badge]', { scale: 1.25 }, { scale: 1, duration: 0.3 }));
+    }, scope);
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(gsap.getProperty(badge, 'scale')).toBe(1);
+    media.revert();
+    warn.mockRestore();
+  });
+
   it('switches to reduced motion when the preference changes mid-session', async () => {
     const preference = stubMotionPreference('no-preference');
     const element = box();
