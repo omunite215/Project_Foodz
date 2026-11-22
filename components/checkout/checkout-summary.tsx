@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, Pencil, ShoppingBag } from 'lucide-react';
-import type { ReactNode, Ref } from 'react';
+import { type ReactNode, type Ref, useRef } from 'react';
 import type { Quote } from '@/server/modules/cart/schema';
 import { UndoRow } from '@/components/cart/cart-line';
 import {
@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { droppedFlavorText, priceChangeText, unitLabel, unitText } from '@/lib/cart-text';
 import { itemsText, orderLinesLabel } from '@/lib/checkout-text';
 import { formatPrice } from '@/lib/format';
+import { useMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
 /*
@@ -120,6 +121,19 @@ export function CheckoutSummary({
   loading,
   inert = false,
 }: CheckoutSummaryProps) {
+  // "Show" below 1024 px: the body fades in from 4 px up; no height tween (F1 accordion rule).
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const wasOpen = useRef(open);
+  useMotion(
+    (motion) => {
+      const opened = open && !wasOpen.current;
+      wasOpen.current = open;
+      if (!opened || motion.reduced || !bodyRef.current) return;
+      motion.from(bodyRef.current, { y: -4, opacity: 0, duration: 0.15, ease: 'power2.out' });
+    },
+    { scope: bodyRef, dependencies: [open] },
+  );
+
   const totalWords =
     figuresHidden(status) || !quote
       ? ''
@@ -179,7 +193,11 @@ export function CheckoutSummary({
         </button>
       </h2>
 
-      <div id="summary-body" className={cn(open ? 'block' : 'hidden', 'pb-6 lg:block lg:pb-0')}>
+      <div
+        ref={bodyRef}
+        id="summary-body"
+        className={cn(open ? 'block' : 'hidden', 'pb-6 lg:block lg:pb-0')}
+      >
         {loading ? (
           <div aria-busy="true" className="space-y-4 py-4">
             <p className="sr-only">Loading your order</p>
