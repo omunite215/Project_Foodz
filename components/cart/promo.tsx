@@ -30,6 +30,13 @@ import {
 import { useCartActions } from '@/lib/data/cart';
 import { prefersReducedMotion } from '@/lib/motion';
 import {
+  linesKey,
+  noteFor,
+  type PromoMessage,
+  type PromoNote,
+  promoFieldMessage,
+} from '@/lib/promo-field';
+import {
   clearPendingPromo,
   readPendingPromo,
   requestCartReopen,
@@ -43,7 +50,6 @@ import {
   type CompareState,
   PromoChip,
   PromoCompare,
-  type PromoMessage,
   PromoMessageLine,
 } from './promo-parts';
 import { fetchQuote, type QuoteRequest, quoteQueryKey, requestKey } from './use-quote';
@@ -123,7 +129,7 @@ export function PromoSection({
   const [arrivedWith] = useState(() => (signedIn ? readPendingPromo() : null));
   const [typed, setTyped] = useState(arrivedWith ?? '');
   const [expanded, setExpanded] = useState(arrivedWith !== null);
-  const [message, setMessage] = useState<PromoMessage | null>(null);
+  const [note, setNote] = useState<PromoNote | null>(null);
   const [checking, setChecking] = useState(false);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
   const [compare, setCompare] = useState<CompareState | null>(null);
@@ -139,18 +145,31 @@ export function PromoSection({
 
   const blocked = blockedUntil !== null;
   const storedPromo = quote?.promo && quote.promo.code === storedCode ? quote.promo : null;
+  // The message under the field follows the code's chip through every quote, and one about
+  // these dishes goes once they change (D2): it is the field's description too.
+  const message = promoFieldMessage(note, {
+    storedCode,
+    promo: quote?.promo ?? null,
+    linesKey: linesKey(request.lines),
+  });
 
-  const say = (next: PromoMessage) => {
-    setMessage(next);
-    announce(next.text);
+  // Once the cart holds the attached code, its message goes if the code later comes off.
+  if (note?.kind === 'code' && !note.seen && storedCode === note.code) {
+    setNote({ ...note, seen: true });
+  }
+
+  const say = (next: PromoNote) => {
+    setNote(next);
+    announce(next.message.text);
   };
+  const sayFixed = (next: PromoMessage) => say({ kind: 'fixed', message: next });
 
   const failed = (failure: ActionFailure, code: string) => {
     if (failure.code === 'OFFLINE') {
       waitingOnline.current = code;
-      say({ tone: 'offline', text: PROMO_OFFLINE });
+      sayFixed({ tone: 'offline', text: PROMO_OFFLINE });
     } else {
-      say({ tone: 'error', text: PROMO_UNAVAILABLE, invalid: false });
+      sayFixed({ tone: 'error', text: PROMO_UNAVAILABLE, invalid: false });
     }
   };
 
@@ -172,30 +191,41 @@ export function PromoSection({
     if (!promo) return;
     switch (promo.status) {
       case 'applied':
-      case 'notApplied':
-        if (canAttach) attach(promo, quoted);
-        say(
+      case 'notApplied': {
+        const said: PromoMessage =
           promo.status === 'applied'
             ? { tone: 'success', text: promoAppliedText(promo) }
-            : { tone: 'neutral', text: promo.message ?? '' },
-        );
+            : { tone: 'neutral', text: promo.message ?? '' };
+        if (canAttach) {
+          attach(promo, quoted);
+          say({ kind: 'code', code: promo.code, message: said });
+        } else {
+          say(noteFor(said, promo.reason, quoted.lines));
+        }
         return;
+      }
       case 'refused':
-        say({
-          tone: 'error',
-          text: promo.message ?? PROMO_UNAVAILABLE,
-          // An offer's Apply leaves the field empty; only a typed code marks it invalid (2.14).
-          invalid: fromField,
-          signInCode: promo.reason?.code === 'signInRequired' ? promo.code : undefined,
-        });
+        say(
+          noteFor(
+            {
+              tone: 'error',
+              text: promo.message ?? PROMO_UNAVAILABLE,
+              // An offer's Apply leaves the field empty; only a typed code marks it invalid (2.14).
+              invalid: fromField,
+              signInCode: promo.reason?.code === 'signInRequired' ? promo.code : undefined,
+            },
+            promo.reason,
+            quoted.lines,
+          ),
+        );
         return;
       default:
         if (promo.reason?.code === 'rateLimited') {
           const wait = promo.retryAfterSeconds ?? 600;
           setBlockedUntil(Date.now() + wait * 1000);
-          say({ tone: 'limited', text: promo.message ?? tooManyCodesText(wait) });
+          sayFixed({ tone: 'limited', text: promo.message ?? tooManyCodesText(wait) });
         } else {
-          say({ tone: 'error', text: PROMO_UNAVAILABLE, invalid: false });
+          sayFixed({ tone: 'error', text: PROMO_UNAVAILABLE, invalid: false });
         }
     }
   };
@@ -207,7 +237,7 @@ export function PromoSection({
     if (!isPossibleCode(code)) {
       if (fromField) inputRef.current?.focus();
       lastChecked.current = code;
-      say({
+      sayFixed({
         tone: 'error',
         // The "not found" sentence has no date in it, so the time zone doesn't matter.
         text: promoMessage(code, { code: 'notFound', rule: 'R1' }, { timeZone: 'UTC' }),
@@ -221,12 +251,16 @@ export function PromoSection({
     setCompare(null);
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       waitingOnline.current = code;
-      say({ tone: 'offline', text: PROMO_OFFLINE });
+      sayFixed({ tone: 'offline', text: PROMO_OFFLINE });
       return;
     }
     if (code === storedCode && storedPromo?.status === 'applied') {
       setTyped('');
-      say({ tone: 'success', text: promoAppliedText(storedPromo) });
+      say({
+        kind: 'code',
+        code,
+        message: { tone: 'success', text: promoAppliedText(storedPromo) },
+      });
       return;
     }
 
@@ -256,13 +290,20 @@ export function PromoSection({
             current: compareSide(storedCode, current.data),
             next: compareSide(nextPromo.code, next.data),
           };
-          setMessage(null);
+          setNote(null);
           setCompare({ status: 'ready', ...card, nextQuote: next.data });
           announce(compareText(card.current, card.next));
           return;
         }
         if (nextPromo?.status === 'notApplied') {
-          say({ tone: 'neutral', text: `${nextPromo.message ?? ''} ${storedCode} stays applied.` });
+          say({
+            kind: 'lines',
+            linesKey: linesKey(next.data.lines),
+            message: {
+              tone: 'neutral',
+              text: `${nextPromo.message ?? ''} ${storedCode} stays applied.`,
+            },
+          });
           return;
         }
         answer(nextPromo, next.data, false, fromField);
@@ -313,12 +354,19 @@ export function PromoSection({
           ),
         );
       } else {
-        say({
-          tone: 'error',
-          text: promo.message ?? PROMO_UNAVAILABLE,
-          invalid: false,
-          signInCode: promo.reason?.code === 'signInRequired' ? promo.code : undefined,
-        });
+        // R8 after a dish came out holds only for these dishes: an Undo clears it (D2).
+        say(
+          noteFor(
+            {
+              tone: 'error',
+              text: promo.message ?? PROMO_UNAVAILABLE,
+              invalid: false,
+              signInCode: promo.reason?.code === 'signInRequired' ? promo.code : undefined,
+            },
+            promo.reason,
+            newest.lines,
+          ),
+        );
       }
     }
   };
@@ -343,7 +391,7 @@ export function PromoSection({
     const timer = setTimeout(
       () => {
         setBlockedUntil(null);
-        setMessage(null);
+        setNote(null);
         announce('You can try codes again.');
       },
       Math.max(0, blockedUntil - Date.now()),
@@ -385,7 +433,7 @@ export function PromoSection({
     onAction();
     cart.setCode(null);
     previous.current = null;
-    setMessage(null);
+    setNote(null);
     announce(`${storedCode} removed.`);
     focusField();
   };
@@ -403,7 +451,7 @@ export function PromoSection({
     const { current, next, nextQuote } = compare;
     if (nextQuote.promo) attach(nextQuote.promo, nextQuote);
     setCompare(null);
-    setMessage(null);
+    setNote(null);
     announce(`${next.code} applied. ${current.code} removed.`);
     focusField();
   };

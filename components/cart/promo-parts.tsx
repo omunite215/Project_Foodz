@@ -27,6 +27,7 @@ import {
 } from '@/lib/cart-text';
 import { CUISINE_LABELS, formatPrice } from '@/lib/format';
 import { useMotion } from '@/lib/motion';
+import type { PromoMessage } from '@/lib/promo-field';
 import { cn } from '@/lib/utils';
 
 /*
@@ -35,10 +36,7 @@ import { cn } from '@/lib/utils';
  * promo.tsx.
  */
 
-export type PromoMessage =
-  | { tone: 'success' | 'neutral'; text: string }
-  | { tone: 'error'; text: string; invalid: boolean; signInCode?: string }
-  | { tone: 'limited' | 'offline'; text: string };
+export type { PromoMessage } from '@/lib/promo-field';
 
 export type CompareState =
   | { status: 'loading'; code: string }
@@ -85,7 +83,8 @@ export function PromoMessageLine({
         ease: 'power2.out',
       });
     },
-    { scope: ref, dependencies: [message] },
+    // The message is worked out on every render: only new words come in again.
+    { scope: ref, dependencies: [message?.tone, message?.text] },
   );
   const Icon = message ? MESSAGE_ICONS[message.tone] : null;
   return (
