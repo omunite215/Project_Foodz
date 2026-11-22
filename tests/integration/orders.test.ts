@@ -408,6 +408,48 @@ describe('cancelling until the kitchen accepts (U6, S12.5, S12.6)', () => {
     ]);
   });
 
+  it('refunds the rest of a partly refunded card order (security S2)', async () => {
+    const maya = await customer(migrator);
+    const order = await paidCardOrder(maya);
+    // Staff refunded $5 for a missing drink from the Stripe dashboard.
+    await fake.refund({
+      paymentIntentId: order.intentId,
+      amountCents: 500,
+      reason: 'staff',
+      orderId: order.orderId,
+      idempotencyKey: `staff-${order.orderId}`,
+    });
+    await sync.applyRefund({
+      paymentIntentId: order.intentId,
+      refundedCents: 500,
+      chargedCents: 5397,
+    });
+    mocks.send.mockClear();
+
+    const result = await orders.cancelOrderAction({ orderId: order.orderId });
+    expect(result?.data?.refund).toEqual({ amountCents: 4897, cardLabel: 'Visa •••• 4242' });
+    expect(
+      mocks.send.mock.calls
+        .map(([event]) => event as { name: string; data: Record<string, unknown> })
+        .filter((event) => event.data.orderId === order.orderId)
+        .map((event) => [event.name, event.data.kind ?? null, event.data.refundCents ?? null]),
+    ).toEqual([
+      ['order.email-requested', 'cancelled', 4897],
+      ['order.refund-requested', null, null],
+    ]);
+    expect(await sync.processAutoRefund(order.orderId)).toBe('refunded');
+    expect(fake.refunds.map((refund) => [refund.amountCents, refund.reason])).toEqual([
+      [500, 'staff'],
+      [4897, 'customer-cancel'],
+    ]);
+    expect(await migrator.order.findUniqueOrThrow({ where: { id: order.orderId } })).toMatchObject({
+      status: 'CANCELLED',
+      paymentStatus: 'REFUNDED',
+      refundedCents: 5397,
+      autoRefundReason: 'customer-cancel',
+    });
+  });
+
   it('refunds through the sweep when the refund job could not be queued, once (security S1)', async () => {
     const maya = await customer(migrator);
     const order = await paidCardOrder(maya);

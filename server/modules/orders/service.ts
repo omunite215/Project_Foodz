@@ -863,7 +863,10 @@ export async function cancelOrder(
   const result = await runAsSystem('cancel', async (ctx) => {
     const order = await lockOrder(ctx, orderId);
     if (!order || order.userId !== actor.userId) throw notFound();
-    const paidByCard = order.paymentMethod === 'CARD' && order.paymentStatus === 'PAID';
+    // A part refunded earlier (staff, from Stripe) still leaves the rest to give back.
+    const paidByCard =
+      order.paymentMethod === 'CARD' &&
+      (order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIALLY_REFUNDED');
     const refundCents = order.totalCents - order.refundedCents;
     if (order.status === 'CANCELLED') {
       // A double press cancels once (S12.6).
@@ -908,7 +911,13 @@ export async function cancelOrder(
       },
     });
     const effects: OrderEffect[] = [
-      { kind: 'email', orderId, email: 'cancelled', change: 'cancelled' },
+      {
+        kind: 'email',
+        orderId,
+        email: 'cancelled',
+        change: 'cancelled',
+        ...(paidByCard && { refundCents, at: now.toISOString() }),
+      },
     ];
     if (paidByCard) effects.push({ kind: 'refund', orderId });
     return { order, paidByCard, refundCents, effects };
