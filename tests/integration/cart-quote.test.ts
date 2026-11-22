@@ -557,7 +557,7 @@ describe('promo refusals, R1 to R9 (S4 table)', () => {
     });
     expect((await quote({ lines: cartA(), code: 'WELCOME10' })).promo).toMatchObject({
       reason: { code: 'onHold', rule: 'R7', orderNumber: number },
-      message: `WELCOME10 is on hold for your unpaid order ${number}. It frees up if that order isn't paid within 15 minutes.`,
+      message: `WELCOME10 is on hold for your unpaid order ${number}. It frees up if you cancel that order, or if it isn't paid within 15 minutes.`,
     });
     await migrator.couponRedemption.deleteMany({
       where: { userId: { in: [used.userId, held.userId] } },
