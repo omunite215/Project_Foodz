@@ -18,6 +18,7 @@ import {
   addEvent,
   allDishesAvailable,
   attemptKeyTaken,
+  findCustomer,
   findDueUnpaid,
   findEvents,
   findOrderForPayment,
@@ -25,6 +26,7 @@ import {
   findRedemption,
   findUnsettledRefunds,
   forceCouponUse,
+  lockCustomerOrders,
   lockOrder,
   type OrderPaymentRow,
   returnCouponUse,
@@ -165,10 +167,12 @@ async function decideAndApply(
       const keyFree =
         !order.attemptKey ||
         !(await attemptKeyTaken(ctx, order.userId, order.attemptKey, order.id));
+      const account = await findCustomer(ctx, order.userId);
       const verdict = decideLatePayment({
         dishesAvailable: await allDishesAvailable(ctx, order.id),
         storeOpen: facts.storeOpen,
         attemptKeyFree: keyFree,
+        accountActive: Boolean(account && !account.deletedAt && !account.banned),
       });
       if (verdict === 'revive') {
         await updateOrder(ctx, order.id, order.version, {
@@ -274,6 +278,11 @@ export async function applyIntent(
 
   const result = await runAsSystem('stripe payment', async (ctx): Promise<StepResult> => {
     if (!(await startStep(ctx, options.event))) return { outcome: 'duplicate', effects: [] };
+    const owner = await findOrderForPayment(ctx, orderId);
+    if (!owner) return { outcome: 'unknown-order', effects: [] };
+    // Checkout and account deletion hold the same lock, so a payment never lands beside either
+    // (B21). Taken before the order row, in the same order as checkout, so they can't deadlock.
+    await lockCustomerOrders(ctx, owner.userId);
     const order = await lockOrder(ctx, orderId);
     if (!order || (order.stripePaymentIntentId && order.stripePaymentIntentId !== intent.id)) {
       return { outcome: 'unknown-order', effects: [] };

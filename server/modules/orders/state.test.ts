@@ -125,22 +125,25 @@ describe('what a PaymentIntent means for its order (S10.1, B1)', () => {
 });
 
 describe('a late payment (U10, S9.5)', () => {
+  const unchanged = {
+    dishesAvailable: true,
+    storeOpen: true,
+    attemptKeyFree: true,
+    accountActive: true,
+  };
+
   it('places the order after all when every dish is available, the store is open and the key is free', () => {
-    expect(
-      decideLatePayment({ dishesAvailable: true, storeOpen: true, attemptKeyFree: true }),
-    ).toBe('revive');
+    expect(decideLatePayment(unchanged)).toBe('revive');
   });
 
   it('refunds in full otherwise', () => {
-    expect(
-      decideLatePayment({ dishesAvailable: false, storeOpen: true, attemptKeyFree: true }),
-    ).toBe('refund');
-    expect(
-      decideLatePayment({ dishesAvailable: true, storeOpen: false, attemptKeyFree: true }),
-    ).toBe('refund');
-    expect(
-      decideLatePayment({ dishesAvailable: true, storeOpen: true, attemptKeyFree: false }),
-    ).toBe('refund');
+    expect(decideLatePayment({ ...unchanged, dishesAvailable: false })).toBe('refund');
+    expect(decideLatePayment({ ...unchanged, storeOpen: false })).toBe('refund');
+    expect(decideLatePayment({ ...unchanged, attemptKeyFree: false })).toBe('refund');
+  });
+
+  it('refunds in full when the account was deleted or suspended meanwhile (security S3)', () => {
+    expect(decideLatePayment({ ...unchanged, accountActive: false })).toBe('refund');
   });
 });
 

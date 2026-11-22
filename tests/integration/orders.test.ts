@@ -916,7 +916,85 @@ describe('the account (F2 hooks, B21, S12.7, S12.8)', () => {
       (await migrator.user.findUniqueOrThrow({ where: { id: maya.userId } })).deletedAt,
     ).toBeNull();
   });
+
+  it('waits while the bank is still confirming a card payment, and changes nothing (security S3)', async () => {
+    const maya = await customer(migrator);
+    const order = await cardOrder(maya);
+    const stripeCustomer = await withCustomer(maya);
+    fake.processing(order.intentId);
+
+    expect((await account.deleteAccountAction({}))?.serverError).toEqual({
+      code: 'CONFLICT',
+      message: `Your bank is still confirming order ${order.number}. Give it a minute.`,
+      details: { orderId: order.orderId, number: order.number },
+    });
+    expect(await migrator.user.findUniqueOrThrow({ where: { id: maya.userId } })).toMatchObject({
+      deletedAt: null,
+      stripeCustomerId: stripeCustomer,
+    });
+    expect(fake.deletedCustomers).toEqual([]);
+    expect(await migrator.order.findUniqueOrThrow({ where: { id: order.orderId } })).toMatchObject({
+      status: 'PENDING_PAYMENT',
+      contactName: 'Maya Lopez',
+      addressLine1: '1 Faneuil Hall Square',
+    });
+  });
+
+  it('commits no order for an account deleted while the press waited for its lock (security S3)', async () => {
+    const maya = await customer(migrator);
+    const pressed = press(maya, dish, { allowDuplicate: true });
+    // The deletion's transaction holds the customer's order lock while the press arrives.
+    const { placing } = await migrator.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`orders:${maya.userId}`}, 0))`;
+        const started = orders.placeOrderAction(pressed);
+        await waitForLockWaiter();
+        await tx.user.update({ where: { id: maya.userId }, data: { deletedAt: new Date() } });
+        return { placing: started };
+      },
+      { timeout: 20_000 },
+    );
+    expect((await placing)?.serverError?.code).toBe('UNAUTHENTICATED');
+    expect(await migrator.order.count({ where: { userId: maya.userId } })).toBe(0);
+  });
+
+  it('refunds, never places, a late payment for an account deleted meanwhile (security S3)', async () => {
+    const maya = await customer(migrator);
+    const order = await cardOrder(maya);
+    // Declined, and the call that should have cancelled the payment at Stripe was lost.
+    fake.down.add('cancelIntent');
+    fake.decline(order.intentId);
+    await orders.orderStatusAction({ orderId: order.orderId, confirmed: true });
+    expect((await migrator.order.findUniqueOrThrow({ where: { id: order.orderId } })).status).toBe(
+      'FAILED',
+    );
+    expect((await account.deleteAccountAction({}))?.data).toEqual({ deleted: true });
+    mocks.send.mockClear();
+
+    await sync.applyIntent(fake.succeed(order.intentId), { source: 'stripe' });
+    expect(await migrator.order.findUniqueOrThrow({ where: { id: order.orderId } })).toMatchObject({
+      status: 'FAILED',
+      paymentStatus: 'PAID',
+      autoRefundReason: 'late-payment',
+    });
+    expect(
+      mocks.send.mock.calls.filter(
+        ([event]) => (event as { name: string }).name === 'order.refund-requested',
+      ),
+    ).toHaveLength(1);
+  });
 });
+
+/** Until some session is queued behind an advisory lock (the press in the test above). */
+async function waitForLockWaiter() {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [row] = await migrator.$queryRaw<{ waiting: number }[]>`
+      SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`;
+    if ((row?.waiting ?? 0) > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('the press never reached the order lock');
+}
 
 describe('row-level security on orders (F4 migration)', () => {
   it('lets customers read only their own orders, lines, timeline and code uses', async () => {

@@ -82,8 +82,12 @@ export function decideLatePayment(facts: {
   storeOpen: boolean;
   /** No newer live order holds the same checkout key. */
   attemptKeyFree: boolean;
+  /** The customer's account is neither deleted nor suspended (B21). */
+  accountActive: boolean;
 }): 'revive' | 'refund' {
-  return facts.dishesAvailable && facts.storeOpen && facts.attemptKeyFree ? 'revive' : 'refund';
+  return facts.dishesAvailable && facts.storeOpen && facts.attemptKeyFree && facts.accountActive
+    ? 'revive'
+    : 'refund';
 }
 
 /**
