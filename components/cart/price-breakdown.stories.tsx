@@ -3,8 +3,11 @@ import { expect, within } from 'storybook/test';
 import { CheckoutBar } from './checkout-bar';
 import {
   quoteClosed,
+  quoteClosedOutside,
+  quoteGuestOutside,
   quoteOutside,
   quoteQ1,
+  quoteQ1FreeDelivery,
   quoteQ2,
   quoteQ5,
   quoteSoldOut,
@@ -53,8 +56,31 @@ export const GuestRange: Story = {
 /** FREEDELIVERY: "Free", with the real fee struck through and read as "free, was $4.14". */
 export const FreeDelivery: Story = { args: { quote: quoteQ5 } };
 
+/**
+ * FREEDELIVERY before the address is known: the promo row, the delivery row and the total agree
+ * that delivery is free, so there is no fee range and no "before delivery" (D4).
+ */
+export const FreeDeliveryNoAddress: Story = {
+  args: { quote: quoteQ1FreeDelivery },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Free delivery')).toBeVisible();
+    await expect(canvas.getByText('Free')).toBeVisible();
+    await expect(canvas.queryByText('$1.99 to $5.99')).toBeNull();
+    await expect(canvas.queryByText('depending on distance')).toBeNull();
+  },
+};
+
 /** The address is outside the area: no fee. */
 export const Outside: Story = { args: { quote: quoteOutside } };
+
+/** A guest checked an address outside the area: no fee from an earlier address (S2.8). */
+export const GuestOutside: Story = {
+  args: { quote: quoteGuestOutside },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText('not available')).toBeInTheDocument();
+  },
+};
 
 /** A new answer is on its way: the figures stay, dimmed to 75 %. */
 export const Updating: Story = { args: { status: 'updating', dim: true } };
@@ -89,6 +115,9 @@ export const CheckoutBarStates: Story = {
       {bar({ quote: quoteSoldOut })}
       {bar({ quote: quoteClosed })}
       {bar({ quote: quoteOutside })}
+      {bar({ quote: quoteClosedOutside })}
+      {bar({ quote: quoteClosed, status: 'updating', dim: true, slow: true })}
+      {bar({ quote: quoteQ1FreeDelivery })}
       {bar({ status: 'offline' })}
     </div>
   ),
@@ -96,9 +125,15 @@ export const CheckoutBarStates: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: 'Go to checkout · $55.47' })).toBeVisible();
     await expect(canvas.getByText('Remove sold-out dishes to check out.')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: /^Ordering opens at/ })).toHaveAttribute(
-      'aria-disabled',
+    // Closed while updating keeps its label; closed and outside still says why on the line.
+    const closed = canvas.getAllByRole('button', { name: /^Ordering opens at/ });
+    await expect(closed).toHaveLength(3);
+    await expect(closed.map((button) => button.getAttribute('aria-disabled'))).toEqual([
       'true',
-    );
+      'true',
+      'true',
+    ]);
+    await expect(canvas.getAllByText('Choose an address we deliver to.')).toHaveLength(2);
+    await expect(canvas.getByRole('button', { name: 'Go to checkout · $51.33' })).toBeVisible();
   },
 };

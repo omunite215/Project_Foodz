@@ -413,7 +413,7 @@ test.describe('Privacy and data (S6)', () => {
     expect(file.suggestedFilename()).toMatch(/^foodz-data-\d{4}-\d{2}-\d{2}\.json$/);
     const data = JSON.parse(readFileSync(await file.path(), 'utf8'));
     expect(data.profile.email).toBe(account.email);
-    expect(Object.keys(data)).toEqual(['about', 'profile', 'addresses', 'devices']);
+    expect(Object.keys(data)).toEqual(['about', 'profile', 'addresses', 'devices', 'favorites']);
     expect(Object.keys(data.profile)).not.toContain('password');
     expect(data.devices).toHaveLength(1);
     await expect(

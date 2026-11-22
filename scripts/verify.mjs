@@ -3,22 +3,50 @@
 //   node scripts/verify.mjs               run every step
 //   node scripts/verify.mjs <step> ...    run selected steps
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const GITLEAKS_IMAGE = 'zricethezav/gitleaks:v8.30.1';
+const GITLEAKS_ARGS = ['--config', '.gitleaks.toml', '--redact', '--no-banner'];
 const root = process.cwd();
 
 const npx = (...args) => ['npx', ...args];
 const docker = (...args) => ['docker', 'run', '--rm', '-v', `${root}:/src`, '-w', '/src', ...args];
+const git = (...args) => spawnSync('git', args, { encoding: 'utf8' }).stdout.trim();
+
+// Route types are regenerated first: types left in .next by an earlier build (or by another
+// branch, in a worktree) still point at routes that have since moved, and both the type-aware
+// lint and tsc would fail on them.
+const typegen = [...npx('next', 'typegen'), '&&'];
+
+// In a git worktree `.git` is a file pointing into the main repository's .git, which the
+// container can't follow, so the scan would read no history. There the shared git directory is
+// mounted instead and scanned with every ref, the same history a scan from the main checkout reads.
+function secretsScan() {
+  if (!existsSync('.git') || !statSync('.git').isFile()) {
+    return docker(GITLEAKS_IMAGE, 'git', ...GITLEAKS_ARGS, '.');
+  }
+  const commonDir = resolve(git('rev-parse', '--git-common-dir'));
+  const mounts = ['-v', `${root}:/src`, '-v', `${commonDir}:/repo.git:ro`, '-w', '/src'];
+  return [
+    'docker',
+    'run',
+    '--rm',
+    ...mounts,
+    GITLEAKS_IMAGE,
+    'git',
+    ...GITLEAKS_ARGS,
+    '--log-opts=--all',
+    '/repo.git',
+  ];
+}
 
 const STEPS = {
   // What gets verified must be exactly what gets pushed.
   'clean-tree': ['node', 'scripts/clean-tree.mjs'],
-  lint: npx('oxlint', '--type-aware', '--deny-warnings'),
+  lint: [...typegen, ...npx('oxlint', '--type-aware', '--deny-warnings')],
   format: ['node', 'scripts/format-check.mjs'],
-  // Route types are regenerated first: types left in .next by an earlier build still point at
-  // routes that have since moved, and tsc would fail on them.
-  typecheck: [...npx('next', 'typegen'), '&&', ...npx('tsc', '--noEmit')],
+  typecheck: [...typegen, ...npx('tsc', '--noEmit')],
   architecture: npx(
     'depcruise',
     ...['app', 'components', 'lib', 'server', 'proxy.ts'].filter((p) => existsSync(p)),
@@ -26,15 +54,7 @@ const STEPS = {
     '.dependency-cruiser.cjs',
   ),
   semgrep: ['node', 'scripts/semgrep.mjs'],
-  secrets: docker(
-    GITLEAKS_IMAGE,
-    'git',
-    '--config',
-    '.gitleaks.toml',
-    '--redact',
-    '--no-banner',
-    '.',
-  ),
+  secrets: secretsScan(),
   'secrets-staged': ['node', 'scripts/staged-secrets.mjs', GITLEAKS_IMAGE],
   unit: npx('vitest', 'run', '--project', 'unit'),
   integration: npx('vitest', 'run', '--project', 'integration'),

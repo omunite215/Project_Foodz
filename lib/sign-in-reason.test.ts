@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   cartReopenStep,
   parsePendingFavorite,
+  parsePendingPromo,
   PENDING_FAVORITE_MS,
+  PENDING_PROMO_MS,
   pendingFavoriteStep,
+  reasonNoticeText,
   signInFor,
 } from './sign-in-reason';
 
@@ -58,5 +61,56 @@ describe('a heart tapped while signed out (design 3.2)', () => {
     expect(at({ signedIn: false })).toBe('drop');
     expect(at({ path: '/menu' })).toBe('drop');
     expect(at({ now: NOW + PENDING_FAVORITE_MS + 1 })).toBe('drop');
+  });
+});
+
+const kept = (fields: Record<string, unknown>) =>
+  JSON.stringify({ code: 'WELCOME10', at: NOW, ...fields });
+
+describe('a code kept for the return from sign-in (S4.8)', () => {
+  it('is used while it is up to 30 minutes old', () => {
+    expect(parsePendingPromo(kept({}), NOW)).toBe('WELCOME10');
+    expect(parsePendingPromo(kept({}), NOW + PENDING_PROMO_MS)).toBe('WELCOME10');
+    // A minute of clock skew is allowed.
+    expect(parsePendingPromo(kept({}), NOW - 60_000)).toBe('WELCOME10');
+  });
+
+  it('expires after 30 minutes, and from the future', () => {
+    expect(parsePendingPromo(kept({}), NOW + PENDING_PROMO_MS + 1)).toBeNull();
+    expect(parsePendingPromo(kept({}), NOW - 60_001)).toBeNull();
+  });
+
+  it('ignores anything malformed, and a bare code saved before it had a time', () => {
+    expect(parsePendingPromo(null, NOW)).toBeNull();
+    expect(parsePendingPromo('WELCOME10', NOW)).toBeNull();
+    expect(parsePendingPromo('{', NOW)).toBeNull();
+    expect(parsePendingPromo(kept({ code: '<b>X</b>' }), NOW)).toBeNull();
+    expect(parsePendingPromo(kept({ code: 'A'.repeat(33) }), NOW)).toBeNull();
+    expect(parsePendingPromo(kept({ at: 'now' }), NOW)).toBeNull();
+  });
+});
+
+describe('the notice on the sign-in and sign-up forms (design 1.3)', () => {
+  it('asks her to sign in on /sign-in', () => {
+    expect(reasonNoticeText('promo', '/sign-in', 'WELCOME10')).toBe('Sign in to use WELCOME10.');
+    expect(reasonNoticeText('promo', '/sign-in', null)).toBe('Sign in to use your promo code.');
+    expect(reasonNoticeText('checkout', '/sign-in', null)).toBe(
+      'Sign in to check out. Your cart is saved.',
+    );
+    expect(reasonNoticeText('favorite', '/sign-in', 'Bulgogi')).toBe(
+      'Sign in to save Bulgogi to your favorites.',
+    );
+  });
+
+  it('asks her to create an account on /sign-up', () => {
+    expect(reasonNoticeText('promo', '/sign-up', 'WELCOME10')).toBe(
+      'Create an account to use WELCOME10.',
+    );
+    expect(reasonNoticeText('checkout', '/sign-up', null)).toBe(
+      'Create an account to check out. Your cart is saved.',
+    );
+    expect(reasonNoticeText('favorite', '/sign-up', null)).toBe(
+      'Create an account to save this dish to your favorites.',
+    );
   });
 });

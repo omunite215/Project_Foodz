@@ -8,6 +8,7 @@ import { runAs } from '@/server/db/context';
 import { PrismaClient } from '@/server/db/generated/client';
 import {
   DEMO_ACCOUNTS,
+  FANEUIL_HALL,
   SAMPLE_ACCOUNTS,
   sampleAccountsRefusal,
   type SeedResult,
@@ -369,13 +370,15 @@ describe('sample customers (local and CI only)', () => {
   it('gives the second customer a Work address inside the area, and the demo Home its kind', async () => {
     const work = await migrator.address.findFirstOrThrow({
       where: { user: { email: 'second.customer@foodz.example' } },
-      select: { kind: true, label: true, line1: true, isDefault: true },
+      select: { kind: true, label: true, line1: true, isDefault: true, lat: true, lng: true },
     });
+    // Where the address search puts it, so a guest checking it gets the same distance (F6).
     expect(work).toEqual({
       kind: 'WORK',
       label: 'Work',
       line1: '1 Faneuil Hall Square',
       isDefault: true,
+      ...FANEUIL_HALL,
     });
     const home = await migrator.address.findFirstOrThrow({
       where: { user: { email: 'demo.customer@foodz.example' } },
@@ -463,7 +466,7 @@ describe('F3 fixtures (local and CI only)', () => {
           endsAt: null,
         },
       },
-      delivery: { status: 'inside', distanceMeters: 1300 },
+      delivery: { status: 'inside', distanceMeters: 1400 },
       settings: {
         taxRateBps: 700,
         baseDeliveryFeeCents: 199,

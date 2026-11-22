@@ -7,25 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { Quote } from '@/server/modules/cart/schema';
 import { announce } from '@/lib/announce';
-import { CHECKOUT_REASONS, type CheckoutReason, orderingOpensText } from '@/lib/cart-text';
-import { formatPrice } from '@/lib/format';
+import { CHECKOUT_REASONS, checkoutButtonState, type QuoteStatus } from '@/lib/cart-text';
 import { cn } from '@/lib/utils';
-import { type QuoteStatus, TotalRow } from './price-breakdown';
-
-/** Why checkout can't start now, the first that applies (design 2.17). Null: it can. */
-export function checkoutReason(quote: Quote | null, status: QuoteStatus): CheckoutReason | null {
-  if (status === 'offline') return 'offline';
-  if (status === 'updating') return 'updating';
-  if (status === 'loading') return 'loading';
-  if (status === 'failed' || status === 'tooBig') return 'failed';
-  if (status === 'rateLimited') return 'rateLimited';
-  const blockers = quote?.checkoutBlockers ?? [];
-  if (blockers.includes('soldOut')) return 'soldOut';
-  if (blockers.includes('closed')) return 'closed';
-  if (blockers.includes('outside')) return 'outside';
-  if (blockers.includes('empty')) return 'soldOut';
-  return null;
-}
+import { TotalRow } from './price-breakdown';
 
 export interface CheckoutBarProps {
   quote: Quote | null;
@@ -54,24 +38,15 @@ export function CheckoutBar({
   backToCheckout = false,
 }: CheckoutBarProps) {
   const reasonId = `${useId()}-checkout-reason`;
-  const reason = backToCheckout ? null : checkoutReason(quote, status);
+  const state = checkoutButtonState(quote, status, slow);
+  // With an order waiting at checkout, the button goes back there whatever the quote says.
+  const reason = backToCheckout ? null : state.reason;
   const blocked = reason !== null;
-  const final = status === 'ready' && quote?.totalKind === 'final' && !blocked;
-  const closed = reason === 'closed' && quote ? orderingOpensText(quote.store.opensAt) : null;
-  const label = backToCheckout
-    ? 'Back to checkout'
-    : (closed ??
-      (final && quote ? `Go to checkout · ${formatPrice(quote.totalCents)}` : 'Go to checkout'));
+  const label = backToCheckout ? 'Back to checkout' : state.label;
+  const line = backToCheckout ? null : state.line;
   // While updating, presses are ignored at once but the grey look waits 300 ms (no flicker).
   const looksBlocked = blocked && (reason !== 'updating' || slow);
-  const reasonText =
-    reason === 'closed' || reason === null
-      ? null
-      : reason === 'loading' || reason === 'updating'
-        ? slow
-          ? CHECKOUT_REASONS.updating
-          : null
-        : CHECKOUT_REASONS[reason];
+  const closed = quote !== null && !quote.store.isOpen;
 
   return (
     <div className="shrink-0 border-t border-neutral-6 bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6 md:pb-6">
@@ -83,7 +58,9 @@ export function CheckoutBar({
         aria-describedby={blocked ? reasonId : undefined}
         onClick={() => {
           if (blocked) {
-            announce(closed ?? reasonText ?? CHECKOUT_REASONS.updating);
+            announce(
+              closed ? (line ? `${label}. ${line}` : label) : (line ?? CHECKOUT_REASONS.updating),
+            );
             return;
           }
           onCheckout();
@@ -99,13 +76,13 @@ export function CheckoutBar({
           reason === 'failed' ? 'text-destructive' : 'text-neutral-3',
         )}
       >
-        {reasonText && (reason === 'updating' || reason === 'loading') ? (
+        {line && (reason === 'updating' || reason === 'loading') ? (
           <Spinner className="size-4 motion-reduce:animate-none" />
         ) : null}
         {reason === 'failed' ? (
           <CircleExclamationPoint className="size-4 shrink-0" aria-hidden />
         ) : null}
-        {reasonText ? <span>{reasonText}</span> : null}
+        {line ? <span>{line}</span> : null}
         {reason === 'failed' ? (
           <button
             type="button"

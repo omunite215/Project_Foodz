@@ -429,7 +429,14 @@ export function Checkout({
     current.dishActions.learn(
       answer.lines.flatMap((line) =>
         line.dish && line.unitPriceCents !== null
-          ? [{ id: line.menuItemId, ...line.dish, unitPriceCents: line.unitPriceCents }]
+          ? [
+              {
+                id: line.menuItemId,
+                ...line.dish,
+                unitPriceCents: line.unitPriceCents,
+                flavorsOffered: line.flavorsOffered,
+              },
+            ]
           : [],
       ),
     );

@@ -24,10 +24,12 @@ test.describe('Favorites', () => {
     // The dish is named by this tab, never by the address.
     await expect(page.getByText('Sign in to save Bulgogi to your favorites.')).toBeVisible();
 
-    // "Create an account" keeps the reason, so the same notice shows there.
+    // "Create an account" keeps the reason, so the notice follows in sign-up wording.
     await page.getByRole('link', { name: 'Create an account' }).click();
     await expect(page).toHaveURL(/\/sign-up\?callbackUrl=%2Fmenu&reason=favorite$/);
-    await expect(page.getByText('Sign in to save Bulgogi to your favorites.')).toBeVisible();
+    await expect(
+      page.getByText('Create an account to save Bulgogi to your favorites.'),
+    ).toBeVisible();
     await signUp(page, { from: page.url().replace(/^https?:\/\/[^/]+/, '') });
 
     await expect(page).toHaveURL(/\/menu$/);

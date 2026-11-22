@@ -432,12 +432,13 @@ export function MenuBrowser({
       <div className="mt-4 flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-1 text-body-5 text-neutral-3 md:mt-6 md:text-body-4 xl:mx-auto xl:w-full xl:max-w-[1168px]">
         <div className="min-w-0">{rowLeft}</div>
         {filterOn || text ? (
-          // -ml-3: when it wraps under the sentence, its word lines up with the text above.
+          // -ml-3: when it wraps under the sentence, its word lines up with the text above;
+          // md:-mr-3: on one row, its word ends on the grid's right edge.
           <Button
             type="button"
             variant="ghost"
             onClick={clearAll}
-            className="-ml-3 h-11 px-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
+            className="-ml-3 h-11 px-3 md:-mr-3 text-button-2 font-medium text-brand-strong hover:bg-brand-soft hover:text-brand-strong"
           >
             Clear all
           </Button>
