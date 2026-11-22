@@ -3,7 +3,10 @@ import { PageContainer } from '@/components/layout/page-container';
 import { EmptyState } from '@/components/states/empty-state';
 import { Button } from '@/components/ui/button';
 
-/** The same page for another customer's id, a made-up id and an order number (F4 design 3.12). */
+/**
+ * The same page for another customer's id, a made-up id and an order number (F4 design 3.12). It
+ * sits above `[id]` so the 404 its layout throws, before anything streams, lands here too.
+ */
 export default function OrderNotFound() {
   return (
     <PageContainer className="py-15 md:py-20">
