@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
  * none is left behind. A link inside the dialog replaces the entry with its own page instead.
  */
 
-export type DialogHistoryKey = 'foodzCart' | 'foodzFilters';
+export type DialogHistoryKey = 'foodzCart' | 'foodzFilters' | 'foodzAddress';
 
 const isOurs = (state: unknown, key: DialogHistoryKey) =>
   typeof state === 'object' && state !== null && Reflect.get(state, key) === true;

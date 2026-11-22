@@ -281,6 +281,17 @@ function stripeGateway(stripe: Stripe): PaymentGateway {
               amount: input.amountCents,
               currency: 'usd',
               allowed_payment_method_types: ['card'],
+              description: `Foodz order ${input.orderNumber}`,
+              shipping: {
+                name: 'Verification Customer',
+                address: {
+                  line1: '1 Faneuil Hall Square',
+                  city: 'Boston',
+                  state: 'MA',
+                  postal_code: '02109',
+                  country: 'US',
+                },
+              },
               metadata: {
                 orderId: input.orderId,
                 orderNumber: input.orderNumber,

@@ -44,7 +44,7 @@ const profileDraft = z.object({
  * The country code beside the phone number (design 4.2): a compact "US +1" like Figma's, over a
  * native select whose options read in full ("United States (+1)").
  */
-function CountryCodeSelect({
+export function CountryCodeSelect({
   countries,
   value,
   onChange,

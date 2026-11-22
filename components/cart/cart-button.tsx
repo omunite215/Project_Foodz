@@ -126,6 +126,7 @@ export function CartButton({
           titleRef={titleRef}
           onClose={history.close}
           onNavigate={navigating}
+          onCheckoutPage={pathname === '/checkout'}
         />
       </SheetContent>
     </Sheet>

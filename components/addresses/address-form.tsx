@@ -155,6 +155,12 @@ export interface AddressFormProps {
    * account only and comes back after it signs in again (S2.12).
    */
   draftOwner: string;
+  /**
+   * Inside checkout's dialog (F4 design 2.8): Save hands the saved address back instead of going
+   * to the address book, and Cancel closes the dialog.
+   */
+  onSaved?: (address: AddressDto) => void;
+  onCancel?: () => void;
 }
 
 /**
@@ -169,7 +175,10 @@ export function AddressForm({
   firstAddress,
   canSave,
   draftOwner,
+  onSaved,
+  onCancel,
 }: AddressFormProps) {
+  const inDialog = onSaved !== undefined;
   const router = useRouter();
   const pathname = usePathname();
   const id = useId();
@@ -242,7 +251,9 @@ export function AddressForm({
   const valuesUnchanged = useStore(form.store, (formState) => formState.isDefaultValue);
   // The pick and the pin as the form opened: moving either is a change too.
   const [opened] = useState(() => ({ found, pin }));
-  useUnsavedChanges(canSave && (!valuesUnchanged || found !== opened.found || pin !== opened.pin));
+  useUnsavedChanges(
+    canSave && !inDialog && (!valuesUnchanged || found !== opened.found || pin !== opened.pin),
+  );
 
   // Load the map the first time there is a point to show (S7.9: never before).
   useEffect(() => {
@@ -400,6 +411,10 @@ export function AddressForm({
 
     if (outcome.ok) {
       forgetDraft(pathname);
+      if (onSaved) {
+        onSaved(outcome.data);
+        return;
+      }
       setAddressStatus({ text: 'Address saved', focusId: outcome.data.id });
       router.push('/account/addresses');
       return;
@@ -821,14 +836,26 @@ export function AddressForm({
             >
               Save address
             </SubmitButton>
-            <Button
-              asChild
-              variant="ghost"
-              size="touch"
-              className="text-neutral-2 hover:bg-neutral-7"
-            >
-              <Link href="/account/addresses">Cancel</Link>
-            </Button>
+            {onCancel ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="touch"
+                onClick={onCancel}
+                className="text-neutral-2 hover:bg-neutral-7"
+              >
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                asChild
+                variant="ghost"
+                size="touch"
+                className="text-neutral-2 hover:bg-neutral-7"
+              >
+                <Link href="/account/addresses">Cancel</Link>
+              </Button>
+            )}
           </div>
         </>
       ) : (

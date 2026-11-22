@@ -71,6 +71,8 @@ export interface CartPanelProps {
   onClose: () => void;
   /** A link inside the cart is about to replace its history entry. */
   onNavigate: () => void;
+  /** Opened from checkout: its footer button reads "Back to checkout" and only closes it. */
+  onCheckoutPage?: boolean;
 }
 
 interface Undo {
@@ -101,6 +103,7 @@ export function CartPanel({
   titleRef,
   onClose,
   onNavigate,
+  onCheckoutPage = false,
 }: CartPanelProps) {
   const router = useRouter();
   const id = useId();
@@ -394,8 +397,13 @@ export function CartPanel({
     router.replace(href);
   };
 
-  const checkout = () =>
+  const checkout = () => {
+    if (onCheckoutPage) {
+      onClose();
+      return;
+    }
     goTo(signedIn ? '/checkout' : signInFor('/sign-in', '/checkout', 'checkout'));
+  };
 
   // ---------------------------------------------------------------- render
   const empty = isReady && lines.length === 0 && !undo;
@@ -603,6 +611,7 @@ export function CartPanel({
           slow={view.slow}
           onCheckout={checkout}
           onRetry={view.retry}
+          backToCheckout={onCheckoutPage}
         />
       )}
 

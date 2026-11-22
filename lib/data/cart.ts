@@ -480,6 +480,19 @@ export function useCartSession(
   }, [isReady, sessionKey]);
 }
 
+/**
+ * The demo visitor signs out to create an account (F4 D29): the cart built in this tab holds
+ * nothing personal, so it stays, as a guest cart. Only the demo account's chosen address goes.
+ */
+export function useKeepCartAsGuest() {
+  const actions = useCartActions();
+  return () => {
+    writeCartOwner(null);
+    actions.setAddressId(null);
+    setCheckedAddress(null);
+  };
+}
+
 /** Signing out on purpose: the cart on this device is emptied (every tab follows). */
 export function useEndCartSession() {
   const actions = useCartActions();

@@ -1,35 +1,42 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getActor } from '@/server/auth/session';
-import { PageContainer } from '@/components/layout/page-container';
-import { EmptyState } from '@/components/states/empty-state';
-import { Button } from '@/components/ui/button';
+import { readNotices } from '@/server/modules/account/notices';
+import { getAddressBook } from '@/server/modules/addresses/service';
+import { getCheckoutPage } from '@/server/modules/orders/service';
+import { requestInfo } from '@/server/request';
+import { Checkout } from '@/components/checkout/checkout-form';
+import { StaffGate } from '@/components/checkout/checkout-gates';
+import { phoneCountries } from '@/lib/phone-countries';
 import { signInFor } from '@/lib/sign-in-reason';
 
 export const metadata: Metadata = { title: 'Checkout', robots: { index: false } };
 
 /**
- * Where "Go to checkout" leads until the checkout itself is built (F3 B16, design 7). Signed-in
- * customers only; the cart is left as it is.
+ * Checkout (F4 design 2). Who may order is decided here, before any HTML: guests go to sign in
+ * and come back, staff and couriers are told to use a customer account, everyone else gets the
+ * page (the unconfirmed and the demo account see it with their gate in place of the button).
  */
 export default async function CheckoutPage() {
-  if ((await getActor()).kind !== 'user') redirect(signInFor('/sign-in', '/checkout', 'checkout'));
+  const actor = await getActor();
+  if (actor.kind !== 'user') redirect(signInFor('/sign-in', '/checkout', 'checkout'));
 
+  const { ip } = await requestInfo();
+  const page = await getCheckoutPage(actor, { ip });
+  if (!('email' in page)) {
+    if (page.eligibility === 'guest') redirect(signInFor('/sign-in', '/checkout', 'checkout'));
+    return <StaffGate />;
+  }
+
+  const [book, notices] = await Promise.all([getAddressBook(actor), readNotices()]);
   return (
-    <PageContainer className="py-15 md:py-20">
-      <EmptyState
-        illustration="orderFood"
-        title="Checkout"
-        titleAs="h1"
-        size="page"
-        description="Checkout arrives with the next update. Your cart is saved."
-        action={
-          <Button asChild size="touch" className="uppercase">
-            <Link href="/menu">Back to the menu</Link>
-          </Button>
-        }
-      />
-    </PageContainer>
+    <Checkout
+      page={page}
+      addressBook={book.addresses}
+      store={book.store}
+      countries={phoneCountries()}
+      draftOwner={actor.userId}
+      demoNoticeDismissed={notices.demoNoticeDismissed}
+    />
   );
 }

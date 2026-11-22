@@ -1,11 +1,13 @@
 'use client';
 
 import {
+  CreditCard,
   Download,
   Heart,
   LogOut,
   type LucideIcon,
   MapPin,
+  Receipt,
   ShieldCheck,
   UserRound,
 } from 'lucide-react';
@@ -30,8 +32,10 @@ interface Section {
 
 const SECTIONS: readonly Section[] = [
   { href: '/account', label: 'Account', icon: UserRound },
+  { href: '/account/orders', label: 'Orders', icon: Receipt },
   { href: '/account/favorites', label: 'Favorites', icon: Heart },
   { href: '/account/addresses', label: 'Addresses', icon: MapPin },
+  { href: '/account/cards', label: 'Saved cards', icon: CreditCard },
   { href: '/account/security', label: 'Security', icon: ShieldCheck },
   { href: '/account/privacy', label: 'Privacy', longLabel: 'Privacy and data', icon: Download },
 ];
@@ -43,19 +47,23 @@ const isCurrent = (href: string, pathname: string) =>
 const isSubPage = (pathname: string) =>
   /^\/account\/(addresses\/[^/]+|privacy\/delete)\/?$/.test(pathname);
 
-/** Where each section sits in the phone bar: 2 + 2 + 1 under 360 px, 2 + 3 to 767, 5 from md. */
+/**
+ * Where each section sits in the phone bar (F4 design 1.2): 3 + 3 + 1 under 360 px, 4 + 3 to
+ * 767, one row of seven from md.
+ */
 const BAR_SPANS = [
   'min-[360px]:col-span-3',
   'min-[360px]:col-span-3',
-  'min-[360px]:col-span-2',
-  'min-[360px]:col-span-2',
-  'col-span-2',
+  'min-[360px]:col-span-3',
+  'min-[360px]:col-span-3',
+  'min-[360px]:col-span-4',
+  'min-[360px]:col-span-4',
+  'col-span-3 min-[360px]:col-span-4',
 ] as const;
 
 /**
- * The account sections below `lg`: the F1 cuisine-bar look, five segments (F3 design 1.2): two
- * rows from 360 px, three below it, one row of five from `md`. Hidden on sub-pages, which show
- * their back link instead (design 4.1).
+ * The account sections below `lg`: seven segments with the icon above the label (F4 design
+ * 1.2, D42). Hidden on sub-pages, which show their back link instead (F2 design 4.1).
  */
 export function AccountNavBar() {
   const pathname = usePathname();
@@ -63,7 +71,7 @@ export function AccountNavBar() {
 
   return (
     <nav aria-label="Account" className="mb-8 md:mb-10 lg:hidden">
-      <ul className="mx-auto grid grid-cols-2 gap-1 rounded-lg bg-white p-1.5 shadow-card min-[360px]:grid-cols-6 md:max-w-[672px] md:grid-cols-5">
+      <ul className="mx-auto grid grid-cols-3 gap-1 rounded-lg bg-white p-1.5 shadow-card min-[360px]:grid-cols-12 md:max-w-[672px] md:grid-cols-7">
         {SECTIONS.map((section, index) => {
           const current = isCurrent(section.href, pathname);
           const Icon = section.icon;
@@ -73,11 +81,11 @@ export function AccountNavBar() {
                 href={section.href}
                 aria-current={current ? 'page' : undefined}
                 className={cn(
-                  'flex h-11 flex-row items-center justify-center gap-2 rounded-lg text-caption font-medium text-neutral-3 hover:bg-neutral-7 hover:text-neutral-1 focus-visible:-outline-offset-2 min-[360px]:text-body-5 md:h-12',
+                  'flex h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-caption font-medium text-neutral-3 hover:bg-neutral-7 hover:text-neutral-1 focus-visible:-outline-offset-2',
                   current && 'bg-brand-strong text-white hover:bg-brand-strong hover:text-white',
                 )}
               >
-                <Icon className="size-5 md:size-[18px]" aria-hidden />
+                <Icon className="size-5" aria-hidden />
                 {section.label}
               </Link>
             </li>
@@ -88,7 +96,7 @@ export function AccountNavBar() {
   );
 }
 
-/** The account sections from `lg`: who is signed in, the four sections, and Sign out. */
+/** The account sections from `lg`: who is signed in, the seven sections, and Sign out. */
 export function AccountSideNav() {
   const pathname = usePathname();
   const account = useAccount();
