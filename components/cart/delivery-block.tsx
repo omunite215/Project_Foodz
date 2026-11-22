@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
-import { distanceText, outsideText } from '@/lib/cart-text';
+import { distanceText, freeDeliveryWithoutAddress, outsideText } from '@/lib/cart-text';
 import { afterAddressCheck, type CheckedAddress } from '@/lib/data/checked-address';
 import { cn } from '@/lib/utils';
 
@@ -56,6 +56,7 @@ function AddressRow({
   line1,
   distance,
   outside,
+  outsideSince = false,
   action,
 }: {
   icon: LucideIcon;
@@ -63,6 +64,8 @@ function AddressRow({
   line1: string;
   distance: string | null;
   outside: boolean;
+  /** A saved address that has fallen outside the area since it was saved reads "…area now". */
+  outsideSince?: boolean;
   action: React.ReactNode;
 }) {
   return (
@@ -82,7 +85,7 @@ function AddressRow({
         {outside ? (
           <p className="mt-1 flex items-center gap-1.5 text-body-5 text-neutral-1">
             <MapPinOff className="size-3.5 text-destructive" aria-hidden />
-            Outside our delivery area now
+            {outsideSince ? 'Outside our delivery area now' : 'Outside our delivery area'}
           </p>
         ) : null}
       </div>
@@ -248,10 +251,12 @@ function GuestAddressCheck({
       announce(limited ? GUEST_LIMIT_TEXT : "We couldn't check delivery for this address.");
       return;
     }
-    announce(outcome.data.message);
-    setState(
-      outcome.data.deliverable ? { kind: 'idle' } : { kind: 'outside', text: outcome.data.message },
-    );
+    // Outside, the sentence is the one the cart shows once reopened (2.15), not the server's.
+    const sentence = outcome.data.deliverable
+      ? outcome.data.message
+      : outsideText(item.line1, outcome.data);
+    announce(sentence);
+    setState(outcome.data.deliverable ? { kind: 'idle' } : { kind: 'outside', text: sentence });
     onChecked({ line1: item.line1, lat: item.lat, lng: item.lng }, outcome.data.deliverable);
   }
 
@@ -400,6 +405,7 @@ export function DeliveryBlock({
           line1={address.line1}
           distance={outside ? null : distanceText(delivery)}
           outside={outside}
+          outsideSince
           action={
             <Button
               ref={changeRef}
@@ -502,7 +508,9 @@ export function DeliveryBlock({
         {checking ? null : (
           <>
             <p className="mt-3 text-body-5 text-neutral-3">
-              We&apos;ll show the exact fee for your address.
+              {quote && freeDeliveryWithoutAddress(quote) && quote.promo
+                ? `Delivery is free with ${quote.promo.code}.`
+                : 'We’ll show the exact fee for your address.'}
             </p>
             <Button
               type="button"
