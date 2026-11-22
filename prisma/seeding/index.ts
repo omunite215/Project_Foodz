@@ -90,6 +90,13 @@ export const SAMPLE_ACCOUNTS = [
 const TERMS_VERSION = 1;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * 1 Faneuil Hall Square where the address search (Photon) puts it, 1.4 km from the kitchen. The
+ * second customer's Work address and her past order use it, so saving the address and checking
+ * it as a guest give the same distance and fee.
+ */
+export const FANEUIL_HALL = { lat: 42.3600335, lng: -71.0562341 } as const;
+
 /** The demo customer's favorites in local and CI databases (F3): one of them sold out. */
 const DEMO_FAVORITE_SLUGS = ['bulgogi', 'naengmyeon'] as const;
 
@@ -270,7 +277,10 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         }
 
         const workId = seedId('second-customer-work');
-        const work = await tx.address.findUnique({ where: { id: workId }, select: { id: true } });
+        const work = await tx.address.findUnique({
+          where: { id: workId },
+          select: { lat: true, lng: true },
+        });
         if (!work) {
           await tx.address.create({
             data: {
@@ -282,11 +292,14 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
               city: 'Boston, MA 02109',
               notes: 'Front desk takes deliveries',
               isDefault: true,
-              lat: 42.36,
-              lng: -71.0548,
+              ...FANEUIL_HALL,
             },
           });
           count('addresses', true);
+        } else if (work.lat !== FANEUIL_HALL.lat || work.lng !== FANEUIL_HALL.lng) {
+          // Put back where the address search finds it, so the saved address and a guest's
+          // check of the same address give the same distance and fee.
+          await tx.address.update({ where: { id: workId }, data: FANEUIL_HALL });
         }
 
         // F3 fixtures: codes for the refusals nobody could reach otherwise, the second
@@ -485,15 +498,15 @@ async function seedPastWelcomeOrder(tx: Tx, userId: string, now: Date): Promise<
       contactName: 'Priya Shah',
       contactPhone: '+16175550123',
       addressText: '1 Faneuil Hall Square, Boston, MA 02109',
-      addressLat: 42.36,
-      addressLng: -71.0548,
-      distanceKm: 1.3,
+      addressLat: FANEUIL_HALL.lat,
+      addressLng: FANEUIL_HALL.lng,
+      distanceKm: 1.4,
       subtotalCents: 2598,
       discountCents: 260,
-      deliveryFeeCents: 264,
+      deliveryFeeCents: 269,
       taxCents: 164,
       tipCents: 0,
-      totalCents: 2766,
+      totalCents: 2771,
       couponId: welcome.id,
       placedAt,
       deliveredAt: new Date(placedAt.getTime() + 38 * 60 * 1000),
