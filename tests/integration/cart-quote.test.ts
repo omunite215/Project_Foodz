@@ -421,6 +421,15 @@ describe('where it goes (S2.6 to S2.8, U2)', () => {
     expect(outside.checkoutBlockers).toContain('outside');
   });
 
+  it('a guest with FREEDELIVERY and no address: delivery free, the total final (D4)', async () => {
+    guest();
+    const q = await quote({ lines: cartA(), code: 'FREEDELIVERY' });
+    expect(q.promo).toMatchObject({ status: 'applied', freeDelivery: true, amountCents: 0 });
+    expect(q.delivery).toMatchObject({ kind: 'none', status: 'unknown', feeCents: null });
+    expect([q.totalCents, q.totalKind]).toEqual([5133, 'final']);
+    expect(q.checkoutBlockers).not.toContain('outside');
+  });
+
   it('never uses another customer’s saved address, nor a saved address for a guest', async () => {
     const { homeId } = await dana();
     await signUp('other');

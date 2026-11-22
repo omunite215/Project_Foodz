@@ -136,6 +136,21 @@ export const quoteQ5: Quote = {
   totalCents: 5133,
 };
 
+/** A guest with no address and FREEDELIVERY: delivery is free wherever it goes, $51.33 (D4). */
+export const quoteQ1FreeDelivery: Quote = {
+  ...quoteQ1,
+  promo: quoteQ5.promo && { ...quoteQ5.promo, deliveryDiscountCents: 0, amountCents: 0 },
+  totalKind: 'final',
+};
+
+/** A guest with no address and KBBQ5: $45.98 before delivery. */
+export const quoteQ1Kbbq5: Quote = {
+  ...quoteQ1,
+  promo: applied({}),
+  tax: { rateBps: 700, cents: 301 },
+  totalCents: 4598,
+};
+
 /** A guest checked an address outside the area (S2.8). */
 export const quoteGuestOutside: Quote = {
   ...quoteQ1,

@@ -310,7 +310,11 @@ export const quoteSchema = z.object({
   tipCents: cents,
   /** subtotal − food discount + delivery fee − delivery discount + tax + tip. */
   totalCents: cents,
-  /** beforeDelivery: no delivery fee is in the total (no address, or outside the area). */
+  /**
+   * final: nothing more is added for delivery (the fee is in the total, or a free-delivery code
+   * is applied and no address is known yet). beforeDelivery: no fee is in the total (no address
+   * yet, or outside the area).
+   */
   totalKind: z.enum(['final', 'beforeDelivery']),
   store: z.object({
     timeZone: z.string(),

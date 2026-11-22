@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { Quote, QuoteDelivery } from '@/server/modules/cart/schema';
+import type { Quote, QuoteDelivery, QuotePromo } from '@/server/modules/cart/schema';
 import {
   cartButtonLabel,
   cartFullText,
   checkoutButtonState,
+  cheaperSide,
   codeEndedText,
+  type CompareSide,
+  compareNoteText,
+  compareSide,
   compareText,
   deliveryRowLabel,
   discountLabel,
@@ -182,6 +186,14 @@ describe('delivery (design 2.15, 2.16)', () => {
   });
 });
 
+/** A side of the compare card whose total already has delivery in it. */
+const known = (code: string, totalCents: number): CompareSide => ({
+  code,
+  totalCents,
+  note: null,
+  toAdd: { minCents: 0, maxCents: 0 },
+});
+
 describe('promo codes (design 2.10 to 2.13)', () => {
   const r9 = {
     code: 'minimumNotReached' as const,
@@ -220,14 +232,11 @@ describe('promo codes (design 2.10 to 2.13)', () => {
   });
 
   it('asks before swapping one code for another, with both totals (S4.7)', () => {
-    expect(
-      compareText({ code: 'KBBQ5', totalCents: 5012 }, { code: 'FREEDELIVERY', totalCents: 5133 }),
-    ).toBe(
+    expect(compareText(known('KBBQ5', 5012), known('FREEDELIVERY', 5133))).toBe(
       "Use FREEDELIVERY instead of KBBQ5? With KBBQ5 your total is $50.12. With FREEDELIVERY it's $51.33.",
     );
-    expect(compareText({ code: 'A', totalCents: 100 }, { code: 'B', totalCents: 100 })).toMatch(
-      /Both give the same total\.$/,
-    );
+    expect(compareText(known('A', 100), known('B', 100))).toMatch(/Both give the same total\.$/);
+    expect(cheaperSide(known('KBBQ5', 5012), known('FREEDELIVERY', 5133))).toBe('current');
   });
 
   it('gives the real wait after too many codes (S4.13)', () => {
@@ -256,12 +265,99 @@ const quoteOf = (fields: Partial<Quote>): Quote => ({
   ...fields,
 });
 
+const promoOf = (fields: Partial<QuotePromo>): QuotePromo => ({
+  code: 'KBBQ5',
+  status: 'applied',
+  reason: null,
+  message: null,
+  description: '$5 off Korean dishes over $25',
+  kind: 'fixed',
+  foodDiscountCents: 500,
+  deliveryDiscountCents: 0,
+  amountCents: 500,
+  freeDelivery: false,
+  retryAfterSeconds: null,
+  ...fields,
+});
+
 const noAddress = delivery({
   kind: 'none',
   address: null,
   status: 'unknown',
   distanceKm: null,
   feeCents: null,
+});
+
+describe('the compare card before the address is known (S4.7, D5)', () => {
+  // A guest with cart A: KBBQ5 leaves the fee out; FREEDELIVERY makes it free wherever it goes.
+  const kbbq5 = compareSide(
+    'KBBQ5',
+    quoteOf({
+      promo: promoOf({}),
+      delivery: noAddress,
+      totalCents: 4598,
+      totalKind: 'beforeDelivery',
+    }),
+  );
+  const freeDelivery = compareSide(
+    'FREEDELIVERY',
+    quoteOf({
+      promo: promoOf({
+        code: 'FREEDELIVERY',
+        kind: 'freeDelivery',
+        freeDelivery: true,
+        foodDiscountCents: 0,
+        amountCents: 0,
+      }),
+      delivery: noAddress,
+      totalCents: 5133,
+      totalKind: 'final',
+    }),
+  );
+
+  it('says which total leaves delivery out', () => {
+    expect(kbbq5).toMatchObject({
+      note: 'beforeDelivery',
+      toAdd: { minCents: 199, maxCents: 599 },
+    });
+    expect(freeDelivery).toMatchObject({
+      note: 'freeDelivery',
+      toAdd: { minCents: 0, maxCents: 0 },
+    });
+    expect(compareNoteText(kbbq5)).toBe('before delivery');
+    expect(compareNoteText(freeDelivery)).toBe('free delivery');
+    expect(compareNoteText(known('KBBQ5', 5012))).toBeNull();
+  });
+
+  it('calls neither cheaper when the delivery fee decides it, and says so', () => {
+    // KBBQ5 costs $47.97 to $51.97 with delivery; FREEDELIVERY costs $51.33.
+    expect(cheaperSide(kbbq5, freeDelivery)).toBe('unknown');
+    expect(compareText(kbbq5, freeDelivery)).toBe(
+      "Use FREEDELIVERY instead of KBBQ5? With KBBQ5 your total is $45.98 before delivery. With FREEDELIVERY it's $51.33 with free delivery. Which one saves more depends on your delivery fee ($1.99 to $5.99).",
+    );
+  });
+
+  it('still picks one when it is cheaper whatever the fee', () => {
+    const big = { ...kbbq5, totalCents: 4400 }; // at most $49.99 with delivery
+    expect(cheaperSide(big, freeDelivery)).toBe('current');
+    const small = { ...kbbq5, totalCents: 5000 }; // at least $51.99 with delivery
+    expect(cheaperSide(small, freeDelivery)).toBe('next');
+    expect(compareText(small, freeDelivery)).not.toMatch(/depends on/);
+  });
+
+  it('compares two food codes directly: the same fee comes on top of both', () => {
+    const other = { ...kbbq5, code: 'TRY5', totalCents: 4620 };
+    expect(cheaperSide(kbbq5, other)).toBe('current');
+    expect(compareText(kbbq5, other)).toBe(
+      "Use TRY5 instead of KBBQ5? With KBBQ5 your total is $45.98 before delivery. With TRY5 it's $46.20 before delivery.",
+    );
+  });
+
+  it('reads a known address as a final total with nothing to add', () => {
+    expect(compareSide('KBBQ5', quoteOf({ promo: promoOf({}), totalCents: 5012 }))).toEqual(
+      known('KBBQ5', 5012),
+    );
+  });
 });
 
 describe('the checkout button and its line (design 2.17)', () => {

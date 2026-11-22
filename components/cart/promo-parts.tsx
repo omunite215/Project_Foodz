@@ -16,7 +16,15 @@ import { OfferCountdown } from '@/components/dish/offer-countdown';
 import { useSlowPending } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { compareText, isMinimumReason, joinWords, shortfallText } from '@/lib/cart-text';
+import {
+  cheaperSide,
+  type CompareSide,
+  compareNoteText,
+  compareText,
+  isMinimumReason,
+  joinWords,
+  shortfallText,
+} from '@/lib/cart-text';
 import { CUISINE_LABELS, formatPrice } from '@/lib/format';
 import { useMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
@@ -35,12 +43,7 @@ export type PromoMessage =
 export type CompareState =
   | { status: 'loading'; code: string }
   | { status: 'failed'; code: string }
-  | {
-      status: 'ready';
-      current: { code: string; totalCents: number };
-      next: { code: string; totalCents: number };
-      nextQuote: Quote;
-    };
+  | { status: 'ready'; current: CompareSide; next: CompareSide; nextQuote: Quote };
 
 // ------------------------------------------------------------------ presentational parts
 
@@ -243,8 +246,10 @@ export function PromoCompare({
     );
   } else {
     const { current, next } = state;
-    const nextCheaper = next.totalCents < current.totalCents;
-    const equal = next.totalCents === current.totalCents;
+    // Before the address is known, the delivery fee can decide which code is cheaper: then
+    // neither is tagged and keeping the code stays first (D5).
+    const outcome = cheaperSide(current, next);
+    const nextCheaper = outcome === 'next';
     const tiles = [current, next];
     const keep = (
       <Button
@@ -274,7 +279,8 @@ export function PromoCompare({
         <ul aria-hidden className="mt-3 grid grid-cols-2 gap-2">
           {tiles.map((tile) => {
             const cheaper =
-              !equal && tile.totalCents === Math.min(current.totalCents, next.totalCents);
+              (outcome === 'current' && tile === current) || (outcome === 'next' && tile === next);
+            const note = compareNoteText(tile);
             return (
               <li
                 key={tile.code}
@@ -289,6 +295,7 @@ export function PromoCompare({
                 <span className="block text-body-2 font-semibold whitespace-nowrap text-neutral-1 tabular-nums">
                   {formatPrice(tile.totalCents)}
                 </span>
+                {note ? <span className="block text-caption text-neutral-3">{note}</span> : null}
                 {cheaper ? (
                   <span className="mt-1 inline-flex h-6 items-center gap-1 rounded-md bg-white px-2 text-caption font-medium text-neutral-1">
                     <Check className="size-3 text-brand-strong" aria-hidden />

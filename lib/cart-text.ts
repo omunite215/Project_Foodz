@@ -194,6 +194,15 @@ export function outsideText(
   return `We don't deliver to ${place} yet.${away} deliver within ${delivery.radiusKm} km.`;
 }
 
+/**
+ * A free-delivery code is applied and no address is known yet: delivery will cost nothing, so the
+ * delivery row reads "Free" rather than the fee range (design 2.16 row 3).
+ */
+export const freeDeliveryWithoutAddress = (quote: Pick<Quote, 'promo' | 'delivery'>) =>
+  quote.promo?.status === 'applied' &&
+  quote.promo.freeDelivery &&
+  quote.delivery.status === 'unknown';
+
 /** "Total $55.47" or "Total before delivery $51.33", announced once a change settles. */
 export const totalAnnouncement = (quote: Pick<Quote, 'totalCents' | 'totalKind'>) =>
   `${quote.totalKind === 'final' ? 'Total' : 'Total before delivery'} ${formatPrice(quote.totalCents)}`;
@@ -235,13 +244,92 @@ export function noLongerAppliedText(code: string, reason: MinimumReason): string
 export const isMinimumReason = (reason: PromoReason | null): reason is MinimumReason =>
   reason?.code === 'minimumNotReached';
 
-/** The compare card's question (S4.7, U6). */
-export function compareText(
-  current: { code: string; totalCents: number },
-  next: { code: string; totalCents: number },
-): string {
-  const base = `Use ${next.code} instead of ${current.code}? With ${current.code} your total is ${formatPrice(current.totalCents)}. With ${next.code} it's ${formatPrice(next.totalCents)}.`;
-  return current.totalCents === next.totalCents ? `${base} Both give the same total.` : base;
+/** One side of the compare card (S4.7, U6): a code and the real total it gives. */
+export interface CompareSide {
+  code: string;
+  totalCents: number;
+  /**
+   * What the total says about delivery when no address is known yet: it leaves the fee out
+   * ("before delivery"), or the code makes delivery free. Null once the fee is in the total.
+   */
+  note: 'beforeDelivery' | 'freeDelivery' | null;
+  /** The delivery fee still to come on top of the total ($0 once it is known or free). */
+  toAdd: QuoteDelivery['feeRange'];
+}
+
+const NOTHING_TO_ADD = { minCents: 0, maxCents: 0 } as const;
+
+/** A side of the compare card from the quote with that code. */
+export function compareSide(
+  code: string,
+  quote: Pick<Quote, 'totalCents' | 'totalKind' | 'delivery' | 'promo'>,
+): CompareSide {
+  const { totalCents } = quote;
+  if (freeDeliveryWithoutAddress(quote)) {
+    return { code, totalCents, note: 'freeDelivery', toAdd: NOTHING_TO_ADD };
+  }
+  if (quote.totalKind === 'beforeDelivery') {
+    const toAdd = quote.delivery.status === 'unknown' ? quote.delivery.feeRange : NOTHING_TO_ADD;
+    return { code, totalCents, note: 'beforeDelivery', toAdd };
+  }
+  return { code, totalCents, note: null, toAdd: NOTHING_TO_ADD };
+}
+
+/**
+ * Which code costs less once delivery is paid. When both totals leave out the same fee, the fee
+ * doesn't change the answer. When only one does (free delivery against a food discount, before
+ * the address is known), the answer is known only if it holds for every fee in the range;
+ * otherwise it is `unknown` and neither is called cheaper.
+ */
+export function cheaperSide(
+  current: CompareSide,
+  next: CompareSide,
+): 'current' | 'next' | 'equal' | 'unknown' {
+  const sameFee =
+    current.toAdd.minCents === next.toAdd.minCents &&
+    current.toAdd.maxCents === next.toAdd.maxCents;
+  if (sameFee) {
+    if (current.totalCents === next.totalCents) return 'equal';
+    return current.totalCents < next.totalCents ? 'current' : 'next';
+  }
+  if (current.totalCents + current.toAdd.maxCents < next.totalCents + next.toAdd.minCents) {
+    return 'current';
+  }
+  if (next.totalCents + next.toAdd.maxCents < current.totalCents + current.toAdd.minCents) {
+    return 'next';
+  }
+  return 'unknown';
+}
+
+/** "$45.98 before delivery", "$51.33 with free delivery" or "$50.12". */
+function compareFigure(side: CompareSide): string {
+  const money = formatPrice(side.totalCents);
+  if (side.note === 'beforeDelivery') return `${money} before delivery`;
+  if (side.note === 'freeDelivery') return `${money} with free delivery`;
+  return money;
+}
+
+/** Under each total on the compare card's tiles: "before delivery" or "free delivery". */
+export const compareNoteText = (side: CompareSide) =>
+  side.note === 'beforeDelivery'
+    ? 'before delivery'
+    : side.note === 'freeDelivery'
+      ? 'free delivery'
+      : null;
+
+/**
+ * The compare card's question (S4.7, U6). A total that leaves delivery out says so, and when the
+ * delivery fee decides which code is cheaper, the card says that instead of guessing.
+ */
+export function compareText(current: CompareSide, next: CompareSide): string {
+  const base = `Use ${next.code} instead of ${current.code}? With ${current.code} your total is ${compareFigure(current)}. With ${next.code} it's ${compareFigure(next)}.`;
+  const outcome = cheaperSide(current, next);
+  if (outcome === 'equal') return `${base} Both give the same total.`;
+  if (outcome === 'unknown') {
+    const range = current.toAdd.maxCents > 0 ? current.toAdd : next.toAdd;
+    return `${base} Which one saves more depends on your delivery fee (${feeRangeText(range)}).`;
+  }
+  return base;
 }
 
 /** "Too many codes tried. You can try again in 10 minutes." (the real wait) */

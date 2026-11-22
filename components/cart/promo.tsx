@@ -20,6 +20,7 @@ import { announce } from '@/lib/announce';
 import { returnPathFor } from '@/lib/auth-links';
 import {
   codeEndedText,
+  compareSide,
   compareText,
   isMinimumReason,
   noLongerAppliedText,
@@ -250,9 +251,10 @@ export function PromoSection({
             announce("We couldn't compare the totals.");
             return;
           }
+          // Each total says whether delivery is in it yet (D5).
           const card = {
-            current: { code: storedCode, totalCents: current.data.totalCents },
-            next: { code: nextPromo.code, totalCents: next.data.totalCents },
+            current: compareSide(storedCode, current.data),
+            next: compareSide(nextPromo.code, next.data),
           };
           setMessage(null);
           setCompare({ status: 'ready', ...card, nextQuote: next.data });

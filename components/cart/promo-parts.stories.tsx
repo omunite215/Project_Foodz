@@ -1,8 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { expect, within } from 'storybook/test';
 import { PROMO_UNAVAILABLE } from '@/server/modules/cart/promo-text';
-import { tooManyCodesText } from '@/lib/cart-text';
-import { offersFixture, quoteQ5 } from './cart.fixtures';
+import { compareSide, tooManyCodesText } from '@/lib/cart-text';
+import {
+  offersFixture,
+  quoteQ1FreeDelivery,
+  quoteQ1Kbbq5,
+  quoteQ4,
+  quoteQ5,
+} from './cart.fixtures';
 import {
   CartOffers,
   PromoChip,
@@ -137,8 +143,8 @@ export const CompareCheaperFirst: Story = {
     <PromoCompare
       state={{
         status: 'ready',
-        current: { code: 'KBBQ5', totalCents: 5012 },
-        next: { code: 'FREEDELIVERY', totalCents: 5133 },
+        current: compareSide('KBBQ5', quoteQ4),
+        next: compareSide('FREEDELIVERY', quoteQ5),
         nextQuote: quoteQ5,
       }}
       onKeep={() => {}}
@@ -160,8 +166,8 @@ export const CompareEqual: Story = {
     <PromoCompare
       state={{
         status: 'ready',
-        current: { code: 'KBBQ5', totalCents: 5012 },
-        next: { code: 'TRY5', totalCents: 5012 },
+        current: compareSide('KBBQ5', quoteQ4),
+        next: compareSide('TRY5', quoteQ4),
         nextQuote: quoteQ5,
       }}
       onKeep={() => {}}
@@ -169,6 +175,34 @@ export const CompareEqual: Story = {
       onRetry={() => {}}
     />
   ),
+};
+
+/**
+ * A guest with no address yet (D5): KBBQ5's total leaves delivery out, FREEDELIVERY's has it
+ * free. The fee decides which is cheaper, so neither is tagged and the card says so.
+ */
+export const CompareBeforeDelivery: Story = {
+  render: () => (
+    <PromoCompare
+      state={{
+        status: 'ready',
+        current: compareSide('KBBQ5', quoteQ1Kbbq5),
+        next: compareSide('FREEDELIVERY', quoteQ1FreeDelivery),
+        nextQuote: quoteQ1FreeDelivery,
+      }}
+      onKeep={() => {}}
+      onUse={() => {}}
+      onRetry={() => {}}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText(/\$45\.98 before delivery\..*depends on your delivery fee/),
+    ).toBeVisible();
+    await expect(canvas.queryByText('Saves more')).toBeNull();
+    await expect(canvas.getAllByRole('button')[0]).toHaveTextContent('Keep KBBQ5');
+  },
 };
 
 /** The two totals failed to come back: nothing is swapped. */

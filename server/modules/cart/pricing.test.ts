@@ -376,6 +376,22 @@ describe('delivery', () => {
     const q = run({ lines: cartA(), promo: withCode(FREEDELIVERY, customer(null)) });
     expect(q.promo).toMatchObject({ status: 'applied', freeDelivery: true, amountCents: 0 });
     expect(q.totalCents).toBe(5133);
+    // Delivery will cost nothing wherever it goes, so the total needs no "before delivery".
+    expect(q.totalKind).toBe('final');
+  });
+
+  it('still says "before delivery" when free delivery is attached but not applied yet', () => {
+    const q = run({ lines: [line('kimchi', 1)], promo: withCode(FREEDELIVERY, customer(null)) });
+    expect(q.promo).toMatchObject({ status: 'notApplied', freeDelivery: false });
+    expect(q.totalKind).toBe('beforeDelivery');
+  });
+
+  it('has no final total outside the area, even with free delivery', () => {
+    const q = run({
+      lines: cartA(),
+      promo: withCode(FREEDELIVERY, customer(null)),
+      delivery: { status: 'outside', distanceMeters: 11_400 },
+    });
     expect(q.totalKind).toBe('beforeDelivery');
   });
 });

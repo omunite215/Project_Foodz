@@ -7,6 +7,7 @@ import {
   quoteGuestOutside,
   quoteOutside,
   quoteQ1,
+  quoteQ1FreeDelivery,
   quoteQ2,
   quoteQ5,
   quoteSoldOut,
@@ -55,6 +56,21 @@ export const GuestRange: Story = {
 /** FREEDELIVERY: "Free", with the real fee struck through and read as "free, was $4.14". */
 export const FreeDelivery: Story = { args: { quote: quoteQ5 } };
 
+/**
+ * FREEDELIVERY before the address is known: the promo row, the delivery row and the total agree
+ * that delivery is free, so there is no fee range and no "before delivery" (D4).
+ */
+export const FreeDeliveryNoAddress: Story = {
+  args: { quote: quoteQ1FreeDelivery },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Free delivery')).toBeVisible();
+    await expect(canvas.getByText('Free')).toBeVisible();
+    await expect(canvas.queryByText('$1.99 to $5.99')).toBeNull();
+    await expect(canvas.queryByText('depending on distance')).toBeNull();
+  },
+};
+
 /** The address is outside the area: no fee. */
 export const Outside: Story = { args: { quote: quoteOutside } };
 
@@ -101,6 +117,7 @@ export const CheckoutBarStates: Story = {
       {bar({ quote: quoteOutside })}
       {bar({ quote: quoteClosedOutside })}
       {bar({ quote: quoteClosed, status: 'updating', dim: true, slow: true })}
+      {bar({ quote: quoteQ1FreeDelivery })}
       {bar({ status: 'offline' })}
     </div>
   ),
@@ -117,5 +134,6 @@ export const CheckoutBarStates: Story = {
       'true',
     ]);
     await expect(canvas.getAllByText('Choose an address we deliver to.')).toHaveLength(2);
+    await expect(canvas.getByRole('button', { name: 'Go to checkout · $51.33' })).toBeVisible();
   },
 };
