@@ -57,3 +57,34 @@ export const FullByLines: Story = {
     notices: [{ kind: 'full', limit: 'lines', phone: '(617) 555-0142', tel: '+16175550142' }],
   },
 };
+
+/** F4: a card order waits for its payment (shown first), with its link to the order page. */
+export const UnpaidOrder: Story = {
+  args: {
+    notices: [{ kind: 'unpaid', orderId: '01a201a9-7986-74dd-9f5a-15ae7a8fe737', number: '1042' }],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(/^You have an unpaid order 1042\./)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Finish paying' })).toHaveAttribute(
+      'href',
+      '/orders/01a201a9-7986-74dd-9f5a-15ae7a8fe737',
+    );
+    await expect(canvas.queryByRole('button', { name: 'Dismiss' })).toBeNull();
+  },
+};
+
+/** F4 B16: an order emptied the cart; she can open it, or dismiss the notice. */
+export const OrderPlaced: Story = {
+  args: {
+    notices: [{ kind: 'placed', orderId: '01a201a9-7986-74dd-9f5a-15ae7a8fe737', number: '1042' }],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText(/^Order 1042 is placed\. Your cart has been emptied\./),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'View your order' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+  },
+};
