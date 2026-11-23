@@ -187,6 +187,13 @@ function Sidebar({
           style={{
             '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
           }}
+          // Opened by a button outside Radix: focus goes back to it, never to the page.
+          onCloseAutoFocus={(event) => {
+            const toggle = document.querySelector<HTMLElement>('[data-sidebar-toggle]');
+            if (!toggle) return;
+            event.preventDefault();
+            toggle.focus();
+          }}
         >
           <div className="sr-only">
             <SheetTitle>Staff menu</SheetTitle>

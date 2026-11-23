@@ -69,7 +69,7 @@ export function SoundButton({
 }: {
   state: SoundState;
   onToggle: () => void;
-  /** Icon only below 1024 px, the words as its name. */
+  /** Icon only at every width. Without it, the words show from 1280 px (design 1.3, 2.10). */
   compact?: boolean;
 }) {
   const words =
@@ -88,15 +88,14 @@ export function SoundButton({
       onClick={onToggle}
       aria-label={words.name}
       className={cn(
-        'lg:w-auto lg:px-4',
-        !compact && 'max-lg:size-12 max-lg:px-0',
+        !compact && 'max-xl:size-12 max-xl:px-0 xl:w-auto xl:px-4',
         state === 'on' &&
           'border-2 border-brand-strong bg-brand-soft text-neutral-1 hover:bg-brand-soft',
         state === 'blocked' && 'border-warning-strong bg-tag-6-bg text-neutral-1 hover:bg-tag-6-bg',
       )}
     >
       <Icon className="size-5" aria-hidden />
-      {compact ? null : <span className="hidden lg:inline">{words.visible}</span>}
+      {compact ? null : <span className="hidden xl:inline">{words.visible}</span>}
     </Button>
   );
 }
@@ -173,20 +172,24 @@ export function WakeLockSwitch({
   className?: string;
 }) {
   const id = useId();
+  // The whole 48 px row is the target, not just the 32 px switch (A16.1): a wet-hands tablet.
   return (
-    <div className={cn('flex min-h-12 items-center gap-3', className)}>
+    <label
+      htmlFor={id}
+      className={cn(
+        'flex min-h-12 cursor-pointer items-center gap-3 rounded-md px-2 hover:bg-neutral-7',
+        className,
+      )}
+    >
       <Switch
         id={id}
         checked={on}
         onCheckedChange={onChange}
         className="focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
       />
-      <label
-        htmlFor={id}
-        className="cursor-pointer text-body-5 font-medium whitespace-nowrap text-neutral-1"
-      >
+      <span className="text-body-5 font-medium whitespace-nowrap text-neutral-1">
         Keep screen on
-      </label>
-    </div>
+      </span>
+    </label>
   );
 }

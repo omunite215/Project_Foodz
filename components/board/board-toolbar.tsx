@@ -182,7 +182,7 @@ export function BoardFiltersBar({
 /** "Sold out" with its count (KITCHEN, ADMIN, demo): opens the dish availability sheet. */
 export function SoldOutButton({ count, onOpen }: { count: number; onOpen: () => void }) {
   return (
-    <Button type="button" variant="outline" size="kitchen" onClick={onOpen} className="ml-auto">
+    <Button type="button" variant="outline" size="kitchen" onClick={onOpen} className="md:ml-auto">
       <Ban className="size-5" aria-hidden />
       {/* Named from its text, which holds the visible words: "Sold out dishes, 2". */}
       Sold out<span className="sr-only"> dishes{count > 0 ? ',' : ''}</span>

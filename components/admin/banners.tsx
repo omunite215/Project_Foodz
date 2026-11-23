@@ -74,13 +74,18 @@ export function Banner({
       <Alert
         variant={variant}
         className={cn(
-          'items-center gap-3 px-4 py-2.5 text-body-5 md:text-body-4 [&>svg]:mt-0',
+          'items-center gap-3 px-4 py-2.5 text-body-5 max-md:flex-wrap md:text-body-4 [&>svg]:mt-0',
           className,
         )}
       >
         <Icon aria-hidden />
-        <AlertDescription ref={textRef}>{children}</AlertDescription>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        <AlertDescription ref={textRef} className="max-md:basis-0">
+          {children}
+        </AlertDescription>
+        {/* Phones: the action sits on its own line under the text, lined up with it (1.5). */}
+        {action ? (
+          <div className="shrink-0 max-md:order-last max-md:basis-full max-md:pl-8">{action}</div>
+        ) : null}
         {onDismiss ? (
           <Button
             type="button"

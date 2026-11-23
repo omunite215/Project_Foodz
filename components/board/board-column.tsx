@@ -202,40 +202,44 @@ export function BoardColumn({
         className,
       )}
     >
-      <header className="sticky top-0 z-10 flex min-h-14 items-center gap-2 rounded-t-2xl bg-neutral-7 px-3 py-2.5 max-md:static">
-        <Icon className="size-5 shrink-0 text-neutral-3" aria-hidden />
-        <div className="min-w-0">
+      {/* Two fixed rows, so first cards start at the same height in every column (2.3): the
+          name and the collapse button, then the chips and Ready's subtitle. */}
+      <header className="sticky top-0 z-10 rounded-t-2xl bg-neutral-7 px-3 py-2 max-md:static">
+        <div className="flex min-h-12 items-center gap-2">
+          <Icon className="size-5 shrink-0 text-neutral-3" aria-hidden />
           <h2
             id={columnHeadingId(column)}
             tabIndex={-1}
-            className="flex flex-wrap items-center gap-2 rounded-md text-body-3 font-semibold text-neutral-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
+            className="min-w-0 rounded-md text-body-3 font-semibold text-neutral-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
           >
             <span aria-hidden>{COLUMN_WORDS[column]}</span>
-            <span aria-hidden className={COUNT_CHIP}>
-              {countChipText(count)}
-            </span>
-            <span aria-hidden className="contents">
-              <LateChip late={count.late} />
-            </span>
             <span className="sr-only">{columnSpoken(column, count)}</span>
           </h2>
+          {collapsible ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-kitchen"
+              aria-expanded="true"
+              aria-label={collapseLabel(column)}
+              onClick={onToggle}
+              className="-my-1 ml-auto shrink-0 text-neutral-3 max-md:hidden"
+            >
+              <ChevronsLeft className="size-5" aria-hidden />
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 pb-1 pl-7">
+          <span aria-hidden className={COUNT_CHIP}>
+            {countChipText(count)}
+          </span>
+          <span aria-hidden className="contents">
+            <LateChip late={count.late} />
+          </span>
           {column === 'ready' ? (
             <p className="text-caption text-neutral-3">{WAITING_FOR_PICKUP}</p>
           ) : null}
         </div>
-        {collapsible ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-kitchen"
-            aria-expanded="true"
-            aria-label={collapseLabel(column)}
-            onClick={onToggle}
-            className="ml-auto shrink-0 text-neutral-3 max-md:hidden"
-          >
-            <ChevronsLeft className="size-5" aria-hidden />
-          </Button>
-        ) : null}
       </header>
       {empty === 'board' ? null : (
         <ul

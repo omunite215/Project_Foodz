@@ -46,16 +46,18 @@ export function TimeBlock({ text, className }: { text: TimeBlockText; className?
   return (
     <p
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-neutral-1',
+        'inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-neutral-1',
         tone.bg,
         className,
       )}
     >
       <Icon className={cn('size-4 shrink-0', tone.iconClass)} aria-hidden />
-      <span aria-hidden className="flex items-baseline gap-1.5 whitespace-nowrap">
+      <span aria-hidden className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
         {text.before ? <span className="text-body-5 font-medium">{text.before}</span> : null}
         {text.figure ? (
-          <span className="text-body-2 leading-none font-semibold tabular-nums">{text.figure}</span>
+          <span className="text-body-2 leading-none font-semibold whitespace-nowrap tabular-nums">
+            {text.figure}
+          </span>
         ) : null}
         {text.after ? <span className="text-body-5 font-medium">{text.after}</span> : null}
       </span>
@@ -74,8 +76,9 @@ export function TimeLine({ text }: { text: TimeBlockText }) {
   );
 }
 
+/* Wraps rather than clips: "to collect" drops to a second line on a narrow card (2.5). */
 const CHIP =
-  'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-body-5 font-medium whitespace-nowrap text-neutral-1';
+  'inline-flex h-auto min-h-7 max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-body-5 font-medium text-neutral-1';
 
 /** Cash gets the blue tint so the bagger spots it; card stays neutral (design 2.6, D32). */
 export function PaymentChip({ payment }: { payment: BoardCard['payment'] }) {
@@ -83,9 +86,9 @@ export function PaymentChip({ payment }: { payment: BoardCard['payment'] }) {
   return (
     <span className={cn(CHIP, cash ? 'bg-tag-3-bg' : 'bg-neutral-7')}>
       {cash ? (
-        <Banknote className="size-3.5 text-tag-3" aria-hidden />
+        <Banknote className="size-3.5 shrink-0 text-tag-3" aria-hidden />
       ) : (
-        <CreditCard className="size-3.5 text-neutral-3" aria-hidden />
+        <CreditCard className="size-3.5 shrink-0 text-neutral-3" aria-hidden />
       )}
       {paymentChipText(payment)}
     </span>

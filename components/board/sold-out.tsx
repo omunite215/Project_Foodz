@@ -96,18 +96,25 @@ function DishRow({
 }) {
   const slow = useSlowPending(pending);
   const blocked = !canChange;
+  const since = dish.available
+    ? null
+    : soldOutSinceText(dish.soldOutSince, dish.soldOutByName, timeZone);
   return (
     <li>
-      <div className="flex min-h-16 items-center gap-3 rounded-xl border border-neutral-6 bg-white px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
+      {/* Wraps rather than crushing the name: the button drops under it when the row is narrow. */}
+      <div className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-neutral-6 bg-white px-4 py-2">
+        <div className="min-w-[8rem] flex-1">
+          <p className="text-body-4 font-medium text-neutral-1 [overflow-wrap:break-word]">
             {dish.title}
           </p>
-          <p className="text-body-5 text-neutral-3">
-            {dish.available
-              ? 'On the menu'
-              : soldOutSinceText(dish.soldOutSince, dish.soldOutByName, timeZone)}
-          </p>
+          {dish.available ? (
+            <p className="text-body-5 text-neutral-3">On the menu</p>
+          ) : since ? (
+            <p className="text-body-5 text-neutral-3">{since}</p>
+          ) : (
+            // Phones hide the chip, so the line says it there.
+            <p className="text-body-5 text-neutral-3 sm:hidden">Sold out</p>
+          )}
         </div>
         {dish.available ? null : (
           <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-tag-4-bg px-2 text-body-5 font-medium text-neutral-1 max-sm:hidden">

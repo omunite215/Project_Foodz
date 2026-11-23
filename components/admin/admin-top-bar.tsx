@@ -13,7 +13,8 @@ import { useStaffShell } from './staff-shell-context';
 /*
  * The top bar of every staff page (F5 design 1.3). DOM order is the visual order: start, the
  * page's h1, the status chips, then the controls at the end. KITCHEN's logo is not a link, so
- * a stray tap never takes the tablet off the board (D4).
+ * a stray tap never takes the tablet off the board (D4), and it is left out on phones, where
+ * the h1 names the page. The h1 and the chips never shrink: they are the "is this live?" signal.
  */
 
 function SidebarToggle() {
@@ -29,6 +30,7 @@ function SidebarToggle() {
       variant="ghost"
       size="icon-kitchen"
       aria-label={label}
+      data-sidebar-toggle=""
       onClick={toggleSidebar}
       className="-ml-2 text-neutral-2"
     >
@@ -72,18 +74,18 @@ export function AdminTopBar({
           width={98}
           height={28}
           unoptimized
-          className="h-4 w-auto shrink-0 md:h-7"
+          className="h-7 w-auto shrink-0 max-md:hidden"
         />
       ) : null}
       {shell.frame === 'gate' || shell.frame === 'editor' ? (
         <LogoLink imageClassName="h-7" />
       ) : null}
       {title ? (
-        <h1 className="min-w-0 truncate font-heading text-body-2 text-neutral-2 tabular-nums md:text-title-2">
+        <h1 className="shrink-0 font-heading text-body-2 whitespace-nowrap text-neutral-2 tabular-nums md:text-title-2">
           {title}
         </h1>
       ) : null}
-      {status ? <div className="flex min-w-0 items-center gap-2">{status}</div> : null}
+      {status ? <div className="flex shrink-0 items-center gap-2">{status}</div> : null}
       <div className="ml-auto flex shrink-0 items-center gap-1.5 md:gap-2">
         {end}
         {shell.frame === 'sidebar' ? null : (
