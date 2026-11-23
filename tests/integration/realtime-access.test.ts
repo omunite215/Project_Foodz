@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { channels } from '@/lib/realtime/channels';
 import type { Role } from '@/server/auth/roles';
 import { db } from '@/server/db/client';
-import { runAs, runAsSystem } from '@/server/db/context';
+import { runAsSystem } from '@/server/db/context';
 import { canSubscribe, type Subscriber } from '@/server/modules/realtime/service';
 
 const customer = uuid();
@@ -44,7 +44,8 @@ beforeAll(async () => {
     ).id;
   });
 
-  order = await runAs({ kind: 'user', userId: customer, role: 'customer', isDemo: false }, (ctx) =>
+  // Only the platform writes orders (F4 orders_insert), as checkout does on the customer's behalf.
+  order = await runAsSystem('test setup: order', (ctx) =>
     db(ctx)
       .order.create({
         data: {

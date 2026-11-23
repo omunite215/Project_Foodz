@@ -78,9 +78,29 @@ export const quoteQ2: Quote = {
   tipCents: 0,
   totalCents: 5547,
   totalKind: 'final',
-  store: { timeZone: 'America/New_York', isOpen: true, opensAt: null, closesAt: null },
+  store: {
+    timeZone: 'America/New_York',
+    isOpen: true,
+    opensAt: null,
+    closesAt: null,
+    closingSoon: false,
+  },
   offers,
   checkoutBlockers: [],
+  // Tips are worked out on the food before any promo: 10, 15 and 20 % of $47.97.
+  tipOptions: [
+    { percent: 10, cents: 480 },
+    { percent: 15, cents: 720 },
+    { percent: 20, cents: 959 },
+  ],
+  arrival: {
+    status: 'ok',
+    fromMinutes: 30,
+    toMinutes: 45,
+    by: new Date(Date.now() + 45 * 60_000).toISOString(),
+  },
+  cashAllowed: true,
+  cashLimitCents: 10_000,
 };
 
 /** Q1: a guest, no address yet: $51.33 before delivery. */
@@ -178,11 +198,13 @@ export const quoteSoldOut: Quote = { ...quoteQ2, checkoutBlockers: ['soldOut'] }
 /** The store is closed until 11 am tomorrow. */
 export const quoteClosed: Quote = {
   ...quoteQ2,
+  arrival: { status: 'closed' },
   store: {
     timeZone: 'America/New_York',
     isOpen: false,
     opensAt: { at: OFFER_ENDS_AT, weekday: 'sat', time: '11:00', day: 'tomorrow' },
     closesAt: null,
+    closingSoon: false,
   },
   checkoutBlockers: ['closed'],
 };

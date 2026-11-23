@@ -10,6 +10,9 @@ server/db/generated
 docs
 design
 tests
+# Unit tests sit next to the code they test; the image needs neither them nor their helpers.
+**/*.test.ts
+**/*.test.tsx
 .env
 .env.*
 !.env.example

@@ -155,6 +155,24 @@ export interface AddressFormProps {
    * account only and comes back after it signs in again (S2.12).
    */
   draftOwner: string;
+  /**
+   * Inside checkout's dialog (F4 design 2.8): Save hands the saved address back instead of going
+   * to the address book, and Cancel closes the dialog.
+   */
+  onSaved?: (address: AddressDto) => void;
+  onCancel?: () => void;
+  /**
+   * A new address that starts from a place already found (F4 S2.5: the one checked in the cart
+   * before signing in). Nothing is saved until Save is pressed. `note` is said first, in the
+   * same announcement as the delivery check, so neither cuts the other off.
+   */
+  initial?: {
+    line1: string;
+    city: string;
+    hasHouseNumber: boolean;
+    point: Point;
+    note?: string;
+  } | null;
 }
 
 /**
@@ -169,7 +187,11 @@ export function AddressForm({
   firstAddress,
   canSave,
   draftOwner,
+  onSaved,
+  onCancel,
+  initial = null,
 }: AddressFormProps) {
+  const inDialog = onSaved !== undefined;
   const router = useRouter();
   const pathname = usePathname();
   const id = useId();
@@ -186,12 +208,20 @@ export function AddressForm({
   };
 
   const savedPoint = address ? { lat: address.lat, lng: address.lng } : null;
+  const start = address ? null : initial;
   const [found, setFound] = useState<Found | null>(
     address && savedPoint
       ? { line1: address.line1, city: address.city, hasHouseNumber: true, point: savedPoint }
-      : null,
+      : start
+        ? {
+            line1: start.line1,
+            city: start.city,
+            hasHouseNumber: start.hasHouseNumber,
+            point: start.point,
+          }
+        : null,
   );
-  const [pin, setPin] = useState<Point | null>(savedPoint);
+  const [pin, setPin] = useState<Point | null>(savedPoint ?? start?.point ?? null);
   const [pinMoved, setPinMoved] = useState(false);
   const [recentre, setRecentre] = useState(0);
   const [delivery, setDelivery] = useState<DeliveryState>(
@@ -210,7 +240,7 @@ export function AddressForm({
         }
       : { kind: 'idle' },
   );
-  const [mapState, setMapState] = useState<MapState>(address ? 'loading' : 'idle');
+  const [mapState, setMapState] = useState<MapState>(address || start ? 'loading' : 'idle');
   const [MapView, setMapView] = useState<ComponentType<AddressMapProps> | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [houseError, setHouseError] = useState<string | null>(null);
@@ -225,7 +255,7 @@ export function AddressForm({
 
   const form = useForm({
     defaultValues: {
-      query: address?.line1 ?? '',
+      query: address?.line1 ?? start?.line1 ?? '',
       houseNumber: '',
       line2: address?.line2 ?? '',
       notes: address?.notes ?? '',
@@ -242,7 +272,9 @@ export function AddressForm({
   const valuesUnchanged = useStore(form.store, (formState) => formState.isDefaultValue);
   // The pick and the pin as the form opened: moving either is a change too.
   const [opened] = useState(() => ({ found, pin }));
-  useUnsavedChanges(canSave && (!valuesUnchanged || found !== opened.found || pin !== opened.pin));
+  useUnsavedChanges(
+    canSave && !inDialog && (!valuesUnchanged || found !== opened.found || pin !== opened.pin),
+  );
 
   // Load the map the first time there is a point to show (S7.9: never before).
   useEffect(() => {
@@ -297,6 +329,14 @@ export function AddressForm({
   useEffect(() => {
     const timer = setTimeout(restoreDraft, 0);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Started from a place found earlier: check it now, as a pick would (F4 S2.5).
+  const checkStart = useEffectEvent(() => {
+    if (start) void runCheck(start.point, start.line1, start.note);
+  });
+  useEffect(() => {
+    checkStart();
   }, []);
 
   const pinCheck = useDebouncer(
@@ -400,6 +440,10 @@ export function AddressForm({
 
     if (outcome.ok) {
       forgetDraft(pathname);
+      if (onSaved) {
+        onSaved(outcome.data);
+        return;
+      }
       setAddressStatus({ text: 'Address saved', focusId: outcome.data.id });
       router.push('/account/addresses');
       return;
@@ -821,14 +865,26 @@ export function AddressForm({
             >
               Save address
             </SubmitButton>
-            <Button
-              asChild
-              variant="ghost"
-              size="touch"
-              className="text-neutral-2 hover:bg-neutral-7"
-            >
-              <Link href="/account/addresses">Cancel</Link>
-            </Button>
+            {onCancel ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="touch"
+                onClick={onCancel}
+                className="text-neutral-2 hover:bg-neutral-7"
+              >
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                asChild
+                variant="ghost"
+                size="touch"
+                className="text-neutral-2 hover:bg-neutral-7"
+              >
+                <Link href="/account/addresses">Cancel</Link>
+              </Button>
+            )}
           </div>
         </>
       ) : (

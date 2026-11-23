@@ -33,10 +33,8 @@ export function isValidTimeZone(timeZone: string): boolean {
   }
 }
 
-export function openState(hours: OpeningHours, timeZone: string, at: Date): OpenState {
-  const now = at.getTime();
-  const today = calendarDateOf(now, timeZone);
-
+/** The openings from yesterday to a week ahead, as UTC instants. */
+function openingsAround(hours: OpeningHours, timeZone: string, today: number) {
   // Yesterday is included because its opening may run past midnight into today.
   const ranges: [number, number][] = [];
   for (let offset = -1; offset <= 7; offset++) {
@@ -49,6 +47,13 @@ export function openState(hours: OpeningHours, timeZone: string, at: Date): Open
     const end = zonedTimeToUtc(close <= open ? date + DAY_MS : date, close, timeZone);
     if (end > start) ranges.push([start, end]);
   }
+  return ranges;
+}
+
+export function openState(hours: OpeningHours, timeZone: string, at: Date): OpenState {
+  const now = at.getTime();
+  const today = calendarDateOf(now, timeZone);
+  const ranges = openingsAround(hours, timeZone, today);
 
   const current = merge(ranges).find(([start, end]) => start <= now && now < end);
   if (current) {
@@ -67,6 +72,19 @@ export function openState(hours: OpeningHours, timeZone: string, at: Date): Open
     closesAt: null,
     opensAt: next.length > 0 ? moment(Math.min(...next), today, timeZone) : null,
   };
+}
+
+/**
+ * When the store last closed, while it is closed: "We closed at 10 pm while you were checking
+ * out" (F4 S3.5). Null while open, or when it has not been open since yesterday.
+ */
+export function lastClosing(hours: OpeningHours, timeZone: string, at: Date): StoreMoment | null {
+  const now = at.getTime();
+  const today = calendarDateOf(now, timeZone);
+  const merged = merge(openingsAround(hours, timeZone, today));
+  if (merged.some(([start, end]) => start <= now && now < end)) return null;
+  const ends = merged.map(([, end]) => end).filter((end) => end <= now);
+  return ends.length > 0 ? moment(Math.max(...ends), today, timeZone) : null;
 }
 
 /** The store's weekday at an instant. */

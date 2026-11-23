@@ -139,6 +139,48 @@ const POLICIES = {
     message: "You're changing favorites very fast. Try again in {wait}.",
   },
   'favorites.read': { points: 120, duration: 60 },
+  // Placing orders (F4 B11): per account and per network. A refused press counts too.
+  'order.place.user': {
+    points: 10,
+    duration: 3600,
+    message: "You've tried to order several times in a short while. You can try again in {wait}.",
+  },
+  'order.place.ip': {
+    points: 30,
+    duration: 3600,
+    message: "You've tried to order several times in a short while. You can try again in {wait}.",
+  },
+  // Declined card payments, against card testing: the 5th decline in an hour on an account (the
+  // 20th on a network) pauses card payment for an hour; cash keeps working. A limiter blocks
+  // once it goes past its points, so each is one below the decline that pauses. Counted once per
+  // failed payment, never per press.
+  'payment.decline.user': { points: 4, duration: 3600, blockDuration: 3600 },
+  'payment.decline.ip': { points: 19, duration: 3600, blockDuration: 3600 },
+  // The order page polls this every 2 seconds for up to a minute while a payment is confirmed.
+  'order.status': {
+    points: 120,
+    duration: 60,
+    message: "You're checking very fast. Try again in {wait}.",
+  },
+  'order.read': { points: 120, duration: 60 },
+  'order.cancel': {
+    points: 10,
+    duration: 3600,
+    message: "You've cancelled several times in a short while. Try again in {wait}.",
+  },
+  'order.pay': {
+    points: 20,
+    duration: 600,
+    message: "You've tried to pay several times in a short while. Try again in {wait}.",
+  },
+  'cards.read': { points: 60, duration: 60 },
+  'cards.write': {
+    points: 20,
+    duration: 600,
+    message: "You're changing saved cards very fast. Try again in {wait}.",
+  },
+  // Stripe's own calls to the webhook, per network. Generous: Stripe retries in bursts.
+  'webhook.stripe': { points: 600, duration: 60 },
   // Price and availability re-checks before adding to the cart; about one per add.
   'menu.check': { points: 60, duration: 60 },
   'contact.submit': { points: 3, duration: 600 },

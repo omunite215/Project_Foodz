@@ -257,7 +257,17 @@ function GuestAddressCheck({
       : outsideText(item.line1, outcome.data);
     announce(sentence);
     setState(outcome.data.deliverable ? { kind: 'idle' } : { kind: 'outside', text: sentence });
-    onChecked({ line1: item.line1, lat: item.lat, lng: item.lng }, outcome.data.deliverable);
+    // City and house number let checkout fill in its address form from this check (F4 D10).
+    onChecked(
+      {
+        line1: item.line1,
+        lat: item.lat,
+        lng: item.lng,
+        city: item.city,
+        hasHouseNumber: item.hasHouseNumber,
+      },
+      outcome.data.deliverable,
+    );
   }
 
   const tryAnother = () => {

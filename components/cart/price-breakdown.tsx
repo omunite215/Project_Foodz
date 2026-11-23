@@ -91,6 +91,9 @@ export interface PriceBreakdownProps {
   /** The label of an address checked without saving it ("Your address"). */
   checkedLabel?: string | null;
   headingId?: string;
+  /** At checkout (F4 design 2.6.6) the tip note becomes the tip row. */
+  variant?: 'cart' | 'checkout';
+  className?: string;
 }
 
 export function PriceBreakdown({
@@ -99,6 +102,8 @@ export function PriceBreakdown({
   dim,
   checkedLabel,
   headingId = 'price-details-title',
+  variant = 'cart',
+  className = 'mt-8',
 }: PriceBreakdownProps) {
   const hidden = figuresHidden(status);
   const loading = !quote && !hidden;
@@ -143,7 +148,7 @@ export function PriceBreakdown({
   }
 
   return (
-    <section aria-labelledby={headingId} className="mt-8">
+    <section aria-labelledby={headingId} className={className}>
       <h3 id={headingId} className="text-body-3 font-semibold text-neutral-1">
         Price details
       </h3>
@@ -156,6 +161,9 @@ export function PriceBreakdown({
         />
         {promo ? (
           <Row
+            // Green figures stay at full strength while a new total is on its way: at 75 % they
+            // drop under 4.5:1. The neutral ones still dim.
+            dim={false}
             label={`Promo · ${promo.code}`}
             value={
               promo.freeDelivery ? (
@@ -164,7 +172,6 @@ export function PriceBreakdown({
                 <Money cents={promo.foodDiscountCents} negative className="text-brand-strong" />
               )
             }
-            dim={dim}
           />
         ) : null}
         <Row
@@ -179,18 +186,27 @@ export function PriceBreakdown({
             </>
           }
           value={show(deliveryValue)}
-          dim={dim}
+          dim={dim && !freeAnywhere && !promo?.freeDelivery}
         />
         <Row
           label={quote ? `Tax (${taxRateText(quote.tax.rateBps)})` : 'Tax'}
           value={show(shown && <Money cents={shown.tax.cents} />)}
           dim={dim}
         />
+        {variant === 'checkout' ? (
+          <Row
+            label="Tip for your courier"
+            value={show(shown && <Money cents={shown.tipCents} />)}
+            dim={dim}
+          />
+        ) : null}
       </dl>
-      <p className="flex items-start gap-2 px-3 py-2 text-body-5 text-neutral-3">
-        <HandCoins className="mt-0.5 size-4 shrink-0" aria-hidden />
-        You can add a tip at checkout. All of it goes to your courier.
-      </p>
+      {variant === 'cart' ? (
+        <p className="flex items-start gap-2 px-3 py-2 text-body-5 text-neutral-3">
+          <HandCoins className="mt-0.5 size-4 shrink-0" aria-hidden />
+          You can add a tip at checkout. All of it goes to your courier.
+        </p>
+      ) : null}
     </section>
   );
 }

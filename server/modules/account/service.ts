@@ -14,13 +14,27 @@ import {
 } from '@/server/errors';
 import { countMyAddresses, listMyAddresses } from '@/server/modules/addresses/service';
 import { audit } from '@/server/modules/audit/service';
+import { logger } from '@/server/logger';
 import { countMyFavorites, listMyFavoritesForExport } from '@/server/modules/favorites/service';
 import { queueAccountEmail } from '@/server/modules/notifications/account-email';
+import {
+  anonymizeMyOrders,
+  cancelUnpaidOrdersForDeletion,
+  countMyOrders,
+  exportMyOrders,
+  lockOrdersForDeletion,
+  ordersBlockingDeletion,
+} from '@/server/modules/orders/service';
+import { paymentInProgressMessage } from '@/server/modules/orders/text';
+import {
+  countSavedCards,
+  deleteStripeCustomer,
+  exportSavedCards,
+} from '@/server/modules/payments/service';
 import { describeDevice } from './devices';
 import {
   anonymizeAccount,
   countDeliveriesInProgress,
-  countOrdersInProgress,
   countSessions,
   deleteOtherSessions,
   deleteSession,
@@ -57,6 +71,14 @@ const DEMO_CANNOT_DELETE =
 const STAFF_CANNOT_DELETE = 'Staff accounts are removed by an admin.';
 const ORDER_ON_ITS_WAY =
   "You have an order on its way. You can delete your account once it's delivered.";
+const orderWaiting = (number: string) =>
+  `Order ${number} is waiting for the kitchen. Cancel it from its page, then you can delete your account.`;
+const paymentConfirming = (order: { id: string; number: string }) =>
+  new AppError('CONFLICT', paymentInProgressMessage(order.number), 409, {
+    details: { orderId: order.id, number: order.number },
+  });
+const CARDS_NOT_REMOVED =
+  "We couldn't remove your saved cards right now, so your account is still here. Try again in a minute.";
 
 /** Whether Google sign-in is configured; the button and divider only show when it is (S1.10). */
 export function getAuthOptions(): { google: boolean } {
@@ -78,6 +100,8 @@ export async function getMyAccount(actor: UserActor): Promise<AccountDto> {
   ]);
   // After the others, so a page render never holds more than two connections at once.
   const favoriteCount = await countMyFavorites(actor);
+  const orderCount = await countMyOrders(actor);
+  const savedCardCount = await countSavedCards(actor);
   const { profile, methods, sessions } = summary;
   const role = isRole(profile.role) ? profile.role : 'customer';
   const phone = profile.phone ? displayPhone(profile.phone) : null;
@@ -106,6 +130,8 @@ export async function getMyAccount(actor: UserActor): Promise<AccountDto> {
     signInMethods,
     addressCount,
     favoriteCount,
+    orderCount,
+    savedCardCount,
     deviceCount: sessions,
     createdAt: profile.createdAt.toISOString(),
     termsAcceptedVersion: profile.termsAcceptedVersion,
@@ -205,6 +231,8 @@ export async function exportMyData(
     listDevices(actor, current),
   ]);
   const favorites = await listMyFavoritesForExport(actor);
+  const orders = await exportMyOrders(actor);
+  const savedCards = await exportSavedCards(actor);
   if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
 
   const data: AccountExport = {
@@ -240,6 +268,8 @@ export async function exportMyData(
       thisDevice: device.isCurrent,
     })),
     favorites,
+    orders,
+    savedCards,
   };
 
   await runAs(actor, (ctx) =>
@@ -284,15 +314,38 @@ export async function deleteAccount(
     }
   }
 
+  // B21: unpaid card orders are cancelled first, with their payments at Stripe. One Stripe was
+  // already paid for becomes placed, and then waits to be cancelled like any placed order (U6);
+  // one the bank is still confirming stays waiting, and so does the deletion.
+  await cancelUnpaidOrdersForDeletion(actor, now);
+  const blocking = await runAs(actor, (ctx) => ordersBlockingDeletion(ctx, actor.userId));
+  if (blocking.onItsWay > 0) throw conflict(ORDER_ON_ITS_WAY);
+  if (blocking.placed) {
+    throw new AppError('CONFLICT', orderWaiting(blocking.placed.number), 409, {
+      details: { orderId: blocking.placed.id, number: blocking.placed.number },
+    });
+  }
+  if (blocking.paying) throw paymentConfirming(blocking.paying);
+  // Saved cards go with the Stripe customer, before anything here is erased.
+  try {
+    await deleteStripeCustomer(actor.userId);
+  } catch (error) {
+    logger.warn({ err: error }, 'could not delete the Stripe customer');
+    throw new AppError('UNAVAILABLE', CARDS_NOT_REMOVED, 503);
+  }
+
   const person = await runAs(actor, async (ctx) => {
-    if (
-      (await countOrdersInProgress(ctx, actor.userId)) > 0 ||
-      (await countDeliveriesInProgress(ctx, actor.userId)) > 0
-    ) {
+    // Held until the commit: a press or payment arriving now waits, then finds the account gone.
+    await lockOrdersForDeletion(ctx, actor.userId);
+    const again = await ordersBlockingDeletion(ctx, actor.userId);
+    if (again.onItsWay > 0 || (await countDeliveriesInProgress(ctx, actor.userId)) > 0) {
       throw conflict(ORDER_ON_ITS_WAY);
     }
+    if (again.placed) throw conflict(orderWaiting(again.placed.number));
+    if (again.paying) throw paymentConfirming(again.paying);
     const profile = await findProfile(ctx, actor.userId);
     if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
+    await anonymizeMyOrders(ctx);
     await anonymizeAccount(ctx, actor.userId, now);
     await audit(ctx, { action: 'account.deleted', targetType: 'user', targetId: actor.userId });
     return {

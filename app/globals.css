@@ -117,6 +117,25 @@ html:has([data-menu-toolbar]) {
   }
 }
 
+/* The pinned pay bar must never hide a focused field (WCAG 2.4.11). The bar writes its own
+   height to --pay-bar-h. */
+@media (width < 64rem) {
+  html:has([data-pay-bar]) {
+    scroll-padding-bottom: calc(var(--pay-bar-h, 7rem) + 1rem);
+  }
+}
+
+/* Receipt paper: 8 px scallops along the bottom edge. A mask clips box-shadow, so the hairline
+   and the lift are drop-shadow filters on the wrapper. */
+.receipt-paper {
+  filter: drop-shadow(0 0 1px rgb(53 57 69 / 0.35)) drop-shadow(0 10px 27px rgb(53 53 53 / 0.05));
+}
+.receipt-paper > .receipt-sheet {
+  padding-bottom: 2rem;
+  mask: radial-gradient(circle 8px at 50% 100%, #0000 calc(100% - 0.5px), #000) bottom / 16px 100%
+    repeat-x;
+}
+
 /* ------------------------------------------------------------------ */
 /* Semantic tokens used by the component library                       */
 /* ------------------------------------------------------------------ */

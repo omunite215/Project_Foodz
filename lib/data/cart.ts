@@ -8,8 +8,10 @@ import {
   useDbClient,
   useLiveQuery,
 } from '@tanstack/react-db';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { z } from 'zod';
+import { forgetCheckout } from '@/lib/checkout-storage';
 import { clearPendingFavorite, clearPendingPromo } from '@/lib/sign-in-reason';
 import { type CartDishActions, useCartDishActions } from './cart-dishes';
 import { setCheckedAddress } from './checked-address';
@@ -156,6 +158,14 @@ export const cartMetaSchema = z.object({
   code: z.string().min(1).max(MAX_CODE_LENGTH).regex(/^\S+$/u).nullable(),
   /** The saved address chosen with "Change"; null means the default one. */
   addressId: z.uuid().nullable(),
+  /**
+   * The order that just emptied the cart (F4 B16): the cart says so until she dismisses it or
+   * adds a dish. It belongs to the session, like the rest of the meta.
+   */
+  placed: z
+    .object({ orderId: z.uuid(), number: z.string().min(1).max(20) })
+    .nullable()
+    .optional(),
 });
 export type CartMeta = z.infer<typeof cartMetaSchema>;
 
@@ -188,7 +198,7 @@ export const cartMetaCollection = collectionOptions('cartMeta', (client) =>
   }),
 );
 
-const NO_META: Omit<CartMeta, 'id'> = { code: null, addressId: null };
+const NO_META: Omit<CartMeta, 'id'> = { code: null, addressId: null, placed: null };
 
 // ------------------------------------------------------------------ actions
 
@@ -228,6 +238,7 @@ export function cartActions(client: DbClient) {
       meta.update(META_ID, (draft) => {
         if ('code' in change) draft.code = change.code ?? null;
         if ('addressId' in change) draft.addressId = change.addressId ?? null;
+        if ('placed' in change) draft.placed = change.placed ?? null;
       });
     } else {
       meta.insert({ id: META_ID, ...NO_META, ...change });
@@ -236,6 +247,7 @@ export function cartActions(client: DbClient) {
 
   return {
     add({ menuItemId, flavors = [], quantity = 1, note }: NewCartLine): AddOutcome {
+      if (meta.get(META_ID)?.placed) writeMeta({ placed: null });
       const kept = cleanNote(note);
       const id = cartLineId(menuItemId, flavors, kept);
       const items = itemsIn(cart.values());
@@ -358,6 +370,11 @@ export function cartActions(client: DbClient) {
       if ((meta.get(META_ID)?.addressId ?? null) !== addressId) writeMeta({ addressId });
     },
 
+    /** The order that emptied the cart (B16), or null once she has seen it. */
+    setPlaced(placed: { orderId: string; number: string } | null) {
+      if ((meta.get(META_ID)?.placed ?? null) !== placed) writeMeta({ placed });
+    },
+
     /** Forgets the code and the chosen address: they belonged to the session that ended. */
     forgetMeta() {
       if (meta.has(META_ID)) meta.delete(META_ID);
@@ -385,7 +402,7 @@ export function useCart() {
 export function useCartMeta(): Omit<CartMeta, 'id'> {
   const { data } = useLiveQuery({ query: (q) => q.from({ meta: cartMetaCollection }) });
   const row = data?.[0];
-  return row ? { code: row.code, addressId: row.addressId } : NO_META;
+  return row ? { code: row.code, addressId: row.addressId, placed: row.placed ?? null } : NO_META;
 }
 
 export function useCartActions(): CartActions {
@@ -449,9 +466,17 @@ export function useCartSession(
   const { isReady, itemCount } = useCart();
   const actions = useCartActions();
   const dishActions = useCartDishActions();
-  const latest = useRef({ itemCount, actions, dishActions, onEmptied, onSessionEnded });
+  const queryClient = useQueryClient();
+  const latest = useRef({
+    itemCount,
+    actions,
+    dishActions,
+    onEmptied,
+    onSessionEnded,
+    queryClient,
+  });
   useEffect(() => {
-    latest.current = { itemCount, actions, dishActions, onEmptied, onSessionEnded };
+    latest.current = { itemCount, actions, dishActions, onEmptied, onSessionEnded, queryClient };
   });
 
   useEffect(() => {
@@ -462,6 +487,7 @@ export function useCartSession(
       dishActions: dishes,
       onEmptied: emptied,
       onSessionEnded: ended,
+      queryClient: queries,
     } = latest.current;
     const saved = readCartOwner();
     const check = cartSessionCheck(saved, sessionKey, count > 0);
@@ -470,6 +496,7 @@ export function useCartSession(
     if (saved !== null && saved !== sessionKey) {
       cart.forgetMeta();
       forgetSessionTraces(dishes);
+      queries.removeQueries(ORDER_QUERIES);
     }
     if (check.emptyCart) {
       cart.clear();
@@ -480,15 +507,30 @@ export function useCartSession(
   }, [isReady, sessionKey]);
 }
 
+/**
+ * The demo visitor signs out to create an account (F4 D29): the cart built in this tab holds
+ * nothing personal, so it stays, as a guest cart. Only the demo account's chosen address goes.
+ */
+export function useKeepCartAsGuest() {
+  const actions = useCartActions();
+  return () => {
+    writeCartOwner(null);
+    actions.setAddressId(null);
+    setCheckedAddress(null);
+  };
+}
+
 /** Signing out on purpose: the cart on this device is emptied (every tab follows). */
 export function useEndCartSession() {
   const actions = useCartActions();
   const dishes = useCartDishActions();
+  const queryClient = useQueryClient();
   return () => {
     writeCartOwner(null);
     actions.clear();
     actions.forgetMeta();
     forgetSessionTraces(dishes);
+    queryClient.removeQueries(ORDER_QUERIES);
   };
 }
 
@@ -502,4 +544,8 @@ function forgetSessionTraces(dishes: Pick<CartDishActions, 'keepOnly'>) {
   dishes.keepOnly(new Set());
   clearPendingPromo();
   clearPendingFavorite();
+  forgetCheckout();
 }
+
+/** Her orders, as cached for the cart's unpaid-order notice and the like, go with the session. */
+const ORDER_QUERIES = { queryKey: ['orders'] } as const;

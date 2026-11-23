@@ -81,3 +81,96 @@ ${footer.map((line) => `<p style="${SMALL_STYLE}">${escape(line)}</p>`).join('\n
     ),
   };
 }
+
+export interface ReceiptContent {
+  heading: string;
+  /** The first paragraphs, e.g. "Thanks, Priya. Order 1042 is arriving about 7:35–7:45 pm." */
+  intro: string[];
+  linesHeading: string;
+  /** "2 × Gimbap", its extras and note, and "$25.98". */
+  lines: { label: string; details: string[]; amount: string }[];
+  /** Under the lines, e.g. "Note for the kitchen: More spicy". */
+  afterLines: string[];
+  /** Subtotal, promo, delivery, tax, tip. `credit` rows (discounts) are green. */
+  rows: { label: string; value: string; credit?: boolean }[];
+  total: { label: string; value: string };
+  /** "Paid with Visa •••• 4242" or the cash sentence. */
+  payment: string;
+  deliveryHeading: string;
+  /** The address line, then smaller lines (instructions, courier call). */
+  delivery: { line: string; notes: string[] };
+  action: string;
+  url: string;
+  footer?: string[];
+}
+
+const SUBHEADING_STYLE = 'font-size:16px;font-weight:600;color:#141416;margin:24px 0 8px';
+const CELL_STYLE = 'font-size:16px;line-height:1.5;color:#23262f;padding:12px 0;vertical-align:top';
+const ROW_STYLE = 'border-top:1px dashed #e6e8ec';
+const DETAIL_STYLE = 'font-size:14px;line-height:1.5;color:#6b7183';
+const BREAKDOWN_LABEL = 'font-size:14px;line-height:1.5;color:#6b7183;padding:6px 0';
+const BREAKDOWN_VALUE =
+  'font-size:14px;line-height:1.5;color:#23262f;padding:6px 0;text-align:right;white-space:nowrap';
+const TOTAL_TABLE = 'width:100%;background:#f4f5f6;border-radius:8px;margin:12px 0 24px';
+
+/**
+ * An order receipt (F4 S11.5, design 6.1): the order's lines and breakdown as tables, the
+ * payment, the delivery address, one button and the link as text. Names wrap; amounts don't.
+ */
+export function receiptEmail(content: ReceiptContent) {
+  const lines = content.lines
+    .map(
+      (line) =>
+        `<tr style="${ROW_STYLE}"><td style="${CELL_STYLE};overflow-wrap:anywhere">${escape(line.label)}${line.details
+          .map((detail) => `<div style="${DETAIL_STYLE}">${escape(detail)}</div>`)
+          .join(
+            '',
+          )}</td><td style="${CELL_STYLE};text-align:right;white-space:nowrap;padding-left:16px">${escape(line.amount)}</td></tr>`,
+    )
+    .join('\n');
+  const rows = content.rows
+    .map(
+      (row) =>
+        `<tr><td style="${BREAKDOWN_LABEL}">${escape(row.label)}</td><td style="${BREAKDOWN_VALUE}${row.credit ? ';color:#03850a' : ''}">${escape(row.value)}</td></tr>`,
+    )
+    .join('\n');
+  const html = layout(
+    content.heading,
+    `${content.intro.map((p) => `<p style="${TEXT_STYLE}">${escape(p)}</p>`).join('\n')}
+<h2 style="${SUBHEADING_STYLE}">${escape(content.linesHeading)}</h2>
+<table role="presentation" style="width:100%;border-collapse:collapse">${lines}</table>
+${content.afterLines.map((p) => `<p style="${SMALL_STYLE}">${escape(p)}</p>`).join('\n')}
+<table role="presentation" style="width:100%;border-collapse:collapse;margin-top:12px">${rows}</table>
+<table role="presentation" style="${TOTAL_TABLE}"><tr><td style="font-size:16px;font-weight:500;padding:8px 12px">${escape(content.total.label)}</td><td style="font-size:20px;font-weight:600;padding:8px 12px;text-align:right;white-space:nowrap">${escape(content.total.value)}</td></tr></table>
+<p style="${TEXT_STYLE}">${escape(content.payment)}</p>
+<h2 style="${SUBHEADING_STYLE}">${escape(content.deliveryHeading)}</h2>
+<p style="${TEXT_STYLE};margin-bottom:8px">${escape(content.delivery.line)}</p>
+${content.delivery.notes.map((p) => `<p style="${SMALL_STYLE}">${escape(p)}</p>`).join('\n')}
+<p style="margin:24px 0"><a href="${escape(content.url)}" style="${BUTTON_STYLE}">${escape(content.action)}</a></p>
+<p style="${SMALL_STYLE}">If the button doesn't work, copy this link into your browser:</p>
+<p style="${SMALL_STYLE};word-break:break-all"><a href="${escape(content.url)}" style="color:#03850a">${escape(content.url)}</a></p>
+${(content.footer ?? []).map((p) => `<p style="${SMALL_STYLE}">${escape(p)}</p>`).join('\n')}`,
+  );
+
+  const text = [
+    content.heading,
+    content.intro.join('\n\n'),
+    [
+      content.linesHeading,
+      ...content.lines.flatMap((line) => [
+        `${line.label} — ${line.amount}`,
+        ...line.details.map((detail) => `   ${detail}`),
+      ]),
+      ...content.afterLines,
+    ].join('\n'),
+    [
+      ...content.rows.map((row) => `${row.label}: ${row.value}`),
+      `${content.total.label}: ${content.total.value}`,
+    ].join('\n'),
+    content.payment,
+    [content.deliveryHeading, content.delivery.line, ...content.delivery.notes].join('\n'),
+    `${content.action}: ${content.url}`,
+    ...(content.footer ?? []),
+  ].join('\n\n');
+  return { text, html };
+}

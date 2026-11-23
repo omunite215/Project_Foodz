@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { quoteCartAction } from '@/server/modules/cart/actions';
 import {
   type DeliveryTargetInput,
+  type PaymentMethodChoice,
   type Quote,
   quoteInput,
   type QuoteLineInput,
+  type TipChoice,
 } from '@/server/modules/cart/schema';
 import { useSlowPending } from '@/components/forms/submit-button';
 import { type ActionFailure, type ActionOutcome, callAction } from '@/lib/action-result';
@@ -26,6 +28,9 @@ export interface QuoteRequest {
   lines: QuoteLineInput[];
   code?: string;
   delivery: DeliveryTargetInput;
+  /** Checkout only (F4 B14): the tip choice and the payment method. The cart sends neither. */
+  tip?: TipChoice;
+  method?: PaymentMethodChoice;
 }
 
 export const QUOTE_TIMEOUT_MS = 10_000;
@@ -44,6 +49,8 @@ export const requestKey = (request: QuoteRequest) =>
     lines: request.lines,
     delivery: request.delivery,
     ...(request.code ? { code: request.code } : {}),
+    ...(request.tip ? { tip: request.tip } : {}),
+    ...(request.method ? { method: request.method } : {}),
   });
 
 export const quoteQueryKey = (key: string) => ['cart-quote', key] as const;
@@ -55,6 +62,8 @@ export function fetchQuote(request: QuoteRequest): Promise<ActionOutcome<Quote>>
         lines: request.lines,
         delivery: request.delivery,
         ...(request.code ? { code: request.code } : {}),
+        ...(request.tip ? { tip: request.tip } : {}),
+        ...(request.method ? { method: request.method } : {}),
       }),
     { timeoutMs: QUOTE_TIMEOUT_MS },
   );

@@ -53,10 +53,21 @@ export const FAQ_COUPON_ANSWER =
 export const WELCOME10_DESCRIPTION = '10% off one order, once per customer (up to $10)';
 export const FREE_DELIVERY_BAR = 'Use code FREEDELIVERY in your cart';
 
+// F4: cash on delivery has a limit (U5).
+export const FAQ_CASH_ANSWER =
+  'Yes. Choose cash at checkout and pay the courier when your order arrives. Cash is available for orders up to $100.';
+
 /**
  * Seeded values earlier runs wrote and F3 changed. A database still holding the old value gets
  * the new one; a value someone has edited since is left alone.
  */
+/**
+ * Privacy, "Who sees it" (F4 security S14): what Stripe receives with each card payment, and that
+ * it keeps its records after the Foodz account is deleted.
+ */
+export const PRIVACY_WHO_SEES_IT =
+  'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. When you pay by card, your card details go straight to our payment processor, Stripe, and never reach our servers. With each card payment Stripe also receives the name and delivery address on the order and the order number, which it needs to process the payment and check it for fraud. Stripe keeps its own record of each payment under its privacy policy, including after you delete your Foodz account.';
+
 export const SEED_CORRECTIONS = {
   taxRateBps: { from: 625, to: 700 },
   welcome10Description: {
@@ -67,6 +78,14 @@ export const SEED_CORRECTIONS = {
   faqCouponAnswer: {
     from: 'Enter the code at checkout. The discount is shown before you pay.',
     to: FAQ_COUPON_ANSWER,
+  },
+  faqCashAnswer: {
+    from: 'Yes. Choose cash at checkout and pay the courier when your order arrives.',
+    to: FAQ_CASH_ANSWER,
+  },
+  privacyWhoSeesIt: {
+    from: 'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. Card details go straight to our payment processor and never reach our servers.',
+    to: PRIVACY_WHO_SEES_IT,
   },
 } as const;
 
@@ -120,7 +139,7 @@ const pages: { slug: string; title: string; blocks: Block[] }[] = [
       },
       { h2: 'Who sees it' },
       {
-        p: 'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. Card details go straight to our payment processor and never reach our servers.',
+        p: PRIVACY_WHO_SEES_IT,
       },
       { h2: 'How long we keep it' },
       {
@@ -166,7 +185,7 @@ const pages: { slug: string; title: string; blocks: Block[] }[] = [
         p: 'Most orders arrive within 45 minutes. You can follow your courier on the map from the moment they pick up your food.',
       },
       { h3: 'Can I pay with cash?' },
-      { p: 'Yes. Choose cash at checkout and pay the courier when your order arrives.' },
+      { p: FAQ_CASH_ANSWER },
       { h3: 'How do I use a coupon?' },
       { p: FAQ_COUPON_ANSWER },
       { h3: 'Can I change my order after placing it?' },
@@ -429,6 +448,16 @@ export function sampleCoupons(now: Date, owners: { secondCustomer: string }) {
       type: 'PERCENT' as const,
       value: 20,
       isActive: false,
+    },
+    {
+      // F4 S8.4: one use left, so two customers pressing at once see one of them refused. Its
+      // use count goes back to 0 on every seed run.
+      code: 'LASTONE',
+      description: '$2 off, while it lasts',
+      type: 'FIXED' as const,
+      value: 200,
+      usageLimit: 1,
+      usedCount: 0,
     },
     {
       // A store-credit code as F10 will issue them: long, random, for one customer only.

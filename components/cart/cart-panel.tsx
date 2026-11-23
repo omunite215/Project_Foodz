@@ -48,6 +48,7 @@ import {
   CartNotices,
   noticeText,
 } from './cart-notices';
+import { useUnpaidOrder } from './use-unpaid-order';
 import { CheckoutBar } from './checkout-bar';
 import { deliveryTarget, setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
 import { DeliveryBlock, useSavedAddresses } from './delivery-block';
@@ -72,6 +73,8 @@ export interface CartPanelProps {
   onClose: () => void;
   /** A link inside the cart is about to replace its history entry. */
   onNavigate: () => void;
+  /** Opened from checkout: its footer button reads "Back to checkout" and only closes it. */
+  onCheckoutPage?: boolean;
 }
 
 interface Undo {
@@ -102,6 +105,7 @@ export function CartPanel({
   titleRef,
   onClose,
   onNavigate,
+  onCheckoutPage = false,
 }: CartPanelProps) {
   const router = useRouter();
   const id = useId();
@@ -117,6 +121,9 @@ export function CartPanel({
   // address still counts. The book is only needed to settle that, so it isn't fetched otherwise:
   // server actions run one at a time and it would hold up the quote.
   const addressBook = useSavedAddresses(signedIn && storedPoint !== null);
+  // Signed in only: a query that is switched off still answers with what it cached.
+  const unpaidQuery = useUnpaidOrder(signedIn);
+  const unpaidOrder = signedIn ? (unpaidQuery.data ?? null) : null;
   const hasSaved = (addressBook.data?.addresses.length ?? 0) > 0;
   const checked =
     storedPoint && (!signedIn || (addressBook.isFetched && !hasSaved)) ? storedPoint : null;
@@ -296,6 +303,8 @@ export function CartPanel({
         ? 'lines'
         : null;
   const candidates: (CartNotice | null)[] = [
+    unpaidOrder ? { kind: 'unpaid', ...unpaidOrder } : null,
+    meta.placed && isReady && lines.length === 0 ? { kind: 'placed', ...meta.placed } : null,
     known && !known.store.isOpen
       ? { kind: 'closed', text: storeClosedText(known.store.opensAt) }
       : null,
@@ -426,8 +435,13 @@ export function CartPanel({
     router.replace(href);
   };
 
-  const checkout = () =>
+  const checkout = () => {
+    if (onCheckoutPage) {
+      onClose();
+      return;
+    }
     goTo(signedIn ? '/checkout' : signInFor('/sign-in', '/checkout', 'checkout'));
+  };
 
   // ---------------------------------------------------------------- render
   const empty = isReady && lines.length === 0 && !undo;
@@ -469,9 +483,11 @@ export function CartPanel({
           notices={notices}
           onDismiss={(kind) => {
             if (kind === 'priceChanged') dishActions.acknowledgePrices(shownPrices);
+            if (kind === 'placed') cart.setPlaced(null);
             setDismissed((current) => new Set([...current, kind]));
           }}
           onRemoveSoldOut={removeSoldOut}
+          onNavigate={onNavigate}
         />
 
         {empty ? (
@@ -635,6 +651,7 @@ export function CartPanel({
           slow={view.slow}
           onCheckout={checkout}
           onRetry={view.retry}
+          backToCheckout={onCheckoutPage}
         />
       )}
 

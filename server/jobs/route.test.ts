@@ -36,6 +36,8 @@ function run(signature?: string, payload = body) {
 
 let route: typeof import('@/app/api/inngest/route');
 
+// The route imports every job function (the order jobs among them); on a busy machine, such as a
+// pre-commit hook running beside the linter, that takes longer than the default hook timeout.
 beforeAll(async () => {
   vi.stubEnv('INNGEST_DEV', '');
   vi.stubEnv('INNGEST_SIGNING_KEY', SIGNING_KEY);
@@ -43,7 +45,7 @@ beforeAll(async () => {
   vi.stubEnv('LOG_LEVEL', 'silent');
   vi.resetModules();
   route = await import('@/app/api/inngest/route');
-});
+}, 30_000);
 
 afterEach(() => {
   vi.unstubAllGlobals();

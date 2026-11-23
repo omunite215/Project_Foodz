@@ -236,9 +236,21 @@ enum PaymentStatus {
   REFUNDED
 }
 
+/// A card dispute (chargeback) opened by the customer's bank (F4 B3).
+enum DisputeStatus {
+  NONE
+  OPEN
+  WON
+  LOST
+}
+
+// Row-level security (F4): customers read their own orders; operations staff read every order,
+// except that demo staff read only demo and sample people's (others through order_directory,
+// masked). Only the platform (checkout, webhooks, jobs) and non-demo operations staff write.
+// `number` comes from the order_number_seq sequence (1001, 1002, ...); the seed's sample keeps S1001.
 model Order {
   id                    String                                 @id @default(uuid(7)) @db.Uuid
-  number                String                                 @unique
+  number                String                                 @unique @default(dbgenerated("(nextval('order_number_seq'::regclass))::text"))
   userId                String                                 @map("user_id") @db.Uuid
   status                OrderStatus                            @default(PENDING_PAYMENT)
   paymentMethod         PaymentMethod                          @map("payment_method")
@@ -246,24 +258,59 @@ model Order {
   contactName           String                                 @map("contact_name")
   contactPhone          String                                 @map("contact_phone")
   addressText           String                                 @map("address_text")
+  /// The address as it was when ordering (S2.10): editing or deleting it later changes nothing.
+  addressLabel          String?                                @map("address_label")
+  addressLine1          String?                                @map("address_line1")
+  /// Apartment, floor.
+  addressLine2          String?                                @map("address_line2")
+  /// City and ZIP, e.g. "Boston, MA 02109".
+  addressCity           String?                                @map("address_city")
+  courierInstructions   String?                                @map("courier_instructions")
   addressLat            Float                                  @map("address_lat")
   addressLng            Float                                  @map("address_lng")
   location              Unsupported("geography(Point, 4326)")?
   distanceKm            Float                                  @map("distance_km")
+  /// The kitchen note for the whole order.
   note                  String?
   subtotalCents         Int                                    @map("subtotal_cents")
+  /// Off the food (the promo); tax is worked out after it.
   discountCents         Int                                    @default(0) @map("discount_cents")
+  /// The real delivery fee, kept even with free delivery so courier pay is unchanged (F3 B4).
   deliveryFeeCents      Int                                    @map("delivery_fee_cents")
+  /// A free-delivery promo, stored apart from the fee.
+  deliveryDiscountCents Int                                    @default(0) @map("delivery_discount_cents")
   taxCents              Int                                    @map("tax_cents")
+  taxRateBps            Int?                                   @map("tax_rate_bps")
   tipCents              Int                                    @default(0) @map("tip_cents")
+  /// none | 10 | 15 | 20 | amount: what the customer picked (kept for "remember my tip").
+  tipChoice             String                                 @default("none") @map("tip_choice")
   totalCents            Int                                    @map("total_cents")
   refundedCents         Int                                    @default(0) @map("refunded_cents")
   couponId              String?                                @map("coupon_id") @db.Uuid
+  /// The code as applied, kept if the coupon is later deleted.
+  promoCode             String?                                @map("promo_code")
   stripePaymentIntentId String?                                @unique @map("stripe_payment_intent_id")
+  stripePaymentMethodId String?                                @map("stripe_payment_method_id")
+  /// For receipts: "Visa •••• 4242". Card details never reach Foodz beyond these two.
+  cardBrand             String?                                @map("card_brand")
+  cardLast4             String?                                @map("card_last4")
+  disputeStatus         DisputeStatus                          @default(NONE) @map("dispute_status")
+  disputeOpenedAt       DateTime?                              @map("dispute_opened_at")
+  disputeClosedAt       DateTime?                              @map("dispute_closed_at")
+  /// The checkout press that made this order (S7.2); one live order per key and customer.
+  attemptKey            String?                                @map("attempt_key")
+  /// Hash of the dishes and the address, for the two-minute duplicate check (S7.5).
+  cartFingerprint       String?                                @map("cart_fingerprint")
+  /// Arrival window in minutes after placing (S3.1): "35–45 min".
+  arrivalFromMinutes    Int?                                   @map("arrival_from_minutes")
+  arrivalToMinutes      Int?                                   @map("arrival_to_minutes")
+  /// Why Foodz itself refunded the card: customer-cancel | late-payment | mismatch.
+  autoRefundReason      String?                                @map("auto_refund_reason")
   expiresAt             DateTime?                              @map("expires_at")
   placedAt              DateTime?                              @map("placed_at")
   deliveredAt           DateTime?                              @map("delivered_at")
   cancelledAt           DateTime?                              @map("cancelled_at")
+  /// customer | payment-expired | account-deleted
   cancelReason          String?                                @map("cancel_reason")
   version               Int                                    @default(0)
   createdAt             DateTime                               @default(now()) @map("created_at")
@@ -280,8 +327,11 @@ model Order {
   reports        PartnerReport[]
   refundRequests RefundRequest[]
 
-  @@index([userId, createdAt(sort: Desc)])
+  @@unique([userId, attemptKey])
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, cartFingerprint])
   @@index([status, createdAt])
+  @@index([status, expiresAt])
   @@index([location], type: Gist)
   @@map("orders")
 }
@@ -882,4 +932,14 @@ model WebhookEvent {
   processedAt DateTime @default(now()) @map("processed_at")
 
   @@map("webhook_events")
+}
+
+/// One row, made by the F4 migration: a random tag for this database. Every PaymentIntent carries
+/// it, so the webhook ignores events from other machines that share the Stripe test account (B6).
+model AppInstance {
+  id        Int      @id @default(1)
+  tag       String   @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("app_instance")
 }

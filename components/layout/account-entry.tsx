@@ -1,6 +1,14 @@
 'use client';
 
-import { ChevronDown, CircleUserRound, Heart, LogOut, MapPin, UserRound } from 'lucide-react';
+import {
+  ChevronDown,
+  CircleUserRound,
+  Heart,
+  LogOut,
+  MapPin,
+  Receipt,
+  UserRound,
+} from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -56,6 +64,7 @@ function SignInEntry() {
 
 const MENU_LINKS: { href: Route; label: string; icon: typeof UserRound }[] = [
   { href: '/account', label: 'Account', icon: UserRound },
+  { href: '/account/orders', label: 'Orders', icon: Receipt },
   { href: '/account/favorites', label: 'Favorites', icon: Heart },
   { href: '/account/addresses', label: 'Addresses', icon: MapPin },
 ];

@@ -19,6 +19,8 @@ export interface CheckoutBarProps {
   slow: boolean;
   onCheckout: () => void;
   onRetry: () => void;
+  /** On /checkout the button only closes the cart (F4 design 1.3, D30). */
+  backToCheckout?: boolean;
 }
 
 /**
@@ -26,10 +28,22 @@ export interface CheckoutBarProps {
  * line that says why the button can't be used yet. A blocked button keeps its focus and repeats
  * its reason when pressed.
  */
-export function CheckoutBar({ quote, status, dim, slow, onCheckout, onRetry }: CheckoutBarProps) {
+export function CheckoutBar({
+  quote,
+  status,
+  dim,
+  slow,
+  onCheckout,
+  onRetry,
+  backToCheckout = false,
+}: CheckoutBarProps) {
   const reasonId = `${useId()}-checkout-reason`;
-  const { reason, label, line } = checkoutButtonState(quote, status, slow);
+  const state = checkoutButtonState(quote, status, slow);
+  // With an order waiting at checkout, the button goes back there whatever the quote says.
+  const reason = backToCheckout ? null : state.reason;
   const blocked = reason !== null;
+  const label = backToCheckout ? 'Back to checkout' : state.label;
+  const line = backToCheckout ? null : state.line;
   // While updating, presses are ignored at once but the grey look waits 300 ms (no flicker).
   const looksBlocked = blocked && (reason !== 'updating' || slow);
   const closed = quote !== null && !quote.store.isOpen;

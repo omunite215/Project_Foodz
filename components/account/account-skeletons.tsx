@@ -296,3 +296,67 @@ export function PrivacySkeleton() {
     </LoadingRegion>
   );
 }
+
+/** /account/orders (F4 design 4.5): up to four order cards, or the empty card's shape. */
+export function OrdersSkeleton() {
+  const { orderCount } = useAccount();
+  const rows = Math.min(orderCount, 4);
+  return (
+    <LoadingRegion label="Loading orders">
+      <Head subtitle />
+      {rows === 0 ? (
+        <Card className="mt-8 flex flex-col items-center py-12">
+          <Bar className="size-40 md:size-50" />
+          <Bar className="mt-6 h-7 w-40" />
+          <Bar className="mt-3 h-6 w-56" />
+          <Bar className="mt-8 h-11 w-44" />
+        </Card>
+      ) : (
+        <div className="mt-8 space-y-3">
+          <Bar className="h-7 w-28" />
+          {Array.from({ length: rows }, (_, index) => (
+            <div
+              key={index}
+              className="rounded-2xl border border-neutral-6 bg-white p-4 md:p-5 xl:grid xl:grid-cols-[9.5rem_minmax(0,1fr)_7.5rem_10.5rem_1.25rem] xl:items-center xl:gap-6"
+            >
+              <div className="flex items-start justify-between gap-3 xl:contents">
+                <div>
+                  <Bar className="h-6 w-28" />
+                  <Bar className="mt-1 h-4 w-40" />
+                </div>
+                <Bar className="h-7 w-24 xl:order-4" />
+              </div>
+              <Bar className="mt-3 h-4 w-3/4 xl:order-2 xl:mt-0" />
+              <Bar className="mt-3 h-6 w-20 xl:order-3 xl:mt-0" />
+            </div>
+          ))}
+        </div>
+      )}
+    </LoadingRegion>
+  );
+}
+
+/** /account/cards (F4 design 5.4): one row per saved card, up to five. */
+export function SavedCardsSkeleton() {
+  const { savedCardCount } = useAccount();
+  const rows = Math.max(1, Math.min(savedCardCount, 5));
+  return (
+    <LoadingRegion label="Loading saved cards">
+      <Head subtitle />
+      <Card className="mt-8">
+        <div className="divide-y divide-neutral-6">
+          {Array.from({ length: rows }, (_, index) => (
+            <div key={index} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
+              <Bar className="size-10 rounded-full" />
+              <div className="flex-1">
+                <Bar className="h-5 w-36" />
+                <Bar className="mt-1 h-4 w-24" />
+              </div>
+              <Bar className="h-11 w-20" />
+            </div>
+          ))}
+        </div>
+      </Card>
+    </LoadingRegion>
+  );
+}

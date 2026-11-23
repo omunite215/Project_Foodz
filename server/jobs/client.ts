@@ -34,3 +34,34 @@ export const notificationEmailRequested = eventType('notification.email-requeste
 export const accountEmailRequested = eventType('account.email-requested', {
   schema: z.object({ sealed: z.string().min(1).max(8000) }),
 });
+
+// Orders (F4). Payloads carry ids and amounts only; the jobs read everything else themselves.
+
+/** A card order is waiting for its payment until `expiresAt` (B8). */
+export const orderPaymentStarted = eventType('order.payment-started', {
+  schema: z.object({ orderId: z.uuid(), expiresAt: z.iso.datetime() }).strict(),
+});
+
+/** Foodz decided to refund a card payment in full (cancellation, late payment, mismatch). */
+export const orderRefundRequested = eventType('order.refund-requested', {
+  schema: z.object({ orderId: z.uuid() }).strict(),
+});
+
+/** One order email, sent once per change (the event id is the order, the kind and the change). */
+export const orderEmailRequested = eventType('order.email-requested', {
+  schema: z
+    .object({
+      orderId: z.uuid(),
+      kind: z.enum([
+        'receipt',
+        'receipt-late',
+        'cancelled',
+        'refunded',
+        'late-refund',
+        'mismatch-refund',
+      ]),
+      refundCents: z.int().min(0).optional(),
+      at: z.iso.datetime().optional(),
+    })
+    .strict(),
+});

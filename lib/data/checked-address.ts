@@ -12,6 +12,9 @@ export interface CheckedAddress {
   line1: string;
   lat: number;
   lng: number;
+  /** From the pick, so checkout can offer to save it as it was found (F4 S2.5). */
+  city?: string;
+  hasHouseNumber?: boolean;
 }
 
 const CHECKED_KEY = 'foodz.cart.point';
@@ -19,6 +22,8 @@ const checkedSchema = z.object({
   line1: z.string().min(1).max(200),
   lat: latitudeSchema,
   lng: longitudeSchema,
+  city: z.string().min(1).max(120).optional(),
+  hasHouseNumber: z.boolean().optional(),
 });
 const checkedListeners = new Set<() => void>();
 let checkedCache: { raw: string | null; value: CheckedAddress | null } = { raw: null, value: null };

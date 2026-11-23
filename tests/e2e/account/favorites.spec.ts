@@ -74,7 +74,12 @@ test.describe('Favorites', () => {
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Kimchi', 'Bulgogi']);
 
     await heart(page, 'Kimchi').click();
-    await expect(page.getByText('Kimchi removed from your favorites.')).toBeVisible();
+    // The visible notice; the screen-reader announcer may hold the same words for a moment.
+    await expect(
+      page.locator('[data-slot="alert-description"]', {
+        hasText: 'Kimchi removed from your favorites.',
+      }),
+    ).toBeVisible();
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Bulgogi']);
     await expect(page.locator('main').getByRole('link', { name: /^Bulgogi,/ })).toBeFocused();
     await page.getByRole('button', { name: 'Undo removing Kimchi' }).click();
@@ -90,14 +95,24 @@ test.describe('Favorites', () => {
     await expectAccessible(page);
   });
 
-  test('the account navigation lists Favorites second (design 1.2)', async ({ page }, testInfo) => {
+  test('the account navigation lists its seven sections (F4 design 1.2)', async ({
+    page,
+  }, testInfo) => {
     await signUp(page);
     await open(page, '/account');
     const nav = page.getByRole('navigation', { name: 'Account' }).filter({ visible: true });
     await expect(nav.getByRole('link')).toHaveText(
       isPhone(testInfo)
-        ? ['Account', 'Favorites', 'Addresses', 'Security', 'Privacy']
-        : ['Account', 'Favorites', 'Addresses', 'Security', 'Privacy and data'],
+        ? ['Account', 'Orders', 'Favorites', 'Addresses', 'Saved cards', 'Security', 'Privacy']
+        : [
+            'Account',
+            'Orders',
+            'Favorites',
+            'Addresses',
+            'Saved cards',
+            'Security',
+            'Privacy and data',
+          ],
     );
     await nav.getByRole('link', { name: 'Favorites' }).click();
     await expect(page).toHaveURL(/\/account\/favorites$/);

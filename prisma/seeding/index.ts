@@ -70,6 +70,7 @@ export const SAMPLE_ACCOUNTS = [
     emailVerified: false,
     banned: false,
     banReason: null,
+    phone: null,
   },
   {
     email: 'suspended.customer@foodz.example',
@@ -77,13 +78,16 @@ export const SAMPLE_ACCOUNTS = [
     emailVerified: true,
     banned: true,
     banReason: 'Repeated coupon abuse (test account)',
+    phone: null,
   },
   {
+    // The main ordering account for F4 QA: her phone fills in at checkout (B23).
     email: 'second.customer@foodz.example',
     name: 'Priya Shah',
     emailVerified: true,
     banned: false,
     banReason: null,
+    phone: '+16175550123',
   },
 ] as const;
 
@@ -270,6 +274,7 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
               banned: account.banned,
               banReason: account.banReason,
               isSample: true,
+              phone: account.phone,
             },
           });
           sample[account.email] = user.id;
@@ -314,7 +319,10 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
           await tx.coupon.create({ data: coupon });
           count('coupons', true);
         }
+        // LASTONE has its one use back on every run (S8.4).
+        await tx.coupon.updateMany({ where: { code: 'LASTONE' }, data: { usedCount: 0 } });
         count('orders', await seedPastWelcomeOrder(tx, secondCustomer, now));
+        await completePastOrderSnapshot(tx);
 
         const favoriteDishes = await tx.menuItem.findMany({
           where: { slug: { in: [...DEMO_FAVORITE_SLUGS] } },
@@ -361,7 +369,18 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         count('contentPages', true);
       }
 
-      count('contentVersions', await correctFaqCouponAnswer(tx, admin.id, now));
+      count(
+        'contentVersions',
+        await correctParagraph(tx, 'faq', admin.id, now, SEED_CORRECTIONS.faqCouponAnswer),
+      );
+      count(
+        'contentVersions',
+        await correctParagraph(tx, 'faq', admin.id, now, SEED_CORRECTIONS.faqCashAnswer),
+      );
+      count(
+        'contentVersions',
+        await correctParagraph(tx, 'privacy', admin.id, now, SEED_CORRECTIONS.privacyWhoSeesIt),
+      );
 
       // -------------------------------------------------------------- blog
       for (const tag of tags) {
@@ -498,6 +517,7 @@ async function seedPastWelcomeOrder(tx: Tx, userId: string, now: Date): Promise<
       contactName: 'Priya Shah',
       contactPhone: '+16175550123',
       addressText: '1 Faneuil Hall Square, Boston, MA 02109',
+      ...PAST_ORDER_SNAPSHOT,
       addressLat: FANEUIL_HALL.lat,
       addressLng: FANEUIL_HALL.lng,
       distanceKm: 1.4,
@@ -539,20 +559,85 @@ async function seedPastWelcomeOrder(tx: Tx, userId: string, now: Date): Promise<
 }
 
 /**
- * The FAQ's answer about coupons said "at checkout" (F3). When the published version still has
- * that sentence, a new version with the new one is published, the way the CMS would.
+ * What the order page needs of S1001 (F4): the address, instructions and arrival window as
+ * an order keeps them. Gimbap takes 20 minutes at most, the address is 1.3 km away: 20 + 10 + 4
+ * = 34, so 35–45 minutes.
  */
-async function correctFaqCouponAnswer(tx: Tx, publishedById: string, now: Date) {
-  const { from, to } = SEED_CORRECTIONS.faqCouponAnswer;
+const PAST_ORDER_SNAPSHOT = {
+  addressLabel: 'Work',
+  addressLine1: '1 Faneuil Hall Square',
+  addressLine2: null,
+  addressCity: 'Boston, MA 02109',
+  courierInstructions: 'Front desk takes deliveries',
+  taxRateBps: 700,
+  promoCode: 'WELCOME10',
+  tipChoice: 'none',
+  arrivalFromMinutes: 35,
+  arrivalToMinutes: 45,
+} as const;
+
+/** S1001 seeded before F4 gets its snapshot, and the timeline its placed and delivered steps. */
+async function completePastOrderSnapshot(tx: Tx) {
+  const id = seedId('second-customer-past-order');
+  const order = await tx.order.findUnique({
+    where: { id },
+    select: { addressLabel: true, placedAt: true, deliveredAt: true },
+  });
+  if (!order) return;
+  if (order.addressLabel === null) {
+    await tx.order.update({ where: { id }, data: PAST_ORDER_SNAPSHOT, select: { id: true } });
+  }
+  const events = await tx.orderEvent.count({ where: { orderId: id } });
+  if (events === 0 && order.placedAt) {
+    await tx.orderEvent.createMany({
+      data: [
+        {
+          orderId: id,
+          type: 'placed',
+          toStatus: 'PLACED',
+          data: { actor: 'customer', method: 'cash' },
+          createdAt: order.placedAt,
+        },
+        ...(order.deliveredAt
+          ? [
+              {
+                orderId: id,
+                type: 'delivered',
+                fromStatus: 'PICKED_UP' as const,
+                toStatus: 'DELIVERED' as const,
+                createdAt: order.deliveredAt,
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+}
+
+/**
+ * Paragraphs earlier seeds published that a feature changed (FAQ answers for coupons in F3 and
+ * cash in F4, the Privacy Policy's "Who sees it" for Stripe in F4). When the published version
+ * still has the old paragraph, a new version with the new one is published, the way the CMS
+ * would; a page someone edited since is left alone.
+ */
+async function correctParagraph(
+  tx: Tx,
+  slug: string,
+  publishedById: string,
+  now: Date,
+  { from, to }: { from: string; to: string },
+) {
   const page = await tx.contentPage.findUnique({
-    where: { slug: 'faq' },
+    where: { slug },
     select: {
       id: true,
       publishedVersion: { select: { title: true, content: true, contentHtml: true } },
     },
   });
   const current = page?.publishedVersion;
-  if (!page || !current?.contentHtml.includes(escapeHtml(from))) return false;
+  // Whole paragraphs only: a new answer may begin with the old one (F4's cash sentence does).
+  const oldParagraph = `>${escapeHtml(from)}<`;
+  if (!page || !current?.contentHtml.includes(oldParagraph)) return false;
   const content = replaceText(current.content, from, to);
   if (content === null) return false;
 
@@ -569,7 +654,7 @@ async function correctFaqCouponAnswer(tx: Tx, publishedById: string, now: Date) 
       version: (latest?.version ?? 0) + 1,
       title: current.title,
       content,
-      contentHtml: current.contentHtml.replaceAll(escapeHtml(from), escapeHtml(to)),
+      contentHtml: current.contentHtml.replaceAll(oldParagraph, `>${escapeHtml(to)}<`),
       publishedById,
       publishedAt: now,
     },
@@ -608,6 +693,8 @@ async function upsertUser(
       banned: boolean;
       banReason: string | null;
       isSample: boolean;
+      /** The profile phone the stories use (E.164), or null. */
+      phone?: string | null;
     };
   },
 ) {
@@ -641,6 +728,7 @@ async function upsertUser(
         banned: state.banned,
         banReason: state.banReason,
         isSample: state.isSample,
+        phone: state.phone ?? null,
         termsAcceptedVersion: TERMS_VERSION,
       },
     });

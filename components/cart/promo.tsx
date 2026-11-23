@@ -103,6 +103,9 @@ export interface PromoSectionProps {
   onAction: () => void;
   /** A link out of the cart is about to replace its history entry. */
   onNavigate: () => void;
+  /** Running offers under the field (the cart); checkout leaves them out (F4 design 2.6.5). */
+  showOffers?: boolean;
+  className?: string;
 }
 
 export function PromoSection({
@@ -113,6 +116,8 @@ export function PromoSection({
   onCodeEnded,
   onAction,
   onNavigate,
+  showOffers = true,
+  className = 'mt-8',
 }: PromoSectionProps) {
   const cart = useCartActions();
   const queryClient = useQueryClient();
@@ -461,7 +466,7 @@ export function PromoSection({
   const showChip = storedCode !== null;
 
   return (
-    <div className="mt-8">
+    <div className={className}>
       {showChip ? (
         <div className="mb-3">
           <PromoChip
@@ -586,18 +591,20 @@ export function PromoSection({
           />
         ) : null}
       </div>
-      <CartOffers
-        offers={quote?.offers ?? []}
-        appliedCode={storedPromo?.status === 'applied' ? storedCode : null}
-        onApply={(code) => {
-          // Below md the field, its answer, "Checking…" and the compare card are folded away
-          // until opened: an offer's Apply opens them (2.14).
-          setExpanded(true);
-          revealAnswer.current = true;
-          requestAnimationFrame(showField);
-          void check(code, { fromField: false });
-        }}
-      />
+      {showOffers ? (
+        <CartOffers
+          offers={quote?.offers ?? []}
+          appliedCode={storedPromo?.status === 'applied' ? storedCode : null}
+          onApply={(code) => {
+            // Below md the field, its answer, "Checking…" and the compare card are folded away
+            // until opened: an offer's Apply opens them (2.14).
+            setExpanded(true);
+            revealAnswer.current = true;
+            requestAnimationFrame(showField);
+            void check(code, { fromField: false });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

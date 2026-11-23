@@ -1,5 +1,16 @@
 import type { Cuisine } from '@/server/db/enums';
-import type { PromoKind, PromoReason } from './schema';
+import {
+  ARRIVAL_HANDOVER_MINUTES,
+  ARRIVAL_MINUTES_PER_KM,
+  ARRIVAL_WINDOW_MINUTES,
+  CASH_LIMIT_CENTS,
+  MAX_TIP_CENTS,
+  type PromoKind,
+  type PromoReason,
+  TIP_PERCENTS,
+  type TipChoice,
+  type TipPercent,
+} from './schema';
 
 /*
  * quote(): every figure in the cart and at checkout, worked out in one pure function.
@@ -394,4 +405,55 @@ export function quote(input: QuoteCalcInput): QuoteFigures {
     totalCents: subtotalCents - foodDiscountCents + deliveryChargeCents + taxCents + tipCents,
     totalKind: final ? 'final' : 'beforeDelivery',
   };
+}
+
+// ------------------------------------------------------------------ checkout (F4)
+
+/**
+ * The tip for a choice (U1, B14): a percentage of the food before any promo, rounded half up
+ * once, or a typed amount, both up to $100.00 (the orders table refuses more). The browser only
+ * says which choice was made.
+ */
+export function tipFor(choice: TipChoice, foodSubtotalCents: number): number {
+  assertCents(foodSubtotalCents, 'subtotal');
+  switch (choice.kind) {
+    case 'none':
+      return 0;
+    case 'percent':
+      if (!TIP_PERCENTS.includes(choice.percent)) throw new RangeError('unknown tip percentage');
+      return Math.min(roundHalfUp(foodSubtotalCents * choice.percent, 100), MAX_TIP_CENTS);
+    case 'amount':
+      assertCents(choice.cents, 'tip');
+      if (choice.cents > MAX_TIP_CENTS) throw new RangeError('tip over the limit');
+      return choice.cents;
+    default:
+      throw new RangeError('unknown tip choice');
+  }
+}
+
+/** Each percentage with its amount for this cart, for the tip buttons (S4.1). */
+export function tipOptions(foodSubtotalCents: number): { percent: TipPercent; cents: number }[] {
+  return TIP_PERCENTS.map((percent) => ({
+    percent,
+    cents: tipFor({ kind: 'percent', percent }, foodSubtotalCents),
+  }));
+}
+
+/** Cash on delivery for totals up to $100.00, tip included (U5). */
+export const cashAllowed = (totalCents: number) => totalCents <= CASH_LIMIT_CENTS;
+
+/**
+ * "Arrives in about 35–45 min" (S3.1, B15): the longest prep time among the dishes, plus the
+ * handover, plus 3 minutes per km (the distance as shown, to 0.1 km) rounded up; the start is
+ * rounded up to the next 5 minutes and the window is 10 minutes wide.
+ */
+export function arrivalWindow(
+  prepMinutes: readonly number[],
+  tenths: number,
+): { fromMinutes: number; toMinutes: number } | null {
+  if (prepMinutes.length === 0) return null;
+  const travel = Math.ceil((ARRIVAL_MINUTES_PER_KM * Math.max(0, tenths)) / 10);
+  const raw = Math.max(...prepMinutes) + ARRIVAL_HANDOVER_MINUTES + travel;
+  const fromMinutes = Math.ceil(raw / 5) * 5;
+  return { fromMinutes, toMinutes: fromMinutes + ARRIVAL_WINDOW_MINUTES };
 }

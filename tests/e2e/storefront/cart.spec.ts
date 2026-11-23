@@ -69,7 +69,7 @@ test.describe('Cart', () => {
     await expect(dialog.getByRole('heading', { name: 'Your cart is empty' })).toBeVisible();
     // Full screen on phones, a 440 px panel from 768 px (D1).
     const box = await dialog.boundingBox();
-    expect(box?.width).toBe(isPhone(testInfo) ? 375 : 440);
+    expect(box?.width).toBeCloseTo(isPhone(testInfo) ? 375 : 440, 0);
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();

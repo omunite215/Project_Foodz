@@ -17,6 +17,22 @@ export type AppErrorCode =
   | 'UNAVAILABLE'
   // The cart holds more than an online order can (F3 S1.12).
   | 'CART_TOO_BIG'
+  // Checkout and orders (F4). Each carries `details` the page needs to explain it.
+  | 'EMAIL_NOT_CONFIRMED'
+  | 'NOT_A_CUSTOMER'
+  | 'STORE_CLOSED'
+  | 'SOLD_OUT'
+  | 'OUTSIDE_AREA'
+  | 'PROMO_REFUSED'
+  | 'PRICE_CHANGED'
+  | 'CASH_LIMIT'
+  | 'UNPAID_ORDER'
+  | 'LIKELY_DUPLICATE'
+  | 'CARD_PAUSED'
+  | 'STRIPE_NOT_CONFIGURED'
+  | 'KITCHEN_STARTED'
+  | 'PAYMENT_IN_PROGRESS'
+  | 'ORDER_NOT_PAYABLE'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'
