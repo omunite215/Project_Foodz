@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { onAuthEvent } from '@/lib/auth-channel';
 import { isAuthPage } from '@/lib/auth-links';
+import { forgetCheckout } from '@/lib/checkout-storage';
 import { useCartSession } from '@/lib/data/cart';
 import { forgetEmail } from '@/lib/email-handoff';
 import { forgetDrafts, hasUnsavedChanges, onUnsavedChangesSettled } from '@/lib/form-draft';
@@ -54,9 +55,11 @@ export function SessionWatch({
     });
     const stopListening = onAuthEvent((type) => {
       if (type === 'signed-out') {
-        // Signed out on purpose in another tab: this tab's drafts and carried email go too.
+        // Signed out on purpose in another tab: this tab's drafts, carried email and checkout
+        // choices (note, tip, the order just placed) go too.
         forgetDrafts();
         forgetCarriedEmail();
+        forgetCheckout();
       }
       refreshWhenSafe();
     });

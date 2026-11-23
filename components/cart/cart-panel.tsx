@@ -121,7 +121,9 @@ export function CartPanel({
   // address still counts. The book is only needed to settle that, so it isn't fetched otherwise:
   // server actions run one at a time and it would hold up the quote.
   const addressBook = useSavedAddresses(signedIn && storedPoint !== null);
-  const unpaidOrder = useUnpaidOrder(signedIn).data ?? null;
+  // Signed in only: a query that is switched off still answers with what it cached.
+  const unpaidQuery = useUnpaidOrder(signedIn);
+  const unpaidOrder = signedIn ? (unpaidQuery.data ?? null) : null;
   const hasSaved = (addressBook.data?.addresses.length ?? 0) > 0;
   const checked =
     storedPoint && (!signedIn || (addressBook.isFetched && !hasSaved)) ? storedPoint : null;

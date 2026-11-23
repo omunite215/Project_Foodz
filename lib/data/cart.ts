@@ -8,8 +8,10 @@ import {
   useDbClient,
   useLiveQuery,
 } from '@tanstack/react-db';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { z } from 'zod';
+import { forgetCheckout } from '@/lib/checkout-storage';
 import { clearPendingFavorite, clearPendingPromo } from '@/lib/sign-in-reason';
 import { type CartDishActions, useCartDishActions } from './cart-dishes';
 import { setCheckedAddress } from './checked-address';
@@ -464,9 +466,17 @@ export function useCartSession(
   const { isReady, itemCount } = useCart();
   const actions = useCartActions();
   const dishActions = useCartDishActions();
-  const latest = useRef({ itemCount, actions, dishActions, onEmptied, onSessionEnded });
+  const queryClient = useQueryClient();
+  const latest = useRef({
+    itemCount,
+    actions,
+    dishActions,
+    onEmptied,
+    onSessionEnded,
+    queryClient,
+  });
   useEffect(() => {
-    latest.current = { itemCount, actions, dishActions, onEmptied, onSessionEnded };
+    latest.current = { itemCount, actions, dishActions, onEmptied, onSessionEnded, queryClient };
   });
 
   useEffect(() => {
@@ -477,6 +487,7 @@ export function useCartSession(
       dishActions: dishes,
       onEmptied: emptied,
       onSessionEnded: ended,
+      queryClient: queries,
     } = latest.current;
     const saved = readCartOwner();
     const check = cartSessionCheck(saved, sessionKey, count > 0);
@@ -485,6 +496,7 @@ export function useCartSession(
     if (saved !== null && saved !== sessionKey) {
       cart.forgetMeta();
       forgetSessionTraces(dishes);
+      queries.removeQueries(ORDER_QUERIES);
     }
     if (check.emptyCart) {
       cart.clear();
@@ -512,11 +524,13 @@ export function useKeepCartAsGuest() {
 export function useEndCartSession() {
   const actions = useCartActions();
   const dishes = useCartDishActions();
+  const queryClient = useQueryClient();
   return () => {
     writeCartOwner(null);
     actions.clear();
     actions.forgetMeta();
     forgetSessionTraces(dishes);
+    queryClient.removeQueries(ORDER_QUERIES);
   };
 }
 
@@ -530,4 +544,8 @@ function forgetSessionTraces(dishes: Pick<CartDishActions, 'keepOnly'>) {
   dishes.keepOnly(new Set());
   clearPendingPromo();
   clearPendingFavorite();
+  forgetCheckout();
 }
+
+/** Her orders, as cached for the cart's unpaid-order notice and the like, go with the session. */
+const ORDER_QUERIES = { queryKey: ['orders'] } as const;
