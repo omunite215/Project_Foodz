@@ -146,7 +146,10 @@ export function CheckoutSummary({
       className={cn(
         '-mx-6 border-y border-neutral-6 bg-white px-6',
         'md:mx-0 md:rounded-2xl md:border md:px-5',
-        'lg:sticky lg:top-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:max-h-[calc(100dvh-3rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:p-6',
+        // From 1024 px a sticky card no taller than the window: only the dish list scrolls, so
+        // the price details and the total stay in view (the card itself scrolls only if even
+        // those don't fit, at 200 % zoom on a short window).
+        'lg:sticky lg:top-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:max-h-[calc(100dvh-3rem)] lg:flex-col lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:p-6',
         'xl:col-span-5 xl:col-start-8 min-[90rem]:-ml-6',
       )}
     >
@@ -177,6 +180,8 @@ export function CheckoutSummary({
             </span>
           </span>
           <SummaryTotal quote={quote} status={status} dim={dim} />
+          {/* Out of the name: aria-expanded says it. No aria-label on the button, so the rest of
+              its visible words stay its name (WCAG 2.5.3). */}
           <span
             aria-hidden
             className="inline-flex items-center gap-1 text-body-5 font-medium text-brand-strong"
@@ -196,7 +201,10 @@ export function CheckoutSummary({
       <div
         ref={bodyRef}
         id="summary-body"
-        className={cn(open ? 'block' : 'hidden', 'pb-6 lg:block lg:pb-0')}
+        className={cn(
+          open ? 'block' : 'hidden',
+          'pb-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:pb-0',
+        )}
       >
         {loading ? (
           <div aria-busy="true" className="space-y-4 py-4">
@@ -212,7 +220,10 @@ export function CheckoutSummary({
             ))}
           </div>
         ) : (
-          <ul aria-label={orderLinesLabel(itemCount)} className="divide-y divide-neutral-6">
+          <ul
+            aria-label={orderLinesLabel(itemCount)}
+            className="divide-y divide-neutral-6 lg:-mx-2 lg:min-h-24 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:px-2"
+          >
             {lines.map((line) => {
               if (undo?.key === line.key) {
                 return (
@@ -245,8 +256,8 @@ export function CheckoutSummary({
                         <Money
                           cents={lineTotal}
                           className={cn(
-                            'font-heading text-body-3 text-brand-strong transition-opacity duration-150',
-                            dim && 'opacity-75',
+                            // Never dimmed: green at 75 % falls under 4.5:1.
+                            'font-heading text-body-3 text-brand-strong',
                             line.soldOut && 'text-neutral-3 line-through',
                           )}
                         />

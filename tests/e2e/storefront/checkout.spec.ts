@@ -5,6 +5,8 @@ import {
   liveRegion,
   newPassword,
   open,
+  signIn,
+  signUp,
   test,
   uniqueEmail,
   watchConsole,
@@ -55,15 +57,24 @@ const priceRow = (page: Page, label: string | RegExp) =>
 
 /** The store keeps hours: when it is closed nothing can be placed (S3.4). */
 async function storeOpen(page: Page) {
-  await expect(
-    payButton(page).or(page.getByRole('button', { name: /^Ordering opens/ })),
-  ).toBeVisible();
-  return (await page.getByRole('button', { name: /^Ordering opens/ }).count()) === 0;
+  // Decide on the settled quote, not on the first paint: before the quote the button still reads
+  // "Pay" whatever the hours. The Arrival box says one of these once the quote is in ("…when your
+  // total updates" is the in-between state, so it doesn't count).
+  await expect(page.getByRole('region', { name: 'Arrival' })).toContainText(
+    /Arrives in about|Choose an address to see when it arrives|Ordering opens/,
+    { timeout: 30_000 },
+  );
+  const closed =
+    (await page.getByRole('button', { name: /^Ordering opens/ }).count()) > 0 ||
+    (await inMain(page)
+      .getByText(/^We're closed right now/)
+      .count()) > 0;
+  return !closed;
 }
 
 /** A fresh customer with Work saved and two dishes in the cart, on checkout. */
 async function readyToPay(page: Page) {
-  await confirmedCustomer(page);
+  const account = await confirmedCustomer(page);
   await saveWorkAddress(page);
   await addToCart(page, 'gimbap');
   await addToCart(page, 'pad-thai');
@@ -71,7 +82,27 @@ async function readyToPay(page: Page) {
   const phone = page.getByLabel('Phone number');
   await phone.fill('(617) 555-0142');
   await phone.blur();
+  return account;
 }
+
+/** Signs out from the header; with dishes in the cart the dialog asks first. */
+async function signOutHere(page: Page) {
+  await page.getByRole('button', { name: /^Account menu for / }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  const confirm = page.getByRole('alertdialog', { name: 'Sign out?' });
+  const signedOut = page.locator('header').getByRole('link', { name: 'Sign in' });
+  await expect(confirm.or(signedOut)).toBeVisible({ timeout: 15_000 });
+  if (await confirm.isVisible()) await confirm.getByRole('button', { name: 'Sign out' }).click();
+  await expect(signedOut).toBeVisible({ timeout: 15_000 });
+}
+
+/** What checkout keeps in this tab (note, tip, attempt key, the order just placed). */
+const checkoutKeys = (page: Page) =>
+  page.evaluate(() =>
+    Object.keys(sessionStorage).filter(
+      (key) => key.startsWith('foodz.checkout.') || key.startsWith('foodz.order.'),
+    ),
+  );
 
 test.describe('Checkout', () => {
   test.describe.configure({ timeout: 240_000 });
@@ -84,6 +115,11 @@ test.describe('Checkout', () => {
     await addToCart(page, 'gimbap');
     await addToCart(page, 'pad-thai');
     await openCheckout(page);
+    // At night nothing can be placed (S3.4): checked first, as everything below is the open store.
+    if (!(await storeOpen(page))) {
+      test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
+      return;
+    }
     await expect(page).toHaveTitle('Checkout | Foodz');
     await expect(
       inMain(page).getByText('Hooray! This is the last step before your meal.'),
@@ -115,6 +151,8 @@ test.describe('Checkout', () => {
     await expect(liveRegion(page)).toHaveText(/Address saved|Total/);
     const address = page.getByRole('radio', { name: /^Home, default, .*Faneuil Hall/ });
     await expect(address).toBeChecked();
+    // Focus lands on the new card, not on the page (design 2.8).
+    await expect(address).toBeFocused();
 
     // The phone is required; a new one offers to be saved, ticked (S2.6, S2.7).
     const phone = page.getByLabel('Phone number');
@@ -152,10 +190,6 @@ test.describe('Checkout', () => {
       inMain(page).getByText(/^Pay \$\d+\.\d\d in cash when your order arrives, tip included\./),
     ).toBeVisible();
 
-    if (!(await storeOpen(page))) {
-      test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
-      return;
-    }
     await expect(payButton(page)).toHaveText(/^Place order · \$\d+\.\d\d$/);
     const label = (await payButton(page).textContent()) ?? '';
     const total = label.replace('Place order · ', '');
@@ -164,6 +198,9 @@ test.describe('Checkout', () => {
     await phone.press('Enter');
     await expect(page).toHaveURL(/\/checkout$/);
     await phone.blur();
+    const note = page.getByLabel(/^Note for the kitchen/);
+    await note.fill('Extra napkins please');
+    await note.blur();
     await expectAccessiblePage(page);
 
     await payButton(page).click();
@@ -214,6 +251,12 @@ test.describe('Checkout', () => {
     // No script errors on the way: no hydration mismatch, nothing the CSP refused.
     expect(problems).toEqual([]);
 
+    // The next order in this tab starts afresh: no tip, no note she didn't type for it (S4.1).
+    await addToCart(page, 'kimchi');
+    await openCheckout(page);
+    await expect(page.getByRole('radio', { name: 'No tip' })).toBeChecked();
+    await expect(page.getByLabel(/^Note for the kitchen/)).toHaveValue('');
+
     // Orders list (S12.1).
     await open(page, '/account/orders');
     const past = page.getByRole('region', { name: 'Past orders' });
@@ -226,8 +269,9 @@ test.describe('Checkout', () => {
     await expectAccessiblePage(page);
   });
 
-  test('card: 4242 pays, the card is saved, and the order page confirms it (S6.4, S6.5, S6.10, S6.13)', async ({
+  test('card: 4242 pays, the card is saved, and the order page confirms it (S6.4, S6.5, S6.10, S6.11, S6.13)', async ({
     page,
+    context,
   }, testInfo) => {
     test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
     await readyToPay(page);
@@ -263,6 +307,33 @@ test.describe('Checkout', () => {
       page.getByRole('region', { name: 'Receipt' }).getByText('Paid · Visa •••• 4242'),
     ).toBeVisible();
     await expectAccessiblePage(page);
+
+    // The next order with the saved card, left unpaid (Stripe unreachable at the press): its
+    // "Finish paying" shows that card chosen, and pays with it (S6.11).
+    await addToCart(page, 'kimchi');
+    await openCheckout(page);
+    const savedAtCheckout = page.getByRole('radio', { name: 'Visa ending in 4242, expires 12/34' });
+    await expect(savedAtCheckout).toBeChecked();
+    await context.route('https://api.stripe.com/**', (route) => route.abort());
+    await payButton(page).click();
+    const panel = page.locator('#pay-status');
+    await expect(panel).toBeVisible({ timeout: 40_000 });
+    await panel.getByRole('button', { name: 'Check again' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Waiting for payment' })).toBeVisible({
+      timeout: 30_000,
+    });
+    await context.unroute('https://api.stripe.com/**');
+    const step = page.getByRole('region', { name: 'Finish paying' });
+    const savedOnStep = step.getByRole('radio', { name: 'Visa ending in 4242, expires 12/34' });
+    await expect(savedOnStep).toBeChecked();
+    await expect(step.getByRole('radio', { name: 'Use a new card' })).not.toBeChecked();
+    await step.getByRole('button', { name: /^Pay \$\d+\.\d\d$/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Order placed' })).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(
+      page.getByRole('region', { name: 'Receipt' }).getByText('Paid · Visa •••• 4242'),
+    ).toBeVisible();
 
     // The saved card is listed and can be removed (S6.13).
     await open(page, '/account/cards');
@@ -377,12 +448,87 @@ test.describe('Checkout', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Order placed' })).toBeVisible();
   });
 
+  test('a press answered late: the panel checks again and moves on before the answer arrives (S7.3, D22)', async ({
+    page,
+    clientIp,
+  }) => {
+    await readyToPay(page);
+    if (!(await storeOpen(page))) {
+      test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
+      return;
+    }
+    await choose(page, /^Cash on delivery/);
+    await expect(payButton(page)).toHaveText(/^Place order · \$\d+\.\d\d$/);
+
+    // The server takes the press at once (the order is placed), but its answer reaches the page
+    // only 35 s later. The re-checks must not wait for it.
+    let held = false;
+    let released = false;
+    await page.route('**/checkout', async (route) => {
+      const request = route.request();
+      if (
+        request.method() !== 'POST' ||
+        held ||
+        !request.postData()?.includes('expectedTotalCents')
+      ) {
+        await route.fallback();
+        return;
+      }
+      held = true;
+      const response = await route.fetch({
+        headers: { ...request.headers(), 'x-forwarded-for': clientIp },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 35_000));
+      released = true;
+      await route.fulfill({ response }).catch(() => undefined);
+    });
+    await payButton(page).click();
+    const panel = page.locator('#pay-status');
+    await expect(panel).toBeVisible({ timeout: 20_000 });
+    await expect(panel).toBeFocused();
+    // Nothing she chose can change while the press may still be going through (D21).
+    await expect(page.locator('#checkout')).toHaveAttribute('inert');
+
+    // "Check again" reaches the server while the press is still out, and the page moves on.
+    const checked = page.waitForResponse(
+      (response) => response.url().includes('/api/checkout/attempt?key=') && response.ok(),
+      { timeout: 10_000 },
+    );
+    await panel.getByRole('button', { name: 'Check again' }).click();
+    await checked;
+    await expect(page).toHaveURL(ORDER_URL, { timeout: 15_000 });
+    expect(released).toBe(false);
+    await expect(page.getByRole('heading', { level: 1, name: 'Order placed' })).toBeVisible();
+  });
+
+  test('signing out forgets the kitchen note for the next person on the tab (security S12)', async ({
+    page,
+  }) => {
+    await readyToPay(page);
+    const note = page.getByLabel(/^Note for the kitchen/);
+    await note.fill('Peanut allergy, buzzer 4B broken');
+    await note.blur();
+    await expect
+      .poll(() => page.evaluate(() => sessionStorage.getItem('foodz.checkout.choices') ?? ''))
+      .toContain('Peanut allergy');
+
+    await signOutHere(page);
+    expect(await checkoutKeys(page)).toEqual([]);
+
+    // Someone else signs in on the same tab: nothing of the last order is offered.
+    await signUp(page);
+    await addToCart(page, 'kimchi');
+    await openCheckout(page);
+    await expect(page.getByLabel(/^Note for the kitchen/)).toHaveValue('');
+    await expect(page.getByLabel('Name for the order')).toHaveValue('Maya Lopez');
+  });
+
   test('an unpaid card order: checkout offers to finish paying or cancel it (S7.6, U11, S9.3)', async ({
     page,
     context,
   }) => {
     test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
-    await readyToPay(page);
+    const account = await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
       return;
@@ -420,6 +566,16 @@ test.describe('Checkout', () => {
     );
     await page.keyboard.press('Escape');
     await expect(cart).toBeHidden();
+
+    // Signed out, the cart says nothing about her unpaid order (security S12).
+    await signOutHere(page);
+    const guestCart = await openCart(page);
+    await expect(guestCart.getByRole('heading', { name: 'Your cart is empty' })).toBeVisible();
+    await expect(guestCart.getByText(/You have an unpaid order/)).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await signIn(page, account.email, account.password);
+    await addToCart(page, 'kimchi');
+
     await openCheckout(page);
     const notice = inMain(page).getByText(
       /^Order \d+ is waiting for payment \(\$\d+\.\d\d\)\. It expires at /,

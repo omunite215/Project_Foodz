@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { QuoteDelivery } from '@/server/modules/cart/schema';
+import type { Quote, QuoteDelivery, QuotePromo } from '@/server/modules/cart/schema';
 import {
   cartButtonLabel,
   cartFullText,
+  checkoutButtonState,
+  cheaperSide,
   codeEndedText,
+  type CompareSide,
+  compareNoteText,
+  compareSide,
   compareText,
   deliveryRowLabel,
   discountLabel,
@@ -14,6 +19,7 @@ import {
   noLongerAppliedText,
   noteSnippet,
   orderingOpensText,
+  outsideText,
   priceChangeText,
   promoAppliedText,
   shortfallText,
@@ -105,11 +111,17 @@ describe('lines of the same dish (S7.2)', () => {
   });
 
   it('says which flavor was taken off (S3.4)', () => {
-    expect(droppedFlavorText(['Sesame oil'], 'Kimchi')).toBe(
+    expect(droppedFlavorText(['Sesame oil'], 'Kimchi', { noLonger: true })).toBe(
       "Sesame oil isn't offered for Kimchi any more, so we took it off.",
     );
-    expect(droppedFlavorText(['Garlic', 'Basil'], 'Pho')).toBe(
+    expect(droppedFlavorText(['Garlic', 'Basil'], 'Pho', { noLonger: true })).toBe(
       "Garlic and Basil aren't offered for Pho any more, so we took them off.",
+    );
+  });
+
+  it('never says "any more" for an extra the dish never offered (S1.16)', () => {
+    expect(droppedFlavorText(['Strawberry jam'], 'Gimbap')).toBe(
+      "Strawberry jam isn't offered for Gimbap, so we took it off.",
     );
   });
 });
@@ -159,6 +171,33 @@ describe('delivery (design 2.15, 2.16)', () => {
       ),
     ).toBe('Delivery');
   });
+
+  it('says why an address outside the area is refused, with the edge in words (S2.8)', () => {
+    expect(
+      outsideText(
+        '1300 Hancock Street',
+        delivery({ status: 'outside', distanceKm: 11.4, feeCents: null }),
+      ),
+    ).toBe(
+      "We don't deliver to 1300 Hancock Street yet. It's about 11.4 km away, and we deliver within 8 km.",
+    );
+    expect(
+      outsideText(
+        'Quincy Center',
+        delivery({ status: 'outside', distanceKm: 8, edge: 'justOver' }),
+      ),
+    ).toBe(
+      "We don't deliver to Quincy Center yet. It's just over 8 km away, and we deliver within 8 km.",
+    );
+  });
+});
+
+/** A side of the compare card whose total already has delivery in it. */
+const known = (code: string, totalCents: number): CompareSide => ({
+  code,
+  totalCents,
+  note: null,
+  toAdd: { minCents: 0, maxCents: 0 },
 });
 
 describe('promo codes (design 2.10 to 2.13)', () => {
@@ -199,19 +238,220 @@ describe('promo codes (design 2.10 to 2.13)', () => {
   });
 
   it('asks before swapping one code for another, with both totals (S4.7)', () => {
-    expect(
-      compareText({ code: 'KBBQ5', totalCents: 5012 }, { code: 'FREEDELIVERY', totalCents: 5133 }),
-    ).toBe(
+    expect(compareText(known('KBBQ5', 5012), known('FREEDELIVERY', 5133))).toBe(
       "Use FREEDELIVERY instead of KBBQ5? With KBBQ5 your total is $50.12. With FREEDELIVERY it's $51.33.",
     );
-    expect(compareText({ code: 'A', totalCents: 100 }, { code: 'B', totalCents: 100 })).toMatch(
-      /Both give the same total\.$/,
-    );
+    expect(compareText(known('A', 100), known('B', 100))).toMatch(/Both give the same total\.$/);
+    expect(cheaperSide(known('KBBQ5', 5012), known('FREEDELIVERY', 5133))).toBe('current');
   });
 
   it('gives the real wait after too many codes (S4.13)', () => {
     expect(tooManyCodesText(600)).toBe('Too many codes tried. You can try again in 10 minutes.');
     expect(tooManyCodesText(60)).toBe('Too many codes tried. You can try again in 1 minute.');
     expect(tooManyCodesText(45)).toBe('Too many codes tried. You can try again in 45 seconds.');
+  });
+});
+
+// ------------------------------------------------------------------ whole quotes
+
+const quoteOf = (fields: Partial<Quote>): Quote => ({
+  quotedAt: '2026-11-21T17:00:00.000Z',
+  lines: [],
+  itemCount: 3,
+  subtotalCents: 4797,
+  promo: null,
+  delivery: delivery({}),
+  tax: { rateBps: 700, cents: 336 },
+  tipCents: 0,
+  tipOptions: [],
+  totalCents: 5547,
+  totalKind: 'final',
+  store: {
+    timeZone: 'America/New_York',
+    isOpen: true,
+    opensAt: null,
+    closesAt: null,
+    closingSoon: false,
+  },
+  arrival: { status: 'noAddress' },
+  cashAllowed: true,
+  cashLimitCents: 10_000,
+  offers: [],
+  checkoutBlockers: [],
+  ...fields,
+});
+
+const promoOf = (fields: Partial<QuotePromo>): QuotePromo => ({
+  code: 'KBBQ5',
+  status: 'applied',
+  reason: null,
+  message: null,
+  description: '$5 off Korean dishes over $25',
+  kind: 'fixed',
+  foodDiscountCents: 500,
+  deliveryDiscountCents: 0,
+  amountCents: 500,
+  freeDelivery: false,
+  retryAfterSeconds: null,
+  ...fields,
+});
+
+const noAddress = delivery({
+  kind: 'none',
+  address: null,
+  status: 'unknown',
+  distanceKm: null,
+  feeCents: null,
+});
+
+describe('the compare card before the address is known (S4.7, D5)', () => {
+  // A guest with cart A: KBBQ5 leaves the fee out; FREEDELIVERY makes it free wherever it goes.
+  const kbbq5 = compareSide(
+    'KBBQ5',
+    quoteOf({
+      promo: promoOf({}),
+      delivery: noAddress,
+      totalCents: 4598,
+      totalKind: 'beforeDelivery',
+    }),
+  );
+  const freeDelivery = compareSide(
+    'FREEDELIVERY',
+    quoteOf({
+      promo: promoOf({
+        code: 'FREEDELIVERY',
+        kind: 'freeDelivery',
+        freeDelivery: true,
+        foodDiscountCents: 0,
+        amountCents: 0,
+      }),
+      delivery: noAddress,
+      totalCents: 5133,
+      totalKind: 'final',
+    }),
+  );
+
+  it('says which total leaves delivery out', () => {
+    expect(kbbq5).toMatchObject({
+      note: 'beforeDelivery',
+      toAdd: { minCents: 199, maxCents: 599 },
+    });
+    expect(freeDelivery).toMatchObject({
+      note: 'freeDelivery',
+      toAdd: { minCents: 0, maxCents: 0 },
+    });
+    expect(compareNoteText(kbbq5)).toBe('before delivery');
+    expect(compareNoteText(freeDelivery)).toBe('free delivery');
+    expect(compareNoteText(known('KBBQ5', 5012))).toBeNull();
+  });
+
+  it('calls neither cheaper when the delivery fee decides it, and says so', () => {
+    // KBBQ5 costs $47.97 to $51.97 with delivery; FREEDELIVERY costs $51.33.
+    expect(cheaperSide(kbbq5, freeDelivery)).toBe('unknown');
+    expect(compareText(kbbq5, freeDelivery)).toBe(
+      "Use FREEDELIVERY instead of KBBQ5? With KBBQ5 your total is $45.98 before delivery. With FREEDELIVERY it's $51.33 with free delivery. Which one saves more depends on your delivery fee ($1.99 to $5.99).",
+    );
+  });
+
+  it('still picks one when it is cheaper whatever the fee', () => {
+    const big = { ...kbbq5, totalCents: 4400 }; // at most $49.99 with delivery
+    expect(cheaperSide(big, freeDelivery)).toBe('current');
+    const small = { ...kbbq5, totalCents: 5000 }; // at least $51.99 with delivery
+    expect(cheaperSide(small, freeDelivery)).toBe('next');
+    expect(compareText(small, freeDelivery)).not.toMatch(/depends on/);
+  });
+
+  it('compares two food codes directly: the same fee comes on top of both', () => {
+    const other = { ...kbbq5, code: 'TRY5', totalCents: 4620 };
+    expect(cheaperSide(kbbq5, other)).toBe('current');
+    expect(compareText(kbbq5, other)).toBe(
+      "Use TRY5 instead of KBBQ5? With KBBQ5 your total is $45.98 before delivery. With TRY5 it's $46.20 before delivery.",
+    );
+  });
+
+  it('reads a known address as a final total with nothing to add', () => {
+    expect(compareSide('KBBQ5', quoteOf({ promo: promoOf({}), totalCents: 5012 }))).toEqual(
+      known('KBBQ5', 5012),
+    );
+  });
+});
+
+describe('the checkout button and its line (design 2.17)', () => {
+  const closedQuote = quoteOf({
+    store: {
+      timeZone: 'America/New_York',
+      isOpen: false,
+      opensAt: { at: '2026-11-22T17:00:00.000Z', weekday: 'sun', time: '12:00', day: 'today' },
+      closesAt: null,
+      closingSoon: false,
+    },
+    checkoutBlockers: ['closed'],
+  });
+  const outsidePoint = delivery({
+    kind: 'point',
+    address: null,
+    status: 'outside',
+    distanceKm: 11.4,
+    feeCents: null,
+  });
+
+  it('shows the amount only when the total is final and nothing blocks it', () => {
+    expect(checkoutButtonState(quoteOf({}), 'ready', false)).toEqual({
+      reason: null,
+      label: 'Go to checkout · $55.47',
+      line: null,
+    });
+    expect(
+      checkoutButtonState(
+        quoteOf({ delivery: noAddress, totalKind: 'beforeDelivery', totalCents: 5133 }),
+        'ready',
+        false,
+      ).label,
+    ).toBe('Go to checkout');
+  });
+
+  it('blocks an address outside the area with its reason (S2.8)', () => {
+    const outside = quoteOf({
+      delivery: outsidePoint,
+      totalKind: 'beforeDelivery',
+      totalCents: 5133,
+      checkoutBlockers: ['outside'],
+    });
+    expect(checkoutButtonState(outside, 'ready', false)).toEqual({
+      reason: 'outside',
+      label: 'Go to checkout',
+      line: 'Choose an address we deliver to.',
+    });
+  });
+
+  it('keeps saying when ordering opens while a total updates (F12)', () => {
+    expect(checkoutButtonState(closedQuote, 'ready', false).label).toBe('Ordering opens at 12 pm');
+    expect(checkoutButtonState(closedQuote, 'updating', false)).toEqual({
+      reason: 'updating',
+      label: 'Ordering opens at 12 pm',
+      line: null,
+    });
+    expect(checkoutButtonState(closedQuote, 'updating', true).line).toBe('Updating your total…');
+  });
+
+  it('gives the outside reason on the line when the store is closed too', () => {
+    const both = quoteOf({
+      ...closedQuote,
+      delivery: outsidePoint,
+      checkoutBlockers: ['closed', 'outside'],
+    });
+    expect(checkoutButtonState(both, 'ready', false)).toEqual({
+      reason: 'closed',
+      label: 'Ordering opens at 12 pm',
+      line: 'Choose an address we deliver to.',
+    });
+  });
+
+  it('says a failed total failed, never as current', () => {
+    expect(checkoutButtonState(null, 'failed', false)).toEqual({
+      reason: 'failed',
+      label: 'Go to checkout',
+      line: "We couldn't update your total. Your cart is safe.",
+    });
   });
 });

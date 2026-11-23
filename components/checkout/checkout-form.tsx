@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Clock, Info } from 'lucide-react';
+import { ArrowLeft, Clock, Info, WifiOff } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,7 +17,6 @@ import {
   cancelOrderAction,
   orderStatusAction,
   placeOrderAction,
-  attemptStatusAction,
 } from '@/server/modules/orders/actions';
 import type {
   CheckoutAddress,
@@ -48,7 +47,12 @@ import {
 import { focusFirstInvalid } from '@/components/forms/feedback';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
-import { type ActionFailure, callAction, withoutFieldError } from '@/lib/action-result';
+import {
+  type ActionFailure,
+  callAction,
+  readActionResult,
+  withoutFieldError,
+} from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { onAuthEvent } from '@/lib/auth-channel';
 import { openCart, useCartOpen } from '@/lib/cart-dialog';
@@ -62,6 +66,7 @@ import {
   readAttempt,
   readChoices,
   readPlacedHere,
+  takeClearCart,
   writeAttempt,
   writeChoices,
   writePlacedHere,
@@ -85,6 +90,7 @@ import {
   type TipTile,
   tipChoiceFor,
 } from '@/lib/checkout-text';
+import { fetchAttemptStatus } from '@/lib/attempt-status';
 import { confirmCard } from '@/lib/confirm-card';
 import {
   type CartLine,
@@ -262,7 +268,7 @@ export function Checkout({
     return page.lastPaymentMethod === 'cash' ? 'cash' : 'card';
   });
   const firstCard = page.savedCards.find((card) => !card.expired)?.id ?? NEW_CARD;
-  const [cardChoice, setCardChoice] = useState(firstCard);
+  const [pickedCard, setCardChoice] = useState(firstCard);
   const [saveCard, setSaveCard] = useState(false);
   const [cardStatus, setCardStatus] = useState<CardFormStatus>('loading');
   const [cardAttempt, setCardAttempt] = useState(0);
@@ -319,11 +325,27 @@ export function Checkout({
   const [undo, setUndo] = useState<{ line: CartLine; title: string } | null>(null);
   const [removingCard, setRemovingCard] = useState<SavedCardDto | null>(null);
   const [goneCards, setGoneCards] = useState<ReadonlySet<string>>(new Set());
+  const listedCards = page.savedCards.filter((saved) => !goneCards.has(saved.id));
+  const usableCards = listedCards.filter((saved) => !saved.expired);
+  // The card shown as chosen is the card charged (S6.11): a choice that is no longer listed falls
+  // back to the most recently used card that is, or to a new card.
+  const cardChoice =
+    pickedCard === NEW_CARD || usableCards.some((saved) => saved.id === pickedCard)
+      ? pickedCard
+      : (usableCards[0]?.id ?? NEW_CARD);
   const cardOpener = useRef<HTMLButtonElement | null>(null);
   const [removedCount, setRemovedCount] = useState(0);
   const [codeEnded, setCodeEnded] = useState<string | null>(null);
   const pressing = press === 'pressing' || press === 'bank';
+  /** Nothing in the Summary or the form can change while a press may still be going through (D21). */
+  const locked = pressing || press === 'slow';
   const pendingAttempt = useRef<string | null>(null);
+  /** The press's own request, until it settles: a late answer still counts (S7.3). */
+  const inFlight = useRef<Promise<unknown> | null>(null);
+  const pressRef = useRef<Press>(press);
+  useEffect(() => {
+    pressRef.current = press;
+  });
 
   // ---------------------------------------------------------------- refs for focus
   const formRef = useRef<HTMLFormElement>(null);
@@ -339,6 +361,18 @@ export function Checkout({
   const undoRef = useRef<HTMLButtonElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const dialogOpener = useRef<HTMLElement | null>(null);
+  /** An address just saved or edited: focus its radio once the refreshed list shows it (2.8). */
+  const focusSaved = useRef<string | null>(null);
+  useEffect(() => {
+    const id = focusSaved.current;
+    if (!id) return;
+    const radio = addressGroupRef.current?.querySelector<HTMLInputElement>(
+      `input[type="radio"][value="${CSS.escape(id)}"]`,
+    );
+    if (!radio) return;
+    focusSaved.current = null;
+    radio.focus();
+  });
   const focusUndo = useRef(false);
 
   // ---------------------------------------------------------------- contact form
@@ -369,16 +403,13 @@ export function Checkout({
     const attempt = readAttempt();
     if (attempt?.pressed) {
       void (async () => {
-        const outcome = await callAction(() => attemptStatusAction({ attemptKey: attempt.key }));
-        if (!outcome.ok) return;
-        if (outcome.data.kind === 'placed') {
-          const here = {
-            orderId: outcome.data.orderId,
-            number: outcome.data.number,
-            confirming: false,
-          };
+        const status = await fetchAttemptStatus(attempt.key);
+        if (!status) return;
+        if (status.kind === 'placed') {
+          const here = { orderId: status.orderId, number: status.number, confirming: false };
           writePlacedHere(here);
           setPlaced(here);
+          forgetOrderChoices();
           cart.clear();
           cart.setPlaced({ orderId: here.orderId, number: here.number });
         }
@@ -388,6 +419,52 @@ export function Checkout({
     // Once, on arrival.
     // oxlint-disable-next-line react/exhaustive-deps
   }, []);
+
+  // Back here while a card payment this tab made is still being confirmed: ask until the server
+  // knows (every 2 s for a minute, and when the tab is shown again), then say so (S7.4, B7).
+  const confirmingId = placed?.confirming ? placed.orderId : null;
+  useEffect(() => {
+    if (!confirmingId) return undefined;
+    let stopped = false;
+    const started = Date.now();
+    const ask = async () => {
+      const outcome = await callAction(() =>
+        orderStatusAction({ orderId: confirmingId, confirmed: true }),
+      );
+      if (stopped || !outcome.ok || outcome.data.status === 'PENDING_PAYMENT') return;
+      stopped = true;
+      const view = outcome.data;
+      if (view.status === 'FAILED' || view.status === 'CANCELLED') {
+        writePlacedHere(null);
+        setPlaced(null);
+        return;
+      }
+      const here = { orderId: view.id, number: view.number, confirming: false };
+      writePlacedHere(here);
+      setPlaced(here);
+      if (takeClearCart(view.id)) {
+        cart.clear();
+        cart.setPlaced({ orderId: view.id, number: view.number });
+      }
+      announce(`Order ${view.number} is placed.`);
+    };
+    const timer = setInterval(() => {
+      if (Date.now() - started > 60_000) clearInterval(timer);
+      else void ask();
+    }, 2000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void ask();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    void ask();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // `cart` is a fresh object each render; the effect is about the order only.
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [confirmingId]);
 
   useEffect(() => {
     if (!choicesLoaded) return;
@@ -429,7 +506,14 @@ export function Checkout({
     current.dishActions.learn(
       answer.lines.flatMap((line) =>
         line.dish && line.unitPriceCents !== null
-          ? [{ id: line.menuItemId, ...line.dish, unitPriceCents: line.unitPriceCents }]
+          ? [
+              {
+                id: line.menuItemId,
+                ...line.dish,
+                unitPriceCents: line.unitPriceCents,
+                flavorsOffered: line.flavorsOffered,
+              },
+            ]
           : [],
       ),
     );
@@ -689,6 +773,7 @@ export function Checkout({
     summaryNotices.push({
       key: 'offline',
       variant: 'info',
+      icon: WifiOff,
       text: "You're offline. Your total will update when you're back online.",
     });
   }
@@ -717,8 +802,7 @@ export function Checkout({
   const noAddress = !addressId || blockers.includes('outside');
   const cashBlocked =
     quote && !quote.cashAllowed ? cashLimitMessage(quote.totalCents, quote.cashLimitCents) : null;
-  const newCard =
-    method === 'card' && (page.savedCards.length === 0 || demo || cardChoice === NEW_CARD);
+  const newCard = method === 'card' && (demo || cardChoice === NEW_CARD);
 
   const payContent = ((): PayBarContent => {
     if (press === 'slow') {
@@ -802,7 +886,22 @@ export function Checkout({
   })();
 
   // ---------------------------------------------------------------- pressing (design 2.17)
-  const goToOrder = (orderId: string) => router.replace(orderHref(orderId));
+  const goToOrder = (orderId: string) => {
+    // While the press itself is still out, Next would hold a client navigation behind it; a full
+    // load leaves at once (S7.3).
+    if (inFlight.current) window.location.replace(orderHref(orderId));
+    else router.replace(orderHref(orderId));
+  };
+
+  /** The tip, the typed amount and the kitchen note belonged to the order just placed (S4.1). */
+  function forgetOrderChoices() {
+    writeChoices({ ...NO_CHOICES, summaryOpen });
+    setTile(NO_CHOICES.tip);
+    setOtherText('');
+    setLastValidTip(null);
+    note.current = '';
+    form.setFieldValue('kitchenNote', '');
+  }
 
   const placedNow = (orderId: string, number: string, confirming: boolean) => {
     const here = { orderId, number, confirming };
@@ -810,12 +909,15 @@ export function Checkout({
     writeAttempt(null);
     markArrival(orderId);
     setPlaced(here);
+    forgetOrderChoices();
     if (confirming) {
       markConfirming(orderId);
       markClearCart(orderId);
     } else {
       cart.clear();
       cart.setPlaced({ orderId, number });
+      // The order page empties the cart too, in case a full load leaves before it is saved.
+      markClearCart(orderId);
     }
     goToOrder(orderId);
   };
@@ -840,13 +942,17 @@ export function Checkout({
   };
 
   async function checkAttempt() {
-    const key = pendingAttempt.current;
+    // The press that timed out keeps its key; after a reload it is still in this tab's storage.
+    const key = pendingAttempt.current ?? readAttempt()?.key ?? null;
     if (!key || checking) return;
     setChecking(true);
-    const outcome = await callAction(() => attemptStatusAction({ attemptKey: key }));
+    // A plain fetch, not a Server Action: Next runs actions one at a time, so an action would wait
+    // behind the press it is asking about.
+    const status = await fetchAttemptStatus(key);
     setChecking(false);
-    if (!outcome.ok) return;
-    const status = outcome.data;
+    if (!status || pressRef.current !== 'slow') return;
+    // Not there yet while the press itself is still out: keep checking, never offer a fresh Pay.
+    if (status.kind === 'notFound' && inFlight.current) return;
     if (status.kind === 'placed') placedNow(status.orderId, status.number, false);
     else if (status.kind === 'awaitingPayment') goToOrder(status.orderId);
     else if (status.kind === 'failed') {
@@ -884,6 +990,12 @@ export function Checkout({
 
   /** Refusals at the press: each shows where it belongs (design 2.19). */
   function refused(error: ActionFailure) {
+    // No answer in 15 s, or the connection dropped: the status panel asks again with the same
+    // key, so the key stays (S7.3, D22).
+    if (error.code === 'TIMEOUT' || error.code === 'OFFLINE') {
+      setPress('slow');
+      return;
+    }
     backToForm();
     const newQuote = quoteOf(error);
     if (newQuote) queryClient.setQueryData(quoteQueryKey(requestKey(request)), newQuote);
@@ -1002,10 +1114,6 @@ export function Checkout({
       case 'UNAVAILABLE':
         writeAttempt(null);
         alertPayment({ key: 'unavailable', variant: 'error', text: error.message }, error.message);
-        return;
-      case 'TIMEOUT':
-      case 'OFFLINE':
-        setPress('slow');
         return;
       default:
         showNotSent();
@@ -1149,7 +1257,23 @@ export function Checkout({
     };
 
     setPress('pressing');
-    const outcome = await callAction(() => placeOrderAction(input));
+    const call = placeOrderAction(input);
+    inFlight.current = call;
+    // An answer that comes after the 15 s panel took over: show it, or let the check move on.
+    void (async () => {
+      let raw: Awaited<typeof call> | null = null;
+      try {
+        raw = await call;
+      } catch {
+        // Never reached the server: the next check says so.
+      }
+      if (inFlight.current === call) inFlight.current = null;
+      if (pressRef.current !== 'slow' || pendingAttempt.current !== attemptKey) return;
+      const late = raw ? readActionResult(raw) : null;
+      if (late && !late.ok) refused(late.error);
+      else void checkRef.current();
+    })();
+    const outcome = await callAction(() => call);
     if (!outcome.ok) {
       refused(outcome.error);
       return;
@@ -1326,7 +1450,7 @@ export function Checkout({
           }}
           editCartRef={editCartRef}
           loading={!isReady}
-          inert={pressing}
+          inert={locked}
         />
 
         <div className="lg:col-start-1 lg:row-start-2 xl:col-span-5">
@@ -1335,7 +1459,7 @@ export function Checkout({
             id="checkout"
             method="post"
             noValidate
-            inert={pressing}
+            inert={locked}
             onSubmit={(event) => {
               // Enter in a field never places the order (D47): only the pay button does.
               event.preventDefault();
@@ -1432,7 +1556,7 @@ export function Checkout({
               card={
                 stripeKey ? (
                   <CardSection
-                    savedCards={page.savedCards.filter((saved) => !goneCards.has(saved.id))}
+                    savedCards={listedCards}
                     onRemoveCard={(saved, button) => {
                       cardOpener.current = button;
                       setRemovingCard(saved);
@@ -1484,10 +1608,13 @@ export function Checkout({
           cart.setAddressId(address.id);
           setDeliverError(null);
           dialogOpener.current = null;
+          focusSaved.current = address.id;
           announce(edited ? 'Address updated' : 'Address saved');
           router.refresh();
         }}
         returnFocus={() => {
+          // Saved: the effect above focuses the new card when the refreshed list has it.
+          if (focusSaved.current) return;
           const opener = dialogOpener.current;
           if (opener?.isConnected) opener.focus();
           else

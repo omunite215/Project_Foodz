@@ -130,3 +130,14 @@ export const forgetConfirming = (orderId: string) => {
 /** The cart is emptied once this card order is placed (B16), on the order page. */
 export const markClearCart = (orderId: string) => write(KEYS.clearCart, orderId);
 export const takeClearCart = (orderId: string) => takeId(KEYS.clearCart, orderId);
+
+// ------------------------------------------------------------------ the session ends (F3 S2)
+
+/**
+ * Forgets everything checkout keeps for this tab: the kitchen note and tip, the attempt key, the
+ * order it just placed and the order page's one-time flags. Called whenever the session ends or
+ * changes, so the next person on the tab finds none of it.
+ */
+export function forgetCheckout() {
+  for (const key of Object.values(KEYS)) write(key, null);
+}

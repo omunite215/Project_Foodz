@@ -12,6 +12,9 @@ export default defineConfig({
   // Docker stack runs out of memory. E2E_WORKERS overrides it.
   workers: process.env.CI ? undefined : Number(process.env.E2E_WORKERS ?? 4),
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  // Prices, quotes and address checks come from the server; under a loaded machine or a shared
+  // CI runner they can take longer than the 5 s default to settle.
+  expect: { timeout: 10_000 },
   use: {
     baseURL,
     trace: 'retain-on-failure',

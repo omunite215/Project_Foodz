@@ -199,6 +199,22 @@ const DOTS: Record<TimelineKind, { icon: LucideIcon; className: string }> = {
   delivered: { icon: Check, className: 'bg-brand-strong' },
 };
 
+/**
+ * A time window or a minutes range with its unit kept on one line: "Arriving about 6:12–6:22 am"
+ * may wrap before the times, never inside them.
+ */
+export function RangeText({ text }: { text: string }) {
+  const parts = /^(.*?)(\d[\d:]*–\d[\d:]*\s(?:am|pm|min))(.*)$/.exec(text);
+  if (!parts) return <>{text}</>;
+  return (
+    <>
+      {parts[1]}
+      <span className="whitespace-nowrap">{parts[2]}</span>
+      {parts[3]}
+    </>
+  );
+}
+
 export function OrderStatusCard({
   view,
   state,
@@ -238,7 +254,9 @@ export function OrderStatusCard({
           </span>
           <div className="min-w-0">
             <p className="text-body-3 font-semibold text-neutral-1 tabular-nums md:text-body-2">
-              <span aria-hidden>{arriving.text}</span>
+              <span aria-hidden>
+                <RangeText text={arriving.text} />
+              </span>
               <span className="sr-only">{arriving.spoken}</span>
             </p>
             {state === 'placed' ? (
@@ -413,13 +431,6 @@ export function Receipt({ view, state }: { view: OrderView; state: OrderState })
             value={formatPrice(breakdown.tax.cents)}
           />
           <Row label="Tip for your courier" value={formatPrice(breakdown.tipCents)} />
-          {refunded > 0 && view.payment.card ? (
-            <Row
-              label={`Refunded to ${view.payment.card.label}`}
-              value={<span className="text-brand-strong">{discountText(refunded)}</span>}
-              spoken={discountLabel(refunded)}
-            />
-          ) : null}
         </dl>
         <div className="mt-2 flex items-baseline justify-between gap-4 rounded-lg bg-neutral-7 px-3 py-2">
           <span className="text-body-4 font-medium text-neutral-2">Total</span>
@@ -427,6 +438,16 @@ export function Receipt({ view, state }: { view: OrderView; state: OrderState })
             {formatPrice(breakdown.totalCents)}
           </span>
         </div>
+        {/* After the total, which stays what was charged, so the column above adds up (3.6). */}
+        {refunded > 0 && view.payment.card ? (
+          <dl className="mt-2">
+            <Row
+              label={`Refunded to ${view.payment.card.label}`}
+              value={<span className="text-brand-strong">{discountText(refunded)}</span>}
+              spoken={discountLabel(refunded)}
+            />
+          </dl>
+        ) : null}
         <p className="mt-4 flex items-center gap-2 text-body-5 text-neutral-1">
           <PayIcon className="size-4 shrink-0" aria-hidden />
           {pay.text === pay.spoken ? (
@@ -476,7 +497,10 @@ export function DeliveryCard({ view }: { view: OrderView }) {
         ) : null}
         <li className="flex gap-2">
           <Phone className="mt-1 size-4 shrink-0 text-neutral-3" aria-hidden />
-          <span>Your courier will call {contact.phoneDisplay} if needed.</span>
+          <span>
+            Your courier will call <span className="whitespace-nowrap">{contact.phoneDisplay}</span>{' '}
+            if needed.
+          </span>
         </li>
         <li className="flex gap-2">
           <UserRound className="mt-1 size-4 shrink-0 text-neutral-3" aria-hidden />

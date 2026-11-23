@@ -389,6 +389,10 @@ export function quote(input: QuoteCalcInput): QuoteFigures {
   // Tax: the food after the food promo only. Delivery and tip are never taxed (U1).
   const taxCents = roundHalfUp((subtotalCents - foodDiscountCents) * settings.taxRateBps, 10_000);
   const deliveryChargeCents = feeCents === null ? 0 : feeCents - deliveryDiscountCents;
+  // With free delivery applied, no fee will be added wherever inside the area it goes, so the
+  // total is final before the address is known. Outside the area there is no delivery at all.
+  const deliveryFree = promo?.status === 'applied' && promo.freeDelivery;
+  const final = delivery.status === 'inside' || (delivery.status === 'unknown' && deliveryFree);
 
   return {
     lines,
@@ -399,7 +403,7 @@ export function quote(input: QuoteCalcInput): QuoteFigures {
     tax: { rateBps: settings.taxRateBps, cents: taxCents },
     tipCents,
     totalCents: subtotalCents - foodDiscountCents + deliveryChargeCents + taxCents + tipCents,
-    totalKind: delivery.status === 'inside' ? 'final' : 'beforeDelivery',
+    totalKind: final ? 'final' : 'beforeDelivery',
   };
 }
 

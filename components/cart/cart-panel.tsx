@@ -4,7 +4,7 @@ import { Trash2, X } from 'lucide-react';
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import { type Ref, useEffect, useId, useRef, useState } from 'react';
-import type { DeliveryTargetInput, Quote, QuoteLine } from '@/server/modules/cart/schema';
+import type { Quote, QuoteLine } from '@/server/modules/cart/schema';
 import { dishHref } from '@/server/modules/menu/urls';
 import { EmptyState } from '@/components/states/empty-state';
 import {
@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { SheetTitle } from '@/components/ui/sheet';
 import { announce } from '@/lib/announce';
 import {
+  CHECKOUT_REASONS,
   lineSuffix,
   linesLabel,
   removedSoldOutText,
@@ -34,7 +35,7 @@ import {
   useCartActions,
   useCartMeta,
 } from '@/lib/data/cart';
-import { useCartDishActions, useCartDishes } from '@/lib/data/cart-dishes';
+import { useCartDishActions, useCartDishes, wereOffered } from '@/lib/data/cart-dishes';
 import { plural } from '@/lib/format';
 import { signInFor } from '@/lib/sign-in-reason';
 import { useOnline } from '@/lib/use-online';
@@ -50,7 +51,7 @@ import {
 import { clearReorderLeftOut, useReorderLeftOut } from '@/lib/reorder-notice';
 import { useUnpaidOrder } from './use-unpaid-order';
 import { CheckoutBar } from './checkout-bar';
-import { setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
+import { deliveryTarget, setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
 import { DeliveryBlock, useSavedAddresses } from './delivery-block';
 import { PriceBreakdown } from './price-breakdown';
 import { PromoSection } from './promo';
@@ -118,9 +119,12 @@ export function CartPanel({
   const online = useOnline();
   // Signed in with saved addresses, the saved default wins over an address checked before
   // signing in (2.15, S2.6), and "Change" lists the saved ones. With none saved, a checked
-  // address still counts.
-  const addressBook = useSavedAddresses(signedIn);
-  const unpaidOrder = useUnpaidOrder(signedIn).data ?? null;
+  // address still counts. The book is only needed to settle that, so it isn't fetched otherwise:
+  // server actions run one at a time and it would hold up the quote.
+  const addressBook = useSavedAddresses(signedIn && storedPoint !== null);
+  // Signed in only: a query that is switched off still answers with what it cached.
+  const unpaidQuery = useUnpaidOrder(signedIn);
+  const unpaidOrder = signedIn ? (unpaidQuery.data ?? null) : null;
   const hasSaved = (addressBook.data?.addresses.length ?? 0) > 0;
   const checked =
     storedPoint && (!signedIn || (addressBook.isFetched && !hasSaved)) ? storedPoint : null;
@@ -133,7 +137,9 @@ export function CartPanel({
   const [dismissed, setDismissed] = useState<ReadonlySet<CartNoticeKind>>(new Set());
   const [removedCount, setRemovedCount] = useState(0);
   const [codeEnded, setCodeEnded] = useState<string | null>(null);
-  const [dropped, setDropped] = useState<ReadonlyMap<string, string[]>>(new Map());
+  const [dropped, setDropped] = useState<
+    ReadonlyMap<string, { flavors: string[]; wereOffered: boolean }>
+  >(new Map());
   /** Where focus goes once the next render is on screen (S7.1, design 2.7, 2.8). */
   const focusTarget = useRef<FocusTarget | null>(null);
   const focusAfter = (target: FocusTarget) => {
@@ -149,34 +155,38 @@ export function CartPanel({
   const emptyCartRef = useRef<HTMLButtonElement>(null);
 
   // ---------------------------------------------------------------- the quote
-  const delivery: DeliveryTargetInput = checked
-    ? { kind: 'point', lat: checked.lat, lng: checked.lng }
-    : signedIn
-      ? meta.addressId
-        ? { kind: 'saved', addressId: meta.addressId }
-        : { kind: 'default' }
-      : { kind: 'none' };
+  const delivery = deliveryTarget({ checked, signedIn, addressId: meta.addressId });
   const baseRequest = { lines: lines.map(toQuoteLine), delivery };
 
   // Answers act on the cart as it is when they arrive.
-  const latest = useRef({ lines, cart, dishActions });
+  const latest = useRef({ lines, cart, dishActions, dishes });
   useEffect(() => {
-    latest.current = { lines, cart, dishActions };
+    latest.current = { lines, cart, dishActions, dishes };
   });
 
   /** What each answer says about the lines: names and photos, dishes gone, extras dropped. */
   const onAnswer = (answer: Quote) => {
     const now = latest.current;
+    // What the dishes offered before this answer: an extra taken off now was offered once, or
+    // never (an edited saved cart).
+    const before = now.dishes;
     now.dishActions.learn(
       answer.lines.flatMap((line) =>
         line.dish && line.unitPriceCents !== null
-          ? [{ id: line.menuItemId, ...line.dish, unitPriceCents: line.unitPriceCents }]
+          ? [
+              {
+                id: line.menuItemId,
+                ...line.dish,
+                unitPriceCents: line.unitPriceCents,
+                flavorsOffered: line.flavorsOffered,
+              },
+            ]
           : [],
       ),
     );
     const byKey = new Map(now.lines.map((line) => [line.key, line]));
     let gone = 0;
-    const newlyDropped = new Map<string, string[]>();
+    const newlyDropped = new Map<string, { flavors: string[]; wereOffered: boolean }>();
     for (const answered of answer.lines) {
       const line = byKey.get(answered.key);
       if (!line) continue;
@@ -184,7 +194,10 @@ export function CartPanel({
         now.cart.remove(line.id);
         gone += 1;
       } else if (answered.droppedFlavors.length > 0) {
-        newlyDropped.set(line.key, answered.droppedFlavors);
+        newlyDropped.set(line.key, {
+          flavors: answered.droppedFlavors,
+          wereOffered: wereOffered(before.get(line.menuItemId), answered.droppedFlavors),
+        });
         now.cart.edit(line.id, { flavors: answered.flavors, note: line.note });
       }
     }
@@ -204,15 +217,25 @@ export function CartPanel({
   const known = quote ?? view.lastQuote;
   const quoted = new Map<string, QuoteLine>((known?.lines ?? []).map((line) => [line.key, line]));
 
-  // The figures she just changed are announced once they settle (S7.3); opening is not.
-  const firstKey = useRef(view.currentKey);
-  const announced = useRef<string | null>(null);
+  // The figures she just changed are announced once they settle (S7.3); opening is not. Each
+  // settled request is compared with the one before it, so a change that puts the cart back the
+  // way it opened (an Undo, + then −) still ends on a total.
+  const lastSettled = useRef(view.currentKey);
   useEffect(() => {
     if (!quote || view.status !== 'ready' || view.answeredKey !== view.currentKey) return;
-    if (view.currentKey === firstKey.current || announced.current === view.currentKey) return;
-    announced.current = view.currentKey;
+    if (lastSettled.current === view.currentKey) return;
+    lastSettled.current = view.currentKey;
     announce(totalAnnouncement(quote));
   }, [quote, view.status, view.answeredKey, view.currentKey]);
+
+  // A total that couldn't be worked out is said once, so the last total announced isn't left
+  // standing as if it were current (S2.12, S7.3). Each failure after "Try again" is said again.
+  const lastStatus = useRef(view.status);
+  useEffect(() => {
+    const before = lastStatus.current;
+    lastStatus.current = view.status;
+    if (view.status === 'failed' && before !== 'failed') announce(CHECKOUT_REASONS.failed);
+  }, [view.status]);
 
   // Unit prices shown now; they become the "last shown" ones once the cart closes (B8).
   const shownPrices = new Map(
@@ -266,7 +289,8 @@ export function CartPanel({
       unitCents,
       soldOut,
       priceChange,
-      droppedFlavors: dropped.get(line.key) ?? [],
+      droppedFlavors: dropped.get(line.key)?.flavors ?? [],
+      droppedWereOffered: dropped.get(line.key)?.wereOffered ?? false,
       flavorsOffered: answer ? answer.flavorsOffered : null,
     });
   }

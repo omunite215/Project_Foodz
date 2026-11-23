@@ -5,7 +5,7 @@ import type { UserActor } from '@/server/auth/session';
 import { type DbContext, runAs } from '@/server/db/context';
 import { AppError, demoReadOnly, forbidden, limitReached, unavailable } from '@/server/errors';
 import { enforceRateLimit } from '@/server/security/rate-limit';
-import { deliveryFigures } from '@/server/modules/cart/pricing';
+import { deliveryFigures, distanceTenths } from '@/server/modules/cart/pricing';
 import {
   type AddressWrite,
   checkPoint,
@@ -49,8 +49,12 @@ const notFoundAddress = () => new AppError('NOT_FOUND', 'Address not found.', 40
 const DUPLICATE_WINDOW_MS = 30_000;
 const SEARCH_UNAVAILABLE = "We can't look up addresses right now. Please try again in a minute.";
 
+/**
+ * Kilometres as the customer sees them, rounded to 0.1 km exactly as the cart's fee is (the
+ * distance itself always comes from the database, checkPoint or checkSaved).
+ */
 const toKm = (meters: number | null | undefined) =>
-  meters === null || meters === undefined ? 0 : Math.round(meters / 100) / 10;
+  meters === null || meters === undefined ? 0 : distanceTenths(meters) / 10;
 
 const streetOf = (addressText: string) => addressText.split(',')[0]?.trim() || addressText;
 

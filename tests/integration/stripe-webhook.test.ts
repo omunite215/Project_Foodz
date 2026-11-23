@@ -411,8 +411,18 @@ describe('a payment after the order expired (U10, S9.5)', () => {
       });
       expect(audit).toMatchObject({
         actorRole: 'system',
-        data: expect.objectContaining({ amountCents: 5397, reason: 'late-payment' }),
+        data: expect.objectContaining({
+          amountCents: 5397,
+          reason: 'late-payment',
+          refundId: fake.refunds[0]?.id,
+        }),
       });
+      // One row per Stripe refund, however often the job runs (security S15).
+      expect(
+        await migrator.auditLog.count({
+          where: { action: 'order.refund-issued', targetId: orderId },
+        }),
+      ).toBe(1);
 
       // Stripe's own refund event later changes nothing and sends nothing more.
       const refunded = await fake.retrieveIntent(intentId);

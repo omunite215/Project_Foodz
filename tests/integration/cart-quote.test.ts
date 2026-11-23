@@ -4,7 +4,7 @@ import { v7 as uuid } from 'uuid';
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { PrismaClient } from '@/server/db/generated/client';
 import { redis } from '@/server/redis';
-import { seedCatalog } from '../../prisma/seeding';
+import { FANEUIL_HALL, seedCatalog } from '../../prisma/seeding';
 import { type Browser, nextHeaders, newBrowser, switchBrowser } from './support/browser';
 
 /*
@@ -419,6 +419,39 @@ describe('where it goes (S2.6 to S2.8, U2)', () => {
     });
     expect(outside.totalKind).toBe('beforeDelivery');
     expect(outside.checkoutBlockers).toContain('outside');
+  });
+
+  it('gives one address one distance and fee, saved or checked as a guest (F6)', async () => {
+    // The point the address search gives for 1 Faneuil Hall Square, as the seed now saves it.
+    await signUp('same-point');
+    const saved = await addresses.createAddressAction({ ...PLACES.faneuil, ...FANEUIL_HALL });
+    const savedId = saved.data!.id;
+    const asSaved = await quote({
+      lines: cartA(),
+      delivery: { kind: 'saved', addressId: savedId },
+    });
+    const book = (await addresses.listAddressesAction())?.data;
+
+    guest();
+    const asGuest = await quote({ lines: cartA(), delivery: { kind: 'point', ...FANEUIL_HALL } });
+    const checked = (
+      await addresses.guestDeliveryCheckAction({ ...FANEUIL_HALL, line1: '1 Faneuil Hall Square' })
+    )?.data;
+
+    expect(asSaved.delivery).toMatchObject({ kind: 'saved', distanceKm: 1.4, feeCents: 269 });
+    expect(asGuest.delivery).toMatchObject({ kind: 'point', distanceKm: 1.4, feeCents: 269 });
+    expect(checked).toMatchObject({ deliverable: true, distanceKm: 1.4, feeCents: 269 });
+    expect(book?.addresses.find((address) => address.id === savedId)?.distanceKm).toBe(1.4);
+    expect(asGuest.totalCents).toBe(asSaved.totalCents);
+  });
+
+  it('a guest with FREEDELIVERY and no address: delivery free, the total final (D4)', async () => {
+    guest();
+    const q = await quote({ lines: cartA(), code: 'FREEDELIVERY' });
+    expect(q.promo).toMatchObject({ status: 'applied', freeDelivery: true, amountCents: 0 });
+    expect(q.delivery).toMatchObject({ kind: 'none', status: 'unknown', feeCents: null });
+    expect([q.totalCents, q.totalKind]).toEqual([5133, 'final']);
+    expect(q.checkoutBlockers).not.toContain('outside');
   });
 
   it('never uses another customer’s saved address, nor a saved address for a guest', async () => {

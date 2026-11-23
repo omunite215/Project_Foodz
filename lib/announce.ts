@@ -27,32 +27,50 @@ export function subscribeToAnnouncements(listener: Listener): () => void {
 }
 
 /** Messages this close together are read as one, in the order they came. */
-export const GATHER_MS = 50;
+export const ANNOUNCEMENT_GATHER_MS = 50;
+export const GATHER_MS = ANNOUNCEMENT_GATHER_MS;
 
 /**
- * Gathers messages for one live region: messages within 50 ms are read together (one change
- * can say two things, "KBBQ5 applied…" and the new total), a repeat in the same batch is read
- * once, and the region is cleared first so the same message said twice is read twice.
+ * How long a message stays in the region once it has been handed to screen readers. They queue
+ * what they were given, so emptying it doesn't cut the reading short; it only stops someone
+ * browsing the page later from meeting words that no longer hold ("4 dishes" after Clear all).
+ */
+export const ANNOUNCEMENT_CLEAR_MS = 7000;
+
+/**
+ * What one live region holds over time. `write` is called with '' first (so a repeated message
+ * is read again), then with every message gathered in the next 50 ms (one change can say two
+ * things, "KBBQ5 applied…" and the new total, and a repeat in the same batch is read once), then
+ * with '' again once it has been read.
  */
 export function createAnnouncementQueue(
   write: (text: string) => void,
   timers: Pick<typeof globalThis, 'setTimeout' | 'clearTimeout'> = globalThis,
 ) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let gather: ReturnType<typeof setTimeout> | undefined;
+  let clear: ReturnType<typeof setTimeout> | undefined;
   let pending: string[] = [];
+  const stop = () => {
+    timers.clearTimeout(gather);
+    timers.clearTimeout(clear);
+    pending = [];
+  };
   return {
     push(message: string) {
       if (message && !pending.includes(message)) pending.push(message);
       write('');
-      timers.clearTimeout(timer);
-      timer = timers.setTimeout(() => {
+      timers.clearTimeout(gather);
+      timers.clearTimeout(clear);
+      gather = timers.setTimeout(() => {
         write(pending.join(' '));
         pending = [];
-      }, GATHER_MS);
+        clear = timers.setTimeout(() => write(''), ANNOUNCEMENT_CLEAR_MS);
+      }, ANNOUNCEMENT_GATHER_MS);
     },
-    stop() {
-      timers.clearTimeout(timer);
-      pending = [];
-    },
+    stop,
+    dispose: stop,
   };
 }
+
+/** The polite region's queue (the name F3 and F4 use). */
+export const announcementQueue = (show: (text: string) => void) => createAnnouncementQueue(show);

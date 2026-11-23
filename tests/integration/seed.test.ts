@@ -8,6 +8,7 @@ import { runAs } from '@/server/db/context';
 import { PrismaClient } from '@/server/db/generated/client';
 import {
   DEMO_ACCOUNTS,
+  FANEUIL_HALL,
   SAMPLE_ACCOUNTS,
   SAMPLE_STAFF,
   sampleAccountsRefusal,
@@ -29,6 +30,7 @@ import {
   FAQ_CASH_ANSWER,
   FAQ_COUPON_ANSWER,
   FREE_DELIVERY_BAR,
+  PRIVACY_WHO_SEES_IT,
   SEED_CORRECTIONS,
   WELCOME10_DESCRIPTION,
 } from '../../prisma/seeding/content';
@@ -75,6 +77,16 @@ const faqHtml = async () =>
     await migrator.contentPage.findUniqueOrThrow({
       where: { slug: 'faq' },
       select: { publishedVersion: { select: { contentHtml: true, version: true } } },
+    })
+  ).publishedVersion!;
+
+const privacyVersion = async () =>
+  (
+    await migrator.contentPage.findUniqueOrThrow({
+      where: { slug: 'privacy' },
+      select: {
+        publishedVersion: { select: { id: true, contentHtml: true, content: true, version: true } },
+      },
     })
   ).publishedVersion!;
 
@@ -290,6 +302,46 @@ describe('F3 cart settings and copy', () => {
       data: { description: '$5 off Korean dishes over $25' },
     });
   });
+
+  it('says what Stripe receives in the Privacy Policy, and publishes it on older databases once (security S14)', async () => {
+    const { privacyWhoSeesIt } = SEED_CORRECTIONS;
+    // A fresh seed already has it.
+    const fresh = await privacyVersion();
+    expect(fresh.contentHtml).toContain('Stripe');
+    expect(fresh.contentHtml).toContain('delivery address');
+
+    // A database seeded before F4 still publishes the old paragraph.
+    await migrator.contentVersion.update({
+      where: { id: fresh.id },
+      data: {
+        contentHtml: fresh.contentHtml.replace(
+          escapeHtml(PRIVACY_WHO_SEES_IT),
+          escapeHtml(privacyWhoSeesIt.from),
+        ),
+        content: JSON.parse(
+          JSON.stringify(fresh.content).replace(PRIVACY_WHO_SEES_IT, privacyWhoSeesIt.from),
+        ),
+      },
+    });
+    expect((await privacyVersion()).contentHtml).not.toContain('Stripe');
+
+    const rerun = {
+      ...config,
+      demoPassword: 'demo-password-2',
+      samplePassword: 'sample-password-2',
+    };
+    const corrected = await seedDatabase(migrator, rerun);
+    expect(corrected.created).toMatchObject({ contentVersions: 1 });
+    const published = await privacyVersion();
+    expect(published.version).toBe(fresh.version + 1);
+    expect(published.contentHtml).toContain(escapeHtml(PRIVACY_WHO_SEES_IT));
+    expect(JSON.stringify(published.content)).toContain(PRIVACY_WHO_SEES_IT);
+
+    // Once: the next run publishes nothing more.
+    const again = await seedDatabase(migrator, rerun);
+    expect(again.created.contentVersions ?? 0).toBe(0);
+    expect((await privacyVersion()).version).toBe(published.version);
+  });
 });
 
 describe('sample customers (local and CI only)', () => {
@@ -377,13 +429,15 @@ describe('sample customers (local and CI only)', () => {
   it('gives the second customer a Work address inside the area, and the demo Home its kind', async () => {
     const work = await migrator.address.findFirstOrThrow({
       where: { user: { email: 'second.customer@foodz.example' } },
-      select: { kind: true, label: true, line1: true, isDefault: true },
+      select: { kind: true, label: true, line1: true, isDefault: true, lat: true, lng: true },
     });
+    // Where the address search puts it, so a guest checking it gets the same distance (F6).
     expect(work).toEqual({
       kind: 'WORK',
       label: 'Work',
       line1: '1 Faneuil Hall Square',
       isDefault: true,
+      ...FANEUIL_HALL,
     });
     const home = await migrator.address.findFirstOrThrow({
       where: { user: { email: 'demo.customer@foodz.example' } },
@@ -471,7 +525,7 @@ describe('F3 fixtures (local and CI only)', () => {
           endsAt: null,
         },
       },
-      delivery: { status: 'inside', distanceMeters: 1300 },
+      delivery: { status: 'inside', distanceMeters: 1400 },
       settings: {
         taxRateBps: 700,
         baseDeliveryFeeCents: 199,

@@ -6,6 +6,8 @@ import {
   discountLabel,
   discountText,
   feeRangeText,
+  freeDeliveryWithoutAddress,
+  type QuoteStatus,
   taxRateText,
 } from '@/lib/cart-text';
 import { formatPrice } from '@/lib/format';
@@ -18,15 +20,7 @@ import { cn } from '@/lib/utils';
  * Reused by F4's checkout summary.
  */
 
-/** Where the quote is (see useQuote). */
-export type QuoteStatus =
-  | 'loading'
-  | 'ready'
-  | 'updating'
-  | 'failed'
-  | 'rateLimited'
-  | 'offline'
-  | 'tooBig';
+export type { QuoteStatus } from '@/lib/cart-text';
 
 /** A money figure: two decimals, tabular, never wrapped; discounts read "minus $4.80". */
 export function Money({
@@ -119,7 +113,9 @@ export function PriceBreakdown({
 
   const promo = shown?.promo?.status === 'applied' ? shown.promo : null;
   const delivery = shown?.delivery ?? quote?.delivery ?? null;
-  const unknownDelivery = !delivery || delivery.status === 'unknown';
+  // A free-delivery code with no address yet: free wherever it goes, so no range (D4).
+  const freeAnywhere = quote ? freeDeliveryWithoutAddress(quote) : false;
+  const unknownDelivery = (!delivery || delivery.status === 'unknown') && !freeAnywhere;
 
   let deliveryValue: ReactNode = null;
   if (shown && delivery) {
@@ -130,6 +126,8 @@ export function PriceBreakdown({
           <span className="sr-only">not available</span>
         </>
       );
+    } else if (freeAnywhere) {
+      deliveryValue = <span className="text-brand-strong">Free</span>;
     } else if (delivery.status === 'unknown' || delivery.feeCents === null) {
       deliveryValue = feeRangeText(delivery.feeRange);
     } else if (promo?.freeDelivery) {
@@ -163,6 +161,9 @@ export function PriceBreakdown({
         />
         {promo ? (
           <Row
+            // Green figures stay at full strength while a new total is on its way: at 75 % they
+            // drop under 4.5:1. The neutral ones still dim.
+            dim={false}
             label={`Promo · ${promo.code}`}
             value={
               promo.freeDelivery ? (
@@ -171,7 +172,6 @@ export function PriceBreakdown({
                 <Money cents={promo.foodDiscountCents} negative className="text-brand-strong" />
               )
             }
-            dim={dim}
           />
         ) : null}
         <Row
@@ -186,7 +186,7 @@ export function PriceBreakdown({
             </>
           }
           value={show(deliveryValue)}
-          dim={dim}
+          dim={dim && !freeAnywhere && !promo?.freeDelivery}
         />
         <Row
           label={quote ? `Tax (${taxRateText(quote.tax.rateBps)})` : 'Tax'}

@@ -34,6 +34,11 @@ export const cartDishSchema = z.object({
     .nullable(),
   /** The last unit price shown to the customer. */
   priceCents: z.int().min(0),
+  /**
+   * The extras the dish offered when last seen. Only says whether an extra the server takes off
+   * was once offered ("isn't offered … any more", S3.4) or never was (S1.16).
+   */
+  flavorsOffered: z.array(z.string().min(1).max(40)).max(30).optional(),
 });
 export type CartDish = z.infer<typeof cartDishSchema>;
 
@@ -77,6 +82,19 @@ export interface QuotedDish {
   slug: string;
   image: string | null;
   unitPriceCents: number;
+  flavorsOffered: readonly string[];
+}
+
+const sameList = (a: readonly string[] | undefined, b: readonly string[] | undefined) =>
+  a === b || JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Whether the dish offered every one of these extras the last time it was seen. False when it
+ * never did, or when nothing is known about it (an older saved entry).
+ */
+export function wereOffered(dish: CartDish | undefined, flavors: readonly string[]): boolean {
+  const offered = dish?.flavorsOffered;
+  return offered !== undefined && flavors.every((flavor) => offered.includes(flavor));
 }
 
 export function cartDishActions(client: DbClient) {
@@ -90,11 +108,13 @@ export function cartDishActions(client: DbClient) {
       dishes.insert(parsed.data);
       return;
     }
+    const flavorsOffered = parsed.data.flavorsOffered ?? current.flavorsOffered;
     if (
       current.title === dish.title &&
       current.slug === dish.slug &&
       current.image === dish.image &&
-      current.priceCents === dish.priceCents
+      current.priceCents === dish.priceCents &&
+      sameList(current.flavorsOffered, flavorsOffered)
     ) {
       return;
     }
@@ -103,6 +123,7 @@ export function cartDishActions(client: DbClient) {
       draft.slug = parsed.data.slug;
       draft.image = parsed.data.image;
       draft.priceCents = parsed.data.priceCents;
+      if (flavorsOffered) draft.flavorsOffered = [...flavorsOffered];
     });
   };
 
@@ -125,6 +146,7 @@ export function cartDishActions(client: DbClient) {
           slug: dish.slug,
           image: dish.image,
           priceCents: current ? current.priceCents : dish.unitPriceCents,
+          flavorsOffered: [...dish.flavorsOffered],
         });
       }
     },

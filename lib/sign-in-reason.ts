@@ -104,22 +104,81 @@ export function clearPendingFavorite() {
   session()?.removeItem(PENDING_FAVORITE_KEY);
 }
 
-/** A code that needs a signed-in customer (R5), kept for the return from sign-in. */
-export function writePendingPromo(code: string) {
+/** How long a code waiting for sign-in (R5) is kept: after that she types it again. */
+export const PENDING_PROMO_MS = 30 * 60_000;
+
+const pendingPromoSchema = z.object({
+  code: z.string().regex(/^[^\s<>]{1,32}$/u),
+  /** When it was kept, in ms since the epoch. */
+  at: z.number().finite(),
+});
+
+/**
+ * The code kept for the return from sign-in, while it is fresh: up to 30 minutes old (a minute
+ * of clock skew allowed). Anything else, including a bare code saved before it had a time, is
+ * no code.
+ */
+export function parsePendingPromo(raw: string | null, now: number): string | null {
+  if (!raw) return null;
   try {
-    session()?.setItem(PENDING_PROMO_KEY, code);
+    const parsed = pendingPromoSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return null;
+    const age = now - parsed.data.at;
+    return age <= PENDING_PROMO_MS && age >= -60_000 ? parsed.data.code : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A code that needs a signed-in customer (R5), kept for the return from sign-in. */
+export function writePendingPromo(code: string, now = Date.now()) {
+  try {
+    session()?.setItem(PENDING_PROMO_KEY, JSON.stringify({ code, at: now }));
   } catch {
     // Storage blocked: she types the code again.
   }
 }
 
-export function readPendingPromo(): string | null {
-  const code = session()?.getItem(PENDING_PROMO_KEY) ?? null;
-  return code && /^[^\s<>]{1,32}$/u.test(code) ? code : null;
+/** The kept code while it is fresh (read during render, so it never writes). */
+export function readPendingPromo(now = Date.now()): string | null {
+  return parsePendingPromo(session()?.getItem(PENDING_PROMO_KEY) ?? null, now);
 }
 
 export function clearPendingPromo() {
-  session()?.removeItem(PENDING_PROMO_KEY);
+  try {
+    session()?.removeItem(PENDING_PROMO_KEY);
+  } catch {
+    // Storage blocked: there is nothing kept to forget.
+  }
+}
+
+// ------------------------------------------------------------------ the notice on the form
+
+const REASON_ENDINGS: Record<SignInReason, { plain: string; named: (name: string) => string }> = {
+  checkout: {
+    plain: 'check out. Your cart is saved.',
+    named: () => 'check out. Your cart is saved.',
+  },
+  promo: { plain: 'use your promo code.', named: (code) => `use ${code}.` },
+  favorite: {
+    plain: 'save this dish to your favorites.',
+    named: (title) => `save ${title} to your favorites.`,
+  },
+};
+
+/**
+ * Why she was sent to the form (design 1.3): "Sign in to use WELCOME10." on /sign-in, and
+ * "Create an account to use WELCOME10." on /sign-up. `name` is the code or dish this tab kept,
+ * never anything from the address.
+ */
+export function reasonNoticeText(
+  reason: SignInReason,
+  page: '/sign-in' | '/sign-up',
+  name: string | null,
+): string {
+  const lead = page === '/sign-up' ? 'Create an account to' : 'Sign in to';
+  const ending = REASON_ENDINGS[reason];
+  return `${lead} ${name ? ending.named(name) : ending.plain}`;
 }
 
 /** The cart opens again on return from sign-in (B1, S4.8): set before leaving, read once. */
