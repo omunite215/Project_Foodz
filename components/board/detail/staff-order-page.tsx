@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { StaffOrderDetail } from '@/server/modules/board/schema';
 import { BackLink } from '@/components/account/back-link';
-import { AdminPage } from '@/components/admin/admin-page';
+import { AdminPage, useSessionPhase } from '@/components/admin/admin-page';
 import { SignedOutOverlay } from '@/components/admin/signed-out-overlay';
 import { useStaffShell } from '@/components/admin/staff-shell-context';
 import { StaffOrderDetailView, useStaffOrderDetail } from './staff-order-detail';
@@ -14,8 +14,9 @@ import { StaffOrderDetailView, useStaffOrderDetail } from './staff-order-detail'
  */
 export function StaffOrderPage({ initial }: { initial: StaffOrderDetail }) {
   const shell = useStaffShell();
-  const detail = useStaffOrderDetail(initial.id, initial);
   const [signedOut, setSignedOut] = useState(false);
+  const sessionEnded = useSessionPhase(shell.sessionExpiresAt) === 'ended';
+  const detail = useStaffOrderDetail(initial.id, initial, !signedOut && !sessionEnded);
   const data = detail.data ?? initial;
 
   return (
@@ -34,7 +35,7 @@ export function StaffOrderPage({ initial }: { initial: StaffOrderDetail }) {
           />
         </div>
       </div>
-      {signedOut ? <SignedOutOverlay /> : null}
+      {signedOut || sessionEnded ? <SignedOutOverlay /> : null}
     </AdminPage>
   );
 }

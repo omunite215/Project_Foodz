@@ -83,8 +83,14 @@ async function readDetail(orderId: string): Promise<StaffOrderDetail> {
 }
 
 /** The detail, refetched on every `private-ops` event for this order (A10.4). */
-export function useStaffOrderDetail(orderId: string, initial?: StaffOrderDetail) {
+export function useStaffOrderDetail(
+  orderId: string,
+  initial?: StaffOrderDetail,
+  /** False once the session is over: the subscriptions close (security note S21). */
+  live = true,
+) {
   const hydrated = useHydrated();
+  const listen = hydrated && live;
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: detailKey(orderId),
@@ -94,12 +100,10 @@ export function useStaffOrderDetail(orderId: string, initial?: StaffOrderDetail)
     retry: (count, error) => !(error instanceof DetailNotFound) && count < 1,
   });
   const refetch = () => void queryClient.invalidateQueries({ queryKey: detailKey(orderId) });
-  useChannelEvent(hydrated ? channels.ops : null, 'order.board-changed', (event) => {
+  useChannelEvent(listen ? channels.ops : null, 'order.board-changed', (event) => {
     if (event.orderId === orderId) refetch();
   });
-  useChannelEvent(hydrated ? channels.order(orderId) : null, 'order.status-changed', () =>
-    refetch(),
-  );
+  useChannelEvent(listen ? channels.order(orderId) : null, 'order.status-changed', () => refetch());
   return query;
 }
 
