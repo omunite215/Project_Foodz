@@ -371,11 +371,15 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
 
       count(
         'contentVersions',
-        await correctFaqAnswer(tx, admin.id, now, SEED_CORRECTIONS.faqCouponAnswer),
+        await correctParagraph(tx, 'faq', admin.id, now, SEED_CORRECTIONS.faqCouponAnswer),
       );
       count(
         'contentVersions',
-        await correctFaqAnswer(tx, admin.id, now, SEED_CORRECTIONS.faqCashAnswer),
+        await correctParagraph(tx, 'faq', admin.id, now, SEED_CORRECTIONS.faqCashAnswer),
+      );
+      count(
+        'contentVersions',
+        await correctParagraph(tx, 'privacy', admin.id, now, SEED_CORRECTIONS.privacyWhoSeesIt),
       );
 
       // -------------------------------------------------------------- blog
@@ -611,18 +615,20 @@ async function completePastOrderSnapshot(tx: Tx) {
 }
 
 /**
- * FAQ answers earlier seeds published that a feature changed (coupons in F3, cash in F4). When
- * the published version still has the old sentence, a new version with the new one is
- * published, the way the CMS would.
+ * Paragraphs earlier seeds published that a feature changed (FAQ answers for coupons in F3 and
+ * cash in F4, the Privacy Policy's "Who sees it" for Stripe in F4). When the published version
+ * still has the old paragraph, a new version with the new one is published, the way the CMS
+ * would; a page someone edited since is left alone.
  */
-async function correctFaqAnswer(
+async function correctParagraph(
   tx: Tx,
+  slug: string,
   publishedById: string,
   now: Date,
   { from, to }: { from: string; to: string },
 ) {
   const page = await tx.contentPage.findUnique({
-    where: { slug: 'faq' },
+    where: { slug },
     select: {
       id: true,
       publishedVersion: { select: { title: true, content: true, contentHtml: true } },
