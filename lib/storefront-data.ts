@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { getActor } from '@/server/auth/session';
+import { getActor, getSession } from '@/server/auth/session';
 import { CampaignPlacement } from '@/server/db/enums';
 import { logger } from '@/server/logger';
 import { getMyFavoriteIds } from '@/server/modules/favorites/service';
@@ -15,6 +15,21 @@ import type { CampaignBanner, StoreStatus } from '@/server/modules/menu/schema';
  * The shell must render even when the database does not answer: these return null on failure
  * and the page shows its "unavailable" state instead of an error page.
  */
+
+/**
+ * The session as the shells need it, read on the server and never through the rate-limited
+ * /api/auth routes, so a throttled client can never flip the header to "Sign in" (S2.1). If the
+ * read fails, the shell still renders (signed out) and the failure is logged.
+ */
+export const loadSignedIn = cache(async () => {
+  try {
+    const session = await getSession();
+    return session && !session.user.banned ? session : null;
+  } catch (error) {
+    logger.error({ err: error }, 'session unavailable');
+    return null;
+  }
+});
 
 /** Open/closed state, hours, contact details and footer links; null when unavailable. */
 export const loadStoreStatus = cache(async (): Promise<StoreStatus | null> => {

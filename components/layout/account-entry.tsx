@@ -4,6 +4,7 @@ import {
   ChevronDown,
   CircleUserRound,
   Heart,
+  LayoutDashboard,
   LogOut,
   MapPin,
   Receipt,
@@ -32,6 +33,8 @@ export interface HeaderAccount {
   fullName: string;
   email: string;
   isDemo: boolean;
+  /** Staff see "Staff tools" first (F5 A1.8); customers and couriers never do. */
+  staffTools: boolean;
 }
 
 /** The "Sign in" link, returning to this page afterwards. */
@@ -131,6 +134,17 @@ function AccountMenu({ account }: { account: HeaderAccount }) {
               </span>
             ) : null}
           </DropdownMenuLabel>
+          {account.staffTools ? (
+            <>
+              <DropdownMenuItem asChild>
+                <Link href="/admin">
+                  <LayoutDashboard className="text-neutral-3" aria-hidden />
+                  Staff tools
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           {MENU_LINKS.map((link) => {
             const Icon = link.icon;
             const current = pathname === link.href;
