@@ -52,6 +52,7 @@ import { useOnline } from '@/lib/use-online';
 import { CuisinePanel, CuisineTabList, DishGrid } from './cuisine-menu';
 import { FiltersSheet } from './filters-sheet';
 import { PriceRange } from './price-range';
+import { useFreshMenu } from './use-fresh-menu';
 
 /*
  * The menu with search and filters (F3 S6, design 5). Every dish is already on the page; only
@@ -125,6 +126,8 @@ export function MenuBrowser({
 
   // Back from a dish returns to the same results, place and card (S6.13).
   useScrollMemory('/menu');
+  // Sold-out changes from the kitchen show up without a reload (F5 U24).
+  useFreshMenu();
 
   const latestQuery = useRef(query);
   useEffect(() => {
