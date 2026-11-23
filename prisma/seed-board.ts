@@ -42,7 +42,17 @@ async function main() {
     await prisma.$transaction((tx) => resetBoardFixtures(tx, people, new Date()), {
       timeout: 30_000,
     });
-    process.stdout.write(`Board fixtures reset: ${BOARD_FIXTURE_NUMBERS.join(', ')}.\n`);
+    process.stdout.write(
+      [
+        `Board fixtures reset: ${BOARD_FIXTURE_NUMBERS.join(', ')}.`,
+        // Staff sign in with a code; where each code comes from, on any database.
+        'Staff two-factor: the sample staff authenticators are printed by every seed run',
+        '  (`npx prisma db seed`); they come from BETTER_AUTH_SECRET and the email, so they match',
+        '  any database seeded with the same secret. The admin authenticator is printed only by',
+        '  the first seed of each database: a fresh database needs that new one, not an older copy.',
+        '',
+      ].join('\n'),
+    );
   } finally {
     await prisma.$disconnect();
   }
