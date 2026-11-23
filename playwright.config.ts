@@ -107,6 +107,15 @@ export default defineConfig({
               hasTouch: true,
             },
           },
+          // Timers on the board (repeat chime, undo window, hidden-tab count) and "86 it" on the
+          // menu: they change fixtures and dishes, so they run last, on their own.
+          {
+            name: 'admin-timing-1440',
+            testMatch: /admin-timing\/.*\.spec\.ts/,
+            dependencies: ['admin-flows-375'],
+            timeout: 180_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
         ]
       : []),
   ],
