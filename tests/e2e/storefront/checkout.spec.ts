@@ -57,10 +57,18 @@ const priceRow = (page: Page, label: string | RegExp) =>
 
 /** The store keeps hours: when it is closed nothing can be placed (S3.4). */
 async function storeOpen(page: Page) {
-  await expect(
-    payButton(page).or(page.getByRole('button', { name: /^Ordering opens/ })),
-  ).toBeVisible();
-  return (await page.getByRole('button', { name: /^Ordering opens/ }).count()) === 0;
+  // Decide on the settled quote, not on the first paint: before the quote the button still reads
+  // "Pay" whatever the hours. The Arrival box says one of these once the quote is in.
+  await expect(page.getByRole('region', { name: 'Arrival' })).toContainText(
+    /Arrives in about|Choose an address to see when it arrives|Ordering opens|when your total updates/,
+    { timeout: 30_000 },
+  );
+  const closed =
+    (await page.getByRole('button', { name: /^Ordering opens/ }).count()) > 0 ||
+    (await inMain(page)
+      .getByText(/^We're closed right now/)
+      .count()) > 0;
+  return !closed;
 }
 
 /** A fresh customer with Work saved and two dishes in the cart, on checkout. */
@@ -106,6 +114,11 @@ test.describe('Checkout', () => {
     await addToCart(page, 'gimbap');
     await addToCart(page, 'pad-thai');
     await openCheckout(page);
+    // At night nothing can be placed (S3.4): checked first, as everything below is the open store.
+    if (!(await storeOpen(page))) {
+      test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
+      return;
+    }
     await expect(page).toHaveTitle('Checkout | Foodz');
     await expect(
       inMain(page).getByText('Hooray! This is the last step before your meal.'),
@@ -176,10 +189,6 @@ test.describe('Checkout', () => {
       inMain(page).getByText(/^Pay \$\d+\.\d\d in cash when your order arrives, tip included\./),
     ).toBeVisible();
 
-    if (!(await storeOpen(page))) {
-      test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
-      return;
-    }
     await expect(payButton(page)).toHaveText(/^Place order · \$\d+\.\d\d$/);
     const label = (await payButton(page).textContent()) ?? '';
     const total = label.replace('Place order · ', '');
