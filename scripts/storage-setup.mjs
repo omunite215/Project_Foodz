@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Prepares the object storage buckets. Safe to run again.
 //   - S3_PUBLIC_BUCKET: anyone may read objects (menu, banner and blog images)
-//   - S3_PRIVATE_BUCKET: no public access; files left in quarantine/ expire after a day
+//   - S3_PRIVATE_BUCKET: no public access; files left in quarantine/ expire after a day; the site
+//     may PUT to presigned URLs from the browser (CORS), so uploads show real progress (F6)
 // Locally this runs against RustFS; for Cloudflare R2 the same settings are made in its dashboard.
 import 'dotenv/config';
 import {
   BucketAlreadyOwnedByYou,
   CreateBucketCommand,
+  PutBucketCorsCommand,
   PutBucketLifecycleConfigurationCommand,
   PutBucketPolicyCommand,
   S3Client,
@@ -91,6 +93,38 @@ async function main() {
   } catch (error) {
     // Not every S3-compatible server supports lifecycle rules; uploads still work without it.
     console.warn(`Could not set the quarantine expiry rule: ${error?.name ?? error}`);
+  }
+  // The browser PUTs uploads straight to presigned URLs on the private bucket (F6 contract 11.6):
+  // the site's origin, plus any in S3_CORS_ORIGINS (comma-separated), may send content-type and
+  // content-length, which the signature covers. Nothing is readable this way.
+  const origins = [
+    process.env.NEXT_PUBLIC_SITE_URL,
+    ...(process.env.S3_CORS_ORIGINS ?? '').split(','),
+  ]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+    .map((value) => new URL(value).origin);
+  if (origins.length) {
+    try {
+      await s3.send(
+        new PutBucketCorsCommand({
+          Bucket: privateBucket,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                ID: 'browser-uploads',
+                AllowedOrigins: [...new Set(origins)],
+                AllowedMethods: ['PUT'],
+                AllowedHeaders: ['content-type', 'content-length'],
+                MaxAgeSeconds: 3000,
+              },
+            ],
+          },
+        }),
+      );
+    } catch (error) {
+      console.warn(`Could not set the upload CORS rule: ${error?.name ?? error}`);
+    }
   }
   console.warn('Storage buckets are ready.');
 }
