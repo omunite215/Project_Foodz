@@ -3,13 +3,14 @@
 import { Info } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { reorderAction } from '@/server/modules/orders/progress-actions';
-import type { ReorderLeftOut } from '@/server/modules/orders/progress-schema';
 import { useSlowPending } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { openCart } from '@/lib/cart-dialog';
+import { addedText, leftOutSentence } from '@/lib/order-progress';
+import { setReorderLeftOut } from '@/lib/reorder-notice';
 import { useCartActions } from '@/lib/data/cart';
 import { useOnline } from '@/lib/use-online';
 import { cn } from '@/lib/utils';
@@ -20,32 +21,19 @@ import { cn } from '@/lib/utils';
  * opens and says what was added; anything left out is said in words under the button.
  */
 
-/** One sentence per item left out (design 8 step 3). */
-export function leftOutSentence(item: ReorderLeftOut): string {
-  switch (item.kind) {
-    case 'extraDropped':
-      return `${item.extra ?? 'An extra'} is no longer offered on ${item.dish}, so we left it off.`;
-    case 'kitchenRanOut':
-      return `The kitchen ran out of ${item.dish} today, so we left it out.`;
-    case 'offMenu':
-      return `${item.dish} is no longer on the menu, so we left it out.`;
-    case 'soldOut':
-    default:
-      return `${item.dish} is sold out, so we left it out.`;
-  }
-}
-
-export const addedText = (quantity: number) =>
-  `Added ${quantity} ${quantity === 1 ? 'dish' : 'dishes'} to your cart`;
-
 export function OrderAgainButton({
   orderId,
   number,
   variant,
+  className,
+  onRow = false,
 }: {
   orderId: string;
   number: string;
   variant: 'primary' | 'outline';
+  className?: string;
+  /** On an orders-list row, where the button names its order. */
+  onRow?: boolean;
 }) {
   const id = useId();
   const cart = useCartActions();
@@ -81,20 +69,21 @@ export function OrderAgainButton({
       });
       if (result.kind === 'added') added += line.quantity;
     }
-    const leftOut = outcome.data.leftOut.map(leftOutSentence);
     if (added === 0) {
+      // The cart stays as it was, and closed (design 8 step 4).
       const text = 'None of these dishes can be ordered right now.';
-      setStatus({ tone: 'info', lines: [text, ...leftOut] });
+      setStatus({ tone: 'info', lines: [text] });
       announce(text);
       return;
     }
-    if (leftOut.length) setStatus({ tone: 'info', lines: leftOut });
+    // What was left out is the cart's first notice (design 8 step 3); the cart says it.
+    setReorderLeftOut(outcome.data.leftOut.map(leftOutSentence));
     openCart(buttonRef.current);
-    announce([addedText(added), ...leftOut].join(' '));
+    announce(addedText(added));
   }
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className={cn('flex flex-col items-center gap-1', className)}>
       <Button
         ref={buttonRef}
         type="button"
@@ -106,6 +95,8 @@ export function OrderAgainButton({
             .filter(Boolean)
             .join(' ') || undefined
         }
+        // On a list row it names its order: "Order again: order 1042" (design, Labels).
+        aria-label={onRow && !slow ? `Order again: order ${number}` : undefined}
         onClick={() => void reorder()}
         className={cn(variant === 'primary' ? 'uppercase' : 'bg-white')}
       >
@@ -115,9 +106,7 @@ export function OrderAgainButton({
             Adding…
           </>
         ) : (
-          <>
-            Order again<span className="sr-only">: order {number}</span>
-          </>
+          'Order again'
         )}
       </Button>
       {!online ? (

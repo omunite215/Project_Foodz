@@ -97,14 +97,16 @@ test.describe('Orders and saved cards', () => {
     test.skip(!SAMPLE_PASSWORD, 'Needs the sample customers password (E2E_SEED_OUTPUT).');
     await signIn(page, ACCOUNTS.second, SAMPLE_PASSWORD);
     await open(page, '/account/orders');
-    const sample = page.getByRole('link', { name: /^Order S1001\s*,\s*Delivered\s*,/ });
+    // F5 D24: the row's one link is named by the number and described by the rest.
+    const sample = page.getByRole('link', { name: 'Order S1001', exact: true });
     await expect(sample).toBeVisible();
+    await expect(sample).toHaveAccessibleDescription(/^Delivered\s*,/);
     await expectAccessible(page);
     if (isPhone(testInfo)) await expectNoSidewaysScroll(page);
 
     await sample.click();
     await expect(page).toHaveTitle('Order S1001 | Foodz');
-    await expect(page.getByRole('heading', { level: 1, name: 'Order delivered' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Delivered' })).toBeVisible();
     // A revisit shows the still check, never the animation (S11.2).
     await expect(page.locator('[data-success-check]')).toBeVisible();
     await expect(page.locator('[data-success-animation]')).toHaveCount(0);

@@ -1,6 +1,7 @@
 import type { OrderView } from '@/server/modules/orders/schema';
 import type {
   ArrivalWindow,
+  ReorderLeftOut,
   CancellationNotice,
   CustomerCancelLine,
   CustomerTimelineEntry,
@@ -317,3 +318,23 @@ export function progressTimelineLabel(entry: CustomerTimelineEntry): string | nu
 
 export const timelineTime = (at: string, now: Date, timeZone: string) =>
   orderDateText(at, now, timeZone).replace(/^Today, /, '');
+
+// ------------------------------------------------------------------ order again (design 8)
+
+/** One sentence per item left out (design 8 step 3). */
+export function leftOutSentence(item: ReorderLeftOut): string {
+  switch (item.kind) {
+    case 'extraDropped':
+      return `${item.extra ?? 'An extra'} is no longer offered on ${item.dish}, so we left it off.`;
+    case 'kitchenRanOut':
+      return `The kitchen ran out of ${item.dish} today, so we left it out.`;
+    case 'offMenu':
+      return `${item.dish} is no longer on our menu, so we left it out.`;
+    case 'soldOut':
+    default:
+      return `${item.dish} is sold out, so we left it out.`;
+  }
+}
+
+export const addedText = (quantity: number) =>
+  `Added ${quantity} ${quantity === 1 ? 'dish' : 'dishes'} to your cart`;

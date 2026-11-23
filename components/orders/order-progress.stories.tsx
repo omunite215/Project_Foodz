@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { expect, within } from 'storybook/test';
 import type { OrderView } from '@/server/modules/orders/schema';
 import { orderViewFixture, paidCardOrder, stepsAt } from './orders.fixtures';
+import { OrderNoticeCard } from './order-notices';
 import { CancellationCard, ProgressCard, TimelineCard } from './order-progress';
 
 /*
@@ -148,5 +149,44 @@ export const CancelledByTheKitchen: Story = {
     ).toBeVisible();
     // Never a staff name or the word "refused" (S5.6).
     await expect(canvas.queryByText(/refused|Alex/i)).toBeNull();
+  },
+};
+
+/** F5 design 9: order notices in the visible tab, a step and a cancellation. */
+export const OrderNotices: Story = {
+  render: () => (
+    <div className="space-y-2">
+      <OrderNoticeCard
+        notice={{
+          id: 'n1',
+          orderId: '0196a1b2-0000-7000-8000-000000001101',
+          orderNumber: '1042',
+          status: 'accepted',
+          title: 'Order 1042 accepted',
+          body: 'The kitchen has your order and will start cooking soon.',
+          leftMs: 10_000,
+        }}
+        onDismiss={() => undefined}
+      />
+      <OrderNoticeCard
+        notice={{
+          id: 'n2',
+          orderId: '0196a1b2-0000-7000-8000-000000001102',
+          orderNumber: '1046',
+          status: 'cancelled',
+          title: 'Order 1046 is cancelled',
+          body: "The kitchen ran out of Pad Thai, so we couldn't make your order.",
+          leftMs: null,
+        }}
+        onDismiss={() => undefined}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'View order 1042' })).toBeVisible();
+    await expect(
+      canvas.getByRole('button', { name: 'Dismiss notice about order 1046' }),
+    ).toBeVisible();
   },
 };

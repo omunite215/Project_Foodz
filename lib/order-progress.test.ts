@@ -3,6 +3,8 @@ import type { CancellationNotice } from '@/server/modules/orders/progress-schema
 import { orderViewFixture, paidCardOrder, stepsAt } from '@/components/orders/orders.fixtures';
 import {
   acceptedCancelSentence,
+  addedText,
+  leftOutSentence,
   arrivalText,
   cancellationAnnouncement,
   cancellationMoney,
@@ -213,5 +215,24 @@ describe('the timeline (design 6.9)', () => {
       }),
     ).toBeNull();
     expect(paidCardOrder().payment.method).toBe('card');
+  });
+});
+
+describe('order again (design 8)', () => {
+  it('says what was added, and words each item left out', () => {
+    expect(addedText(3)).toBe('Added 3 dishes to your cart');
+    expect(addedText(1)).toBe('Added 1 dish to your cart');
+    expect(leftOutSentence({ kind: 'soldOut', dish: 'Naengmyeon' })).toBe(
+      'Naengmyeon is sold out, so we left it out.',
+    );
+    expect(leftOutSentence({ kind: 'extraDropped', dish: 'Gimbap', extra: 'Gochujang' })).toBe(
+      'Gochujang is no longer offered on Gimbap, so we left it off.',
+    );
+    expect(leftOutSentence({ kind: 'kitchenRanOut', dish: 'Pad Thai' })).toBe(
+      'The kitchen ran out of Pad Thai today, so we left it out.',
+    );
+    expect(leftOutSentence({ kind: 'offMenu', dish: 'Japchae' })).toBe(
+      'Japchae is no longer on our menu, so we left it out.',
+    );
   });
 });

@@ -86,6 +86,27 @@ export default defineConfig({
             timeout: 90_000,
             use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
           },
+          // Flows that change the fixtures for good (a refusal, then "Order again"): after the
+          // projects above, one viewport at a time; each resets the fixtures first.
+          {
+            name: 'admin-flows-1440',
+            testMatch: /admin-flows\/.*\.spec\.ts/,
+            dependencies: ['admin-375', 'admin-1024', 'admin-1440'],
+            timeout: 120_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
+          {
+            name: 'admin-flows-375',
+            testMatch: /admin-flows\/.*\.spec\.ts/,
+            dependencies: ['admin-flows-1440'],
+            timeout: 120_000,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 375, height: 812 },
+              isMobile: true,
+              hasTouch: true,
+            },
+          },
         ]
       : []),
   ],
