@@ -109,6 +109,7 @@
     "storybook-static/**",
     "next-env.d.ts",
     "server/db/generated/**",
-    "prisma/migrations/**"
+    "prisma/migrations/**",
+    "infra/**"
   ]
 }

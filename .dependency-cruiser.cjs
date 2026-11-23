@@ -75,7 +75,7 @@ module.exports = {
   options: {
     doNotFollow: { path: 'node_modules' },
     // node_modules stays in the graph as leaves (see doNotFollow) so rules can name packages.
-    exclude: { path: '(^\\.next/|^server/db/generated/|^docs/|^design/)' },
+    exclude: { path: '(^\\.next/|^server/db/generated/|^docs/|^design/|^infra/)' },
     tsConfig: { fileName: 'tsconfig.json' },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
