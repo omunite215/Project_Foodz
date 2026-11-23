@@ -41,3 +41,29 @@ export async function staffPageMetadata(title: string): Promise<Metadata> {
   }
   return { title };
 }
+
+export type PartnersAccess =
+  | { kind: 'allowed'; actor: UserActor; shell: Extract<StaffShell, { kind: 'staff' }> }
+  | { kind: 'handledByLayout' }
+  /** KITCHEN and CONTENT_EDITOR at a Partners address (F6 A18.2). */
+  | { kind: 'noAccess' };
+
+/** May this request read partner applications (F6 A18)? SUPPORT, ADMIN and the demo admin. */
+export async function partnersAccess(): Promise<PartnersAccess> {
+  const shell = await loadStaffShell();
+  if (shell.kind !== 'staff') return { kind: 'handledByLayout' };
+  if (!shell.screens.includes('partners')) return { kind: 'noAccess' };
+  const actor = await getActor();
+  if (actor.kind !== 'user') return { kind: 'handledByLayout' };
+  return { kind: 'allowed', actor, shell };
+}
+
+/** A Partners page's tab title, or the gate's (F6 A18.4: never a person's name). */
+export async function partnersPageMetadata(title: string): Promise<Metadata> {
+  const shell = await loadStaffShell();
+  if (shell.kind === 'twoFactorRequired') return { title: GATE_TAB_TITLES.twoFactor };
+  if (shell.kind === 'staff' && !shell.screens.includes('partners')) {
+    return { title: GATE_TAB_TITLES.partnersNoAccess };
+  }
+  return { title };
+}

@@ -14,6 +14,7 @@ import { GATE_TITLES, type GateKind } from './gate-text';
 export type { GateKind };
 
 const BOARD_HREF: Route = '/admin/orders';
+const PARTNERS_HREF: Route = '/admin/partners';
 
 /*
  * The staff gate pages (F5 design 1.8): two-factor needed, no access (403), nothing here yet
@@ -108,6 +109,24 @@ export function StaffGate({
       description:
         'Your tools for the menu, campaigns, the blog and site pages arrive in a later update.',
       action: SITE,
+    },
+    partnersNoAccess: {
+      media: (
+        <Disc tone="grey">
+          <Lock className="size-8" />
+        </Disc>
+      ),
+      description: "You don't have access to partner applications. Ask an admin if you need it.",
+      action: <BackButton />,
+    },
+    applicationNotFound: {
+      illustration: 'pageEaten' as const,
+      description: 'It may have been withdrawn, or the address is wrong.',
+      action: (
+        <Button asChild size="touch">
+          <Link href={PARTNERS_HREF}>Back to partners</Link>
+        </Button>
+      ),
     },
     notFound: {
       illustration: 'pageEaten' as const,

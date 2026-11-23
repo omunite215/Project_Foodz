@@ -1,11 +1,11 @@
 'use client';
 
-import { LogOut, Settings, SquareKanban, Store } from 'lucide-react';
+import { Bike, LogOut, Settings, SquareKanban, Store } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Avatar } from '@/components/layout/account-entry';
 import { SignOutDialog } from '@/components/layout/sign-out';
 import {
@@ -25,7 +25,9 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { usePartnerBadge } from '@/components/partner-review/queries';
 import { initialOf } from '@/lib/account-text';
+import { badgeSrText, badgeText, badgeTooltip } from '@/lib/partner-review/text';
 import { cn } from '@/lib/utils';
 import { StaffMenuItems, StaffMenuLabel, useStaffSignOut } from './staff-account-menu';
 import { roleLabel, useStaffShell } from './staff-shell-context';
@@ -33,13 +35,45 @@ import { roleLabel, useStaffShell } from './staff-shell-context';
 /*
  * The staff sidebar (F5 design 1.2): SUPPORT, ADMIN and the demo admin. 256 px expanded, a
  * 72 px icon rail, a 288 px drawer on phones. It lists only screens that exist for this role:
- * in F5 that is "Order board". The current page is marked by a bar, weight and tint, never a
- * tint alone.
+ * "Order board", and "Partners" for SUPPORT, ADMIN and the demo admin (F6 A18.1). The current
+ * page is marked by a bar, weight and tint, never a tint alone.
  */
 
 const SCREENS = {
   orderBoard: { label: 'Order board', href: '/admin/orders' satisfies Route, icon: SquareKanban },
+  partners: { label: 'Partners', href: '/admin/partners' satisfies Route, icon: Bike },
 } as const;
+
+/**
+ * Applications to review (F6 7.1): neutral, not amber, since a count of work isn't lateness.
+ * Recounted on every page and every 60 s; the number swaps without motion and isn't announced.
+ * The link's name carries it ("Partners, 2 applications to review"); the badge is hidden.
+ */
+function useReviewCount(enabled: boolean) {
+  const pathname = usePathname();
+  const badge = usePartnerBadge(enabled);
+  const { refetch } = badge;
+  // Recounted on every page load (A18.1): each navigation asks again.
+  const countedAt = useRef(pathname);
+  useEffect(() => {
+    if (!enabled || countedAt.current === pathname) return;
+    countedAt.current = pathname;
+    void refetch();
+  }, [enabled, pathname, refetch]);
+  return badge.data?.toReview ?? 0;
+}
+
+function CountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-hidden
+      className="ml-auto inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-neutral-1 px-1.5 text-caption font-semibold text-white tabular-nums group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:min-w-5 group-data-[collapsible=icon]:px-1"
+    >
+      {badgeText(count)}
+    </span>
+  );
+}
 
 const NAV_BUTTON =
   'relative h-11 gap-3 rounded-lg px-3 text-body-4 text-neutral-2 hover:bg-neutral-7 hover:text-neutral-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid focus-visible:ring-0 group-data-[collapsible=icon]:size-12! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-5!';
@@ -54,6 +88,7 @@ export function AdminSidebar() {
   const rail = state === 'collapsed' && !isMobile;
   const { signOut, request, onCloseAutoFocus } = useStaffSignOut();
   const accountRef = useRef<HTMLButtonElement>(null);
+  const toReview = useReviewCount(shell.screens.includes('partners'));
 
   // The drawer closes on navigation (design 1.2).
   const closeDrawer = () => setOpenMobile(false);
@@ -99,11 +134,12 @@ export function AdminSidebar() {
                 const item = SCREENS[screen];
                 const Icon = item.icon;
                 const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const count = screen === 'partners' ? toReview : 0;
                 return (
                   <SidebarMenuItem key={screen}>
                     <SidebarMenuButton
                       asChild
-                      tooltip={item.label}
+                      tooltip={screen === 'partners' ? badgeTooltip(count) : item.label}
                       className={cn(NAV_BUTTON, current && CURRENT)}
                     >
                       <Link
@@ -112,7 +148,11 @@ export function AdminSidebar() {
                         onClick={closeDrawer}
                       >
                         <Icon aria-hidden />
-                        <span className="group-data-[collapsible=icon]:sr-only">{item.label}</span>
+                        <span className="group-data-[collapsible=icon]:sr-only">
+                          {item.label}
+                          {count > 0 ? <span className="sr-only">{badgeSrText(count)}</span> : null}
+                        </span>
+                        <CountBadge count={count} />
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
