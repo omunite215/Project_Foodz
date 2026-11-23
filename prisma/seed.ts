@@ -49,6 +49,23 @@ async function main() {
       process.stdout.write(`Sample customers password (local and CI only): ${samplePassword}\n`);
     }
 
+    if (result.staffTwoFactor?.length) {
+      // Every run (local and CI only): the secrets are derived, so an authenticator is added
+      // once; the backup codes are new each run. Copy this block to docs/local-staff-2fa.txt.
+      process.stdout.write(
+        [
+          '',
+          'Sample staff two-factor (local and CI only; same password as the sample customers):',
+          ...result.staffTwoFactor.flatMap((member) => [
+            `  ${member.email} (${member.name}, ${member.role})`,
+            `    Authenticator: ${member.totpUri}`,
+            `    Backup codes: ${member.backupCodes.join(' ')}`,
+          ]),
+          '',
+        ].join('\n'),
+      );
+    }
+
     if (result.adminTwoFactor) {
       // Shown once: the secret is stored encrypted and cannot be read back.
       process.stdout.write(
