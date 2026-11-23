@@ -6,7 +6,9 @@ import { DishDetailSkeleton } from '@/components/dish/dish-detail-skeleton';
 import { DishGallery } from '@/components/dish/dish-gallery';
 import { DishOrderPanel } from '@/components/dish/dish-order-panel';
 import { GoBackLink } from '@/components/dish/go-back-link';
+import { OfferBadge } from '@/components/dish/offer-badge';
 import { OfferCountdown } from '@/components/dish/offer-countdown';
+import { FavoriteButton } from '@/components/favorites/favorite-button';
 import { Rating } from '@/components/dish/rating';
 import { SoldOutSuggestions } from '@/components/dish/sold-out-suggestions';
 import { PageContainer } from '@/components/layout/page-container';
@@ -14,7 +16,13 @@ import { HoldSkeleton } from '@/components/states/loading-region';
 import { StoreStatus } from '@/components/store/store-status';
 import { listDishSuggestions } from '@/server/modules/menu/service';
 import { CUISINE_LABELS, formatPrice, prepTimeText } from '@/lib/format';
-import { loadDish, loadStoreStatus, readOrNull } from '@/lib/storefront-data';
+import {
+  loadCampaign,
+  loadDish,
+  loadStoreStatus,
+  readOrNull,
+  storePhone,
+} from '@/lib/storefront-data';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -28,15 +36,17 @@ export default async function DishPage({ params }: Props) {
   const dish = await loadDish((await params).slug);
   if (!dish) notFound();
 
-  const [status, suggestions] = await Promise.all([
+  const [status, suggestions, campaign] = await Promise.all([
     loadStoreStatus(),
     dish.isAvailable
       ? Promise.resolve([])
       : readOrNull('suggestions', () =>
           listDishSuggestions({ id: dish.id, cuisine: dish.cuisine, limit: 3 }),
         ),
+    dish.offer ? loadCampaign(dish.offer.campaignId) : Promise.resolve(null),
   ]);
   const closedUntil = status && !status.isOpen ? status.opensAt : null;
+  const coupon = campaign?.coupon ?? null;
 
   return (
     <HoldSkeleton skeleton={<DishDetailSkeleton />}>
@@ -55,12 +65,32 @@ export default async function DishPage({ params }: Props) {
                 <DishChip tone="cuisine">{CUISINE_LABELS[dish.cuisine]}</DishChip>
                 {dish.isBestSeller ? <DishChip tone="bestSeller">Best seller</DishChip> : null}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
-                <h1 className="font-heading text-title-1 text-neutral-2 md:text-h4 xl:text-h2">
+              <div className="mt-2 flex items-start gap-3">
+                <h1 className="min-w-0 flex-1 font-heading text-title-1 text-neutral-2 md:text-h4 xl:text-h2">
                   {dish.title}
                 </h1>
-                {dish.offer ? <OfferCountdown endsAt={dish.offer.endsAt} /> : null}
+                <FavoriteButton
+                  dish={{ id: dish.id, title: dish.title }}
+                  className="mt-0.5 shrink-0 border border-neutral-6 shadow-none md:mt-1"
+                />
               </div>
+              {dish.offer ? (
+                <div className="mt-3">
+                  {coupon ? (
+                    <OfferBadge
+                      code={coupon.code}
+                      description={coupon.description}
+                      endsAt={
+                        coupon.endsAt && coupon.endsAt < dish.offer.endsAt
+                          ? coupon.endsAt
+                          : dish.offer.endsAt
+                      }
+                    />
+                  ) : (
+                    <OfferCountdown endsAt={dish.offer.endsAt} />
+                  )}
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-3 md:mt-6 xl:mt-5">
                 <p className="font-heading text-price text-brand-strong tabular-nums">
                   {formatPrice(dish.priceCents)}
@@ -93,11 +123,14 @@ export default async function DishPage({ params }: Props) {
                 dish={{
                   id: dish.id,
                   title: dish.title,
+                  slug: dish.slug,
+                  image: dish.image,
                   priceCents: dish.priceCents,
                   flavors: dish.flavors,
                   isAvailable: dish.isAvailable,
                 }}
                 closedUntil={closedUntil}
+                phone={storePhone(status)}
                 hasSuggestions={(suggestions?.length ?? 0) > 0}
               />
             </div>

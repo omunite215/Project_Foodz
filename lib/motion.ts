@@ -57,10 +57,22 @@ export interface Motion {
 }
 
 /**
+ * Whether a tween's targets are on the page now. Selector text resolves inside the scope of the
+ * running `createMotion`; null, an empty list or a selector that matches nothing is not.
+ */
+function onPage(targets: gsap.TweenTarget): boolean {
+  return gsap.utils.toArray(targets).length > 0;
+}
+
+/** Stands in for a tween whose element isn't drawn (yet, or any more): it does nothing. */
+const nothingToAnimate = () => gsap.to({}, { duration: 0 });
+
+/**
  * Runs `animate` for the user's motion preference, and again if the preference changes while
  * the page is open (GSAP reverts whatever the previous run created). Under
  * `prefers-reduced-motion: reduce`, every tween made through the `Motion` helpers loses its
- * movement and keeps its fade. Code that builds timelines or scroll effects itself should
+ * movement and keeps its fade. A tween whose element isn't on the page is skipped quietly (GSAP
+ * would warn "target not found"). Code that builds timelines or scroll effects itself should
  * check `motion.reduced`.
  */
 export function createMotion(
@@ -73,9 +85,14 @@ export function createMotion(
     const adjust = (vars: gsap.TweenVars) => (reduced ? withoutMovement(vars) : vars);
     animate({
       reduced,
-      from: (targets, vars) => gsap.from(targets, adjust(vars)),
-      to: (targets, vars) => gsap.to(targets, adjust(vars)),
-      fromTo: (targets, fromVars, toVars) => gsap.fromTo(targets, adjust(fromVars), adjust(toVars)),
+      from: (targets, vars) =>
+        onPage(targets) ? gsap.from(targets, adjust(vars)) : nothingToAnimate(),
+      to: (targets, vars) =>
+        onPage(targets) ? gsap.to(targets, adjust(vars)) : nothingToAnimate(),
+      fromTo: (targets, fromVars, toVars) =>
+        onPage(targets)
+          ? gsap.fromTo(targets, adjust(fromVars), adjust(toVars))
+          : nothingToAnimate(),
     });
   });
   return media;
@@ -101,4 +118,10 @@ export function useMotion(
 /** For one-off tweens started by an event (a click, a copy): true when the user asked for less motion. */
 export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(MOTION_QUERIES.reduced).matches;
+}
+
+/** A small "pop" for something just pressed (a heart): 1.25 back to 1. Nothing under reduced motion. */
+export function pop(target: Element | null): void {
+  if (!target || prefersReducedMotion()) return;
+  gsap.fromTo(target, { scale: 1.25 }, { scale: 1, duration: 0.3, ease: 'back.out(2)' });
 }

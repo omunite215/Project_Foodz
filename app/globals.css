@@ -102,6 +102,21 @@
   }
 }
 
+/* The sticky menu toolbar must never hide the focused card (WCAG 2.4.11). */
+html:has([data-menu-toolbar]) {
+  scroll-padding-top: 9.5rem;
+}
+@media (width >= 48rem) {
+  html:has([data-menu-toolbar]) {
+    scroll-padding-top: 10.5rem;
+  }
+}
+@media (width >= 64rem) {
+  html:has([data-menu-toolbar]) {
+    scroll-padding-top: 0;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Semantic tokens used by the component library                       */
 /* ------------------------------------------------------------------ */

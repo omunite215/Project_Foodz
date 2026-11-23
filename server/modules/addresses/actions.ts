@@ -1,6 +1,6 @@
 'use server';
 
-import { userAction } from '@/server/action';
+import { publicAction, userAction } from '@/server/action';
 import {
   addressIdInput,
   addressSearchInput,
@@ -12,8 +12,10 @@ import {
   checkDeliveryArea,
   createAddress,
   deleteAddress,
+  estimateDelivery,
   getAddressBook,
   searchAddresses,
+  searchAddressesAsGuest,
   setDefaultAddress,
   updateAddress,
 } from './service';
@@ -57,3 +59,19 @@ export const deleteAddressAction = userAction
   .metadata({ name: 'addresses.delete', rateLimit: 'address.write', write: true })
   .inputSchema(addressIdInput)
   .action(async ({ parsedInput, ctx }) => deleteAddress(ctx.actor, parsedInput));
+
+/*
+ * Checking an address from the cart without saving it (F3 U2). Open to signed-out visitors,
+ * limited per network; nothing is stored, and the answer holds only the distance, the fee and
+ * the S4.6 sentence.
+ */
+
+export const guestAddressSearchAction = publicAction
+  .metadata({ name: 'addresses.guestSearch', rateLimit: 'geo.guest-search' })
+  .inputSchema(addressSearchInput)
+  .action(async ({ parsedInput }) => searchAddressesAsGuest(parsedInput));
+
+export const guestDeliveryCheckAction = publicAction
+  .metadata({ name: 'addresses.guestDeliveryCheck', rateLimit: 'geo.guest-check' })
+  .inputSchema(deliveryCheckInput)
+  .action(async ({ parsedInput }) => estimateDelivery(parsedInput));

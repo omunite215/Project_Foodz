@@ -74,6 +74,8 @@ export const uniqueEmail = (tag: string) => `${tag}-${randomUUID().slice(0, 12)}
 export async function open(page: Page, path: string) {
   const response = await page.goto(path);
   await page.waitForLoadState('networkidle');
+  // Set by the root providers once the page has hydrated (a busy machine can lag behind network quiet).
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 20_000 });
   return response;
 }
 
@@ -199,7 +201,7 @@ export async function addDishToCart(page: Page) {
     .locator('main')
     .getByRole('button', { name: /^Add to cart/ })
     .click();
-  await expect(page.locator('header').getByText('1 item in your cart')).toBeAttached({
+  await expect(page.locator('header').getByRole('button', { name: 'Cart, 1 item' })).toBeVisible({
     timeout: 10_000,
   });
 }

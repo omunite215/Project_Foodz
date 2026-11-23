@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import path from 'node:path';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -79,7 +80,8 @@ export async function setup(project: TestProject) {
 
   execFileSync(
     process.execPath,
-    [path.join(root, 'node_modules/prisma/build/index.js'), 'migrate', 'deploy'],
+    // Resolved like any import, so it also works from a git worktree without its own install.
+    [createRequire(import.meta.url).resolve('prisma/build/index.js'), 'migrate', 'deploy'],
     {
       cwd: root,
       env: { ...process.env, DATABASE_MIGRATOR_URL: migratorUrl },

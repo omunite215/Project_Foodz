@@ -21,7 +21,13 @@ import { SkipLink } from '@/components/layout/skip-link';
 import { Providers } from '@/components/providers';
 import { initialOf } from '@/lib/account-text';
 import { fontVariables } from '@/lib/fonts';
-import { loadAnnouncement, loadStoreStatus } from '@/lib/storefront-data';
+import { FavoritesProvider } from '@/components/favorites/favorites-provider';
+import {
+  loadAnnouncement,
+  loadFavoriteIds,
+  loadStoreStatus,
+  storePhone,
+} from '@/lib/storefront-data';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
@@ -59,6 +65,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     loadSignedIn(),
     readNotices(),
   ]);
+  const favoriteIds = session ? await loadFavoriteIds() : null;
   const showAnnouncement =
     announcement !== null && cookieStore.get(ANNOUNCEMENT_COOKIE)?.value !== announcement.id;
 
@@ -86,27 +93,29 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     >
       <body className="bg-neutral-8 font-poppins text-neutral-2 antialiased">
         <Providers>
-          <SkipLink />
-          {showAnnouncement ? (
-            <AnnouncementBar
-              campaignId={announcement.id}
-              title={announcement.title}
-              subtitle={announcement.subtitle}
-              code={announcement.coupon?.code ?? null}
+          <FavoritesProvider signedIn={account !== null} ids={favoriteIds}>
+            <SkipLink />
+            {showAnnouncement ? (
+              <AnnouncementBar
+                campaignId={announcement.id}
+                title={announcement.title}
+                subtitle={announcement.subtitle}
+                code={announcement.coupon?.code ?? null}
+              />
+            ) : null}
+            <SiteHeader account={account} phone={storePhone(status)} />
+            <main id="main" tabIndex={-1} className="focus:outline-none">
+              <NoticeArea welcome={welcome} flash={notices.flash} emailVerified={emailVerified} />
+              {children}
+            </main>
+            <SiteFooter status={status} />
+            <LiveAnnouncer />
+            <RouteMemory />
+            <SessionWatch
+              sessionKey={session ? sessionKeyOf(session.session.id) : null}
+              refreshOnReturn={welcome !== null}
             />
-          ) : null}
-          <SiteHeader account={account} />
-          <main id="main" tabIndex={-1} className="focus:outline-none">
-            <NoticeArea welcome={welcome} flash={notices.flash} emailVerified={emailVerified} />
-            {children}
-          </main>
-          <SiteFooter status={status} />
-          <LiveAnnouncer />
-          <RouteMemory />
-          <SessionWatch
-            sessionKey={session ? sessionKeyOf(session.session.id) : null}
-            refreshOnReturn={welcome !== null}
-          />
+          </FavoritesProvider>
         </Providers>
       </body>
     </html>

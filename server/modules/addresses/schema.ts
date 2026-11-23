@@ -142,6 +142,18 @@ export interface DeliveryCheck {
   message: string;
 }
 
+/**
+ * An address checked without saving it (F3 U2): the same check as DeliveryCheck, with the fee
+ * the cart would charge. Nothing is stored.
+ */
+export interface DeliveryEstimate extends DeliveryCheck {
+  /** justOver: outside, though it rounds to the radius ("just over 8 km"); justUnder: inside at it. */
+  edge: 'justUnder' | 'justOver' | null;
+  /** base + per-km × distanceKm when deliverable; null outside. */
+  feeCents: number | null;
+  feeRange: { minCents: number; maxCents: number };
+}
+
 export interface DeleteAddressResult {
   deletedId: string;
   newDefault: { id: string; label: string } | null;
@@ -168,20 +180,26 @@ export interface StaffAddressView {
 
 const km = (value: number) => value.toFixed(1);
 
-/** The S4.6 sentence for a delivery check. */
+/**
+ * The S4.6 sentence for a delivery check. Just outside the radius, where the rounded distance
+ * would read as the radius itself, it says "just over 8 km" instead (F3 B3).
+ */
 export function deliveryMessage(check: {
   deliverable: boolean;
   distanceKm: number;
   radiusKm: number;
   storeStreet: string;
   line1?: string;
+  edge?: 'justUnder' | 'justOver' | null;
 }) {
   if (check.deliverable) {
     return `We deliver here · about ${km(check.distanceKm)} km from our kitchen`;
   }
   const place = check.line1 ?? 'this address';
   const radius = Number.isInteger(check.radiusKm) ? String(check.radiusKm) : km(check.radiusKm);
-  return `Sorry, we don't deliver to ${place} yet. It's about ${km(check.distanceKm)} km from our kitchen at ${check.storeStreet}, and we deliver within ${radius} km.`;
+  const distance =
+    check.edge === 'justOver' ? `just over ${radius} km` : `about ${km(check.distanceKm)} km`;
+  return `Sorry, we don't deliver to ${place} yet. It's ${distance} from our kitchen at ${check.storeStreet}, and we deliver within ${radius} km.`;
 }
 
 export const labelFor = (kind: AddressKind, label: string | undefined) =>

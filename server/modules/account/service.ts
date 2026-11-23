@@ -14,6 +14,7 @@ import {
 } from '@/server/errors';
 import { countMyAddresses, listMyAddresses } from '@/server/modules/addresses/service';
 import { audit } from '@/server/modules/audit/service';
+import { countMyFavorites, listMyFavoritesForExport } from '@/server/modules/favorites/service';
 import { queueAccountEmail } from '@/server/modules/notifications/account-email';
 import { describeDevice } from './devices';
 import {
@@ -75,6 +76,8 @@ export async function getMyAccount(actor: UserActor): Promise<AccountDto> {
     }),
     countMyAddresses(actor),
   ]);
+  // After the others, so a page render never holds more than two connections at once.
+  const favoriteCount = await countMyFavorites(actor);
   const { profile, methods, sessions } = summary;
   const role = isRole(profile.role) ? profile.role : 'customer';
   const phone = profile.phone ? displayPhone(profile.phone) : null;
@@ -102,6 +105,7 @@ export async function getMyAccount(actor: UserActor): Promise<AccountDto> {
     googleLinked: methods.providers.includes('google'),
     signInMethods,
     addressCount,
+    favoriteCount,
     deviceCount: sessions,
     createdAt: profile.createdAt.toISOString(),
     termsAcceptedVersion: profile.termsAcceptedVersion,
@@ -200,6 +204,7 @@ export async function exportMyData(
     listMyAddresses(actor),
     listDevices(actor, current),
   ]);
+  const favorites = await listMyFavoritesForExport(actor);
   if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
 
   const data: AccountExport = {
@@ -234,6 +239,7 @@ export async function exportMyData(
       lastActiveAt: device.lastActiveAt,
       thisDevice: device.isCurrent,
     })),
+    favorites,
   };
 
   await runAs(actor, (ctx) =>

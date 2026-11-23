@@ -115,6 +115,42 @@ function AddressCardBox() {
   );
 }
 
+/** The favorites list (F3 design 4): compact dish cards in the page's own grid. */
+export function FavoritesSkeleton() {
+  const { favoriteCount, isDemo } = useAccount();
+  return (
+    <LoadingRegion label="Loading favorites">
+      <Head subtitle />
+      {isDemo ? <Bar className="mt-1 h-6 w-full max-w-96" /> : null}
+      {favoriteCount > 0 ? (
+        <ul className="mt-6 grid gap-4 md:grid-cols-2 md:gap-6">
+          {Array.from({ length: Math.min(favoriteCount, 6) }, (_, index) => (
+            <li
+              key={index}
+              className="flex items-center gap-4 rounded-2xl bg-white p-3 shadow-raised"
+            >
+              <Bar className="size-22 shrink-0 rounded-full md:size-24" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Bar className="h-5 w-2/3" />
+                <Bar className="h-4 w-1/2" />
+                <Bar className="h-6 w-16" />
+              </div>
+              <Bar className="size-11 shrink-0 rounded-full" />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Card className="mt-6 flex flex-col items-center py-12">
+          <Bar className="size-40 md:size-50" />
+          <Bar className="mt-6 h-7 w-56" />
+          <Bar className="mt-3 h-6 w-64 max-w-full" />
+          <Bar className="mt-8 h-11 w-44 rounded-lg" />
+        </Card>
+      )}
+    </LoadingRegion>
+  );
+}
+
 export function AddressesSkeleton() {
   const { addressCount } = useAccount();
   return (

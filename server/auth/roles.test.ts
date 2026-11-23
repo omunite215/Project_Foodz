@@ -38,6 +38,10 @@ const MATRIX: [Permission, Role[]][] = [
     { address: ['manage-own'] },
     ['customer', 'partner', 'kitchen', 'support', 'content_editor', 'admin'],
   ],
+  [
+    { favorite: ['manage-own'] },
+    ['customer', 'partner', 'kitchen', 'support', 'content_editor', 'admin'],
+  ],
 ];
 
 describe('permission matrix', () => {

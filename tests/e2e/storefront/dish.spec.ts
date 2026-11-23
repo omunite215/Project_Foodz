@@ -27,13 +27,20 @@ test.describe('Dish page', () => {
     await expectNoSidewaysScroll(page);
   });
 
-  test('shows the real time left on its offer, and no badge without one (S3.3)', async ({
+  test('names the offer, its deal and the real time left; no badge without one (S3.3, F3 S4.12)', async ({
     page,
   }) => {
     await open(page, '/menu/yangnyeom-chicken');
-    const badge = page.locator('main').getByText(/^Offer Ends in \d+ days?$/);
+    const badge = page
+      .locator('main')
+      .getByText(/^KBBQ5 · \$5 off Korean dishes over \$25 · Ends in \d+ days?$/);
     await expect(badge).toBeVisible();
     await expect(badge).not.toHaveAttribute('aria-live');
+    await expect(
+      page
+        .locator('main')
+        .getByText(/^Offer: KBBQ5, \$5 off Korean dishes over \$25, ends in \d+ days?$/),
+    ).toBeAttached();
 
     await open(page, '/menu/jajangmyeon');
     await expect(page.locator('main').getByText(/Ends in/)).toHaveCount(0);
@@ -71,7 +78,10 @@ test.describe('Dish page', () => {
     // Within 1 s on a quiet server; the page adds anyway once the check passes 2 s.
     await expect(main.getByText('Added to your cart.')).toBeVisible({ timeout: 2000 });
     await expect(liveRegion(page)).toHaveText('Yangnyeom Chicken added to your cart.');
-    await expect(page.locator('header').getByText('1 item in your cart')).toBeAttached();
+    await expect(
+      page.locator('header').getByRole('button', { name: 'Cart, 1 item' }),
+    ).toBeVisible();
+    await expect(main.getByRole('button', { name: 'View cart' })).toBeVisible();
     expect(await savedCart(page)).toMatchObject([
       { quantity: 1, flavors: ['Spring onion'], note: 'No sesame, please' },
     ]);

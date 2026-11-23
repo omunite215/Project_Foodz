@@ -113,6 +113,7 @@ export function findActiveCampaigns(ctx: DbContext, placement: CampaignPlacement
       ctaHref: true,
       startsAt: true,
       endsAt: true,
+      couponId: true,
       coupon: { select: couponFields },
       menuItems: {
         where: { isAvailable: true },
@@ -137,6 +138,100 @@ export function findCouponCampaigns(ctx: DbContext, at: Date) {
       menuItems: { select: { id: true } },
     },
   });
+}
+
+// ------------------------------------------------------------------ search (F3 S6)
+
+/*
+ * Search runs only on Postgres full-text and trigram matching. What the customer typed is
+ * passed as a bound parameter to websearch_to_tsquery (which accepts any text) and to the
+ * trigram functions; the prefix term is letters and digits only (see search.ts). The text
+ * search configuration foodz_search ignores accents, case and English stop words.
+ */
+
+export interface SearchMatch {
+  id: string;
+  title: string;
+}
+
+interface SearchTermsInput {
+  query: string;
+  head: string;
+  prefix: string | null;
+}
+
+/** How many terms each form of the query holds; 0 and 0 means there is nothing to search for. */
+export async function countSearchTerms(ctx: DbContext, terms: SearchTermsInput) {
+  const rows = await db(ctx).$queryRaw<{ full_nodes: number; prefix_nodes: number }[]>`
+    SELECT
+      numnode(websearch_to_tsquery('public.foodz_search', ${terms.query}))::int AS full_nodes,
+      CASE WHEN ${terms.prefix}::text IS NULL THEN 0
+        ELSE numnode(to_tsquery('public.foodz_search', ${terms.prefix}::text))::int
+      END AS prefix_nodes`;
+  return rows[0] ?? { full_nodes: 0, prefix_nodes: 0 };
+}
+
+/**
+ * Full-text matches: the whole query, or every word but the last plus the last as the start of
+ * a word. Available dishes first, then dishes whose name matches, then by rank and name.
+ */
+export function findSearchMatches(ctx: DbContext, terms: SearchTermsInput, limit: number) {
+  return db(ctx).$queryRaw<SearchMatch[]>`
+    WITH q AS (
+      SELECT
+        websearch_to_tsquery('public.foodz_search', ${terms.query}) AS whole,
+        CASE WHEN ${terms.prefix}::text IS NULL THEN ''::tsquery
+          ELSE websearch_to_tsquery('public.foodz_search', ${terms.head})
+            && to_tsquery('public.foodz_search', ${terms.prefix}::text)
+        END AS started
+    ),
+    hits AS (
+      SELECT
+        m.id,
+        m.title,
+        m.is_available,
+        m.search_vector AS doc,
+        q.whole,
+        q.started,
+        CASE WHEN numnode(q.whole) > 0 THEN m.search_vector @@ q.whole ELSE false END AS whole_hit,
+        CASE WHEN numnode(q.started) > 0 THEN m.search_vector @@ q.started ELSE false END AS started_hit
+      FROM menu_items m, q
+    )
+    SELECT id::text AS id, title
+    FROM hits
+    WHERE whole_hit OR started_hit
+    ORDER BY
+      is_available DESC,
+      (
+        CASE WHEN whole_hit THEN ts_filter(doc, '{a}') @@ whole ELSE false END
+        OR CASE WHEN started_hit THEN ts_filter(doc, '{a}') @@ started ELSE false END
+      ) DESC,
+      ts_rank(doc, CASE WHEN whole_hit THEN whole ELSE started END) DESC,
+      title ASC
+    LIMIT ${limit}`;
+}
+
+/**
+ * Close dish names for a query with no full-text match ("bulgogy", "pad tai"), compared without
+ * accents. Best first.
+ */
+export async function findSimilarTitles(
+  ctx: DbContext,
+  query: string,
+  minScore: number,
+  limit: number,
+) {
+  await db(ctx)
+    .$executeRaw`SELECT set_config('pg_trgm.word_similarity_threshold', ${String(minScore)}, true)`;
+  return db(ctx).$queryRaw<(SearchMatch & { score: number })[]>`
+    SELECT
+      id::text AS id,
+      title,
+      word_similarity(foodz_unaccent(${query}), foodz_unaccent(title)) AS score
+    FROM menu_items
+    WHERE foodz_unaccent(${query}) <% foodz_unaccent(title)
+    ORDER BY score DESC, is_available DESC, title ASC
+    LIMIT ${limit}`;
 }
 
 export function findStoreSettings(ctx: DbContext) {

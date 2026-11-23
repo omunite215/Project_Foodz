@@ -1,7 +1,8 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
-import { type AppError, rateLimited, unavailable } from '@/server/errors';
+import { networkOf } from '@/server/client-ip';
+import { AppError, rateLimited, unavailable } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { redis, waitUntilReady } from '@/server/redis';
 
@@ -23,6 +24,9 @@ interface Policy {
 }
 
 const SIGN_IN_UNAVAILABLE = "We can't sign you in right now. Please try again in a minute.";
+const PROMO_UNAVAILABLE =
+  "We can't check promo codes right now. Your cart is fine. Try the code again in a minute.";
+const TOO_MANY_CODES = 'Too many codes tried. You can try again in {wait}.';
 
 /** Requests allowed per window, keyed by caller (user id, email hash or IP). */
 const POLICIES = {
@@ -104,7 +108,37 @@ const POLICIES = {
   'auth.default': { points: 60, duration: 60 },
   // "Someone tried to sign up with your email": at most one per address per hour.
   'email.account-exists': { points: 1, duration: 3600 },
-  'coupon.check': { points: 10, duration: 60, failClosed: true },
+  // Promo codes that don't exist (or aren't the caller's), per account and per network (F3 B5).
+  // Codes that exist give the point back, so typing a real code live never counts.
+  'coupon.miss.user': {
+    points: 10,
+    duration: 900,
+    blockDuration: 600,
+    failClosed: true,
+    message: TOO_MANY_CODES,
+    unavailableMessage: PROMO_UNAVAILABLE,
+  },
+  'coupon.miss.ip': {
+    points: 30,
+    duration: 900,
+    blockDuration: 600,
+    failClosed: true,
+    message: TOO_MANY_CODES,
+    unavailableMessage: PROMO_UNAVAILABLE,
+  },
+  // Cart price breakdowns: on open, after each change (debounced), on return to the tab, once
+  // a minute, and two at once to compare codes.
+  'cart.quote': {
+    points: 120,
+    duration: 60,
+    message: "You're updating your cart very fast. Try again in {wait}.",
+  },
+  'favorites.write': {
+    points: 60,
+    duration: 60,
+    message: "You're changing favorites very fast. Try again in {wait}.",
+  },
+  'favorites.read': { points: 120, duration: 60 },
   // Price and availability re-checks before adding to the cart; about one per add.
   'menu.check': { points: 60, duration: 60 },
   'contact.submit': { points: 3, duration: 600 },
@@ -116,6 +150,20 @@ const POLICIES = {
   // Address suggestions while typing (debounced in the browser).
   'geo.search': { points: 30, duration: 60 },
   'geo.check': { points: 60, duration: 60 },
+  // The same lookups for signed-out visitors (F3 U2), per network.
+  'geo.guest-search': {
+    points: 30,
+    duration: 60,
+    message: 'Too many address lookups from this network. Try again in {wait}.',
+  },
+  'geo.guest-check': {
+    points: 30,
+    duration: 60,
+    message: 'Too many address checks from this network. Try again in {wait}.',
+  },
+  // Lookups the site sends to the public Photon server for signed-out visitors, all together:
+  // its fair use is about one request a second, and going over could get the site blocked.
+  'geo.photon': { points: 60, duration: 60 },
   'address.write': { points: 30, duration: 600 },
   'account.update': { points: 20, duration: 600 },
   'account.devices': { points: 30, duration: 600 },
@@ -130,7 +178,7 @@ const POLICIES = {
     failClosed: true,
     message: 'Too many attempts. Try again in {wait}.',
   },
-  search: { points: 60, duration: 60 },
+  search: { points: 60, duration: 60, message: "You're searching very fast. Try again in {wait}." },
   'action.default': { points: 60, duration: 60 },
 } as const satisfies Record<string, Policy>;
 
@@ -198,7 +246,8 @@ const noAttempt: Attempt = { consumed: 0, refund: async () => {} };
  * Consumes one point and returns a handle to give it back. Throws a 429 AppError when the caller
  * is over the limit, or a 503 when a fail-closed limiter is down.
  */
-export async function takeAttempt(policy: RateLimitPolicy, key: string): Promise<Attempt> {
+export async function takeAttempt(policy: RateLimitPolicy, callerKey: string): Promise<Attempt> {
+  const key = storedKey(callerKey);
   let result: RateLimiterRes;
   try {
     await waitUntilReady();
@@ -224,16 +273,84 @@ export async function takeAttempt(policy: RateLimitPolicy, key: string): Promise
   };
 }
 
+/**
+ * The key a counter is kept under. A per-network key (`ip:<address>`) counts the client's
+ * network, so an IPv6 client can't reset its limits by moving within its /64 (F3 security S4).
+ */
+function storedKey(key: string): string {
+  return key.startsWith('ip:') ? `ip:${networkOf(key.slice(3))}` : key;
+}
+
 /** Consumes one point; throws a 429 AppError when the caller is over the limit. */
 export async function enforceRateLimit(policy: RateLimitPolicy, key: string) {
   await takeAttempt(policy, key);
+}
+
+/** One limit to count against: a policy and the caller's key under it. */
+export interface LimitCheck {
+  policy: RateLimitPolicy;
+  key: string;
+}
+
+/**
+ * Consumes one point under each check, all or nothing: if any is over its limit (429) or down
+ * and fail-closed (503), the points already taken are given back and that error is thrown. A
+ * 429 wins over a 503, and the longest wait wins among 429s. The returned attempt refunds every
+ * point at once.
+ */
+export async function takeAttempts(checks: readonly LimitCheck[]): Promise<Attempt> {
+  const results = await Promise.allSettled(
+    checks.map(({ policy, key }) => takeAttempt(policy, key)),
+  );
+  const taken = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+  const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (errors.length > 0) {
+    await Promise.all(taken.map((attempt) => attempt.refund()));
+    const refusals = errors.filter((error) => error instanceof AppError);
+    const limited = refusals
+      .filter((error) => error.code === 'RATE_LIMITED')
+      .toSorted((a, b) => (b.retryAfterSeconds ?? 0) - (a.retryAfterSeconds ?? 0));
+    throw limited[0] ?? refusals[0] ?? errors[0];
+  }
+  return {
+    consumed: Math.max(0, ...taken.map((attempt) => attempt.consumed)),
+    async refund() {
+      await Promise.all(taken.map((attempt) => attempt.refund()));
+    },
+  };
+}
+
+/**
+ * Whether any check is blocked right now, without using a point: the 429 to answer with, or
+ * null. Lets a caller refuse everything while a block lasts (so the refusal can't tell anything
+ * apart) and otherwise count only what it means to count. Throws a 503 when a fail-closed
+ * limiter is down.
+ */
+export async function blockedFor(checks: readonly LimitCheck[]): Promise<AppError | null> {
+  const states = await Promise.all(
+    checks.map(async ({ policy, key }) => {
+      try {
+        await waitUntilReady();
+        return { policy, state: await limiterFor(policy).get(storedKey(key)) };
+      } catch (error) {
+        const refusal = outage(policy, error);
+        if (refusal) throw refusal;
+        return { policy, state: null };
+      }
+    }),
+  );
+  const blocked = states
+    .filter(({ policy, state }) => state !== null && state.consumedPoints > policyOf(policy).points)
+    .toSorted((a, b) => (b.state?.msBeforeNext ?? 0) - (a.state?.msBeforeNext ?? 0));
+  const [longest] = blocked;
+  return longest ? limitError(longest.policy, longest.state?.msBeforeNext ?? 0) : null;
 }
 
 /** Clears a caller's counter, e.g. the sign-in lockout once the password has been reset. */
 export async function resetRateLimit(policy: RateLimitPolicy, key: string) {
   try {
     await waitUntilReady();
-    await limiterFor(policy).delete(key);
+    await limiterFor(policy).delete(storedKey(key));
   } catch (error) {
     logger.warn({ err: error, policy }, 'could not reset a rate limit');
   }

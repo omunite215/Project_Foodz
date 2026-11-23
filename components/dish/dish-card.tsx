@@ -5,6 +5,8 @@ import Link, { useLinkStatus } from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dishHref } from '@/server/modules/menu/urls';
 import type { DishCard as Dish } from '@/server/modules/menu/schema';
+import { FavoriteButton } from '@/components/favorites/favorite-button';
+import { useFavorites } from '@/components/favorites/favorites-context';
 import { formatPrice, ratingLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DishPlate } from './dish-plate';
@@ -53,6 +55,10 @@ export interface DishCardProps {
   eager?: boolean;
   headingLevel?: 'h2' | 'h3' | 'h4';
   className?: string;
+  /** The heart beside the card (F3 S5.1); on wherever favorites are available. */
+  favorite?: boolean;
+  /** The heart was tapped: the favorites page removes the card. */
+  onFavoriteChange?: (on: boolean) => void;
 }
 
 /**
@@ -99,8 +105,12 @@ export function DishCard({
   eager = false,
   headingLevel: Heading = 'h3',
   className,
+  favorite = true,
+  onFavoriteChange,
 }: DishCardProps) {
   const [opening, setOpening] = useState(false);
+  const favorites = useFavorites();
+  const showHeart = favorite && favorites !== null;
   const openingRef = useRef(false);
   const settle = useCallback(() => {
     openingRef.current = false;
@@ -144,102 +154,142 @@ export function DishCard({
     </span>
   ) : null;
 
-  const surface = cn(
-    'group relative rounded-2xl bg-white shadow-raised outline-offset-4 transition duration-200 ease-out',
+  // The hover lift and press scale sit on a wrapper, so the heart moves with the card (F3 D20).
+  const wrapper = cn(
+    'group/card relative h-full rounded-2xl transition duration-200 ease-out',
     'motion-safe:hover:-translate-y-1 motion-reduce:hover:ring-1 motion-reduce:hover:ring-neutral-6',
-    'active:bg-neutral-7 motion-safe:active:scale-[.98] motion-safe:active:duration-150',
+    'motion-safe:has-[a:active]:scale-[.98] motion-safe:has-[a:active]:duration-150',
+  );
+  const surface = cn(
+    'group relative rounded-2xl bg-white shadow-raised outline-offset-4 transition-colors duration-200 ease-out',
+    'active:bg-neutral-7',
     opening && 'pointer-events-none bg-neutral-7',
   );
 
   if (layout === 'compact') {
     return (
-      <Link {...linkProps} className={cn(surface, 'flex items-center gap-4 p-3', className)}>
-        <PendingWatcher onSettled={settle} />
-        <DishPlate
-          src={dish.image}
-          sizes="96px"
-          soldOut={!dish.isAvailable}
-          className="w-22 md:w-24"
-        />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <Heading className="line-clamp-2 font-heading text-body-2 leading-tight text-neutral-2">
-            {name}
-          </Heading>
-          <Rating
-            decorative
-            average={dish.ratingAvg}
-            reviews={dish.ratingCount}
-            textClassName="text-body-5 text-neutral-3"
+      <div className={wrapper}>
+        <Link
+          {...linkProps}
+          className={cn(surface, 'flex items-center gap-4 p-3', showHeart && 'pr-14', className)}
+        >
+          <PendingWatcher onSettled={settle} />
+          <DishPlate
+            src={dish.image}
+            sizes="96px"
+            soldOut={!dish.isAvailable}
+            className="w-22 md:w-24"
           />
-          <span aria-hidden className="font-heading text-title-2 text-brand-strong tabular-nums">
-            {formatPrice(dish.priceCents)}
-          </span>
-        </div>
-        <ChevronRight className="size-5 shrink-0 text-neutral-3" aria-hidden />
-      </Link>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <Heading className="line-clamp-2 font-heading text-body-2 leading-tight text-neutral-2">
+              {name}
+            </Heading>
+            <Rating
+              decorative
+              average={dish.ratingAvg}
+              reviews={dish.ratingCount}
+              textClassName="text-body-5 text-neutral-3"
+            />
+            {dish.isAvailable ? (
+              <span
+                aria-hidden
+                className="font-heading text-title-2 text-brand-strong tabular-nums"
+              >
+                {formatPrice(dish.priceCents)}
+              </span>
+            ) : (
+              <span
+                aria-hidden
+                className="inline-flex h-6 w-fit items-center rounded-md bg-neutral-1 px-2 text-caption font-medium text-neutral-8"
+              >
+                Sold out today
+              </span>
+            )}
+          </div>
+          {showHeart ? null : (
+            <ChevronRight className="size-5 shrink-0 text-neutral-3" aria-hidden />
+          )}
+        </Link>
+        {showHeart ? (
+          <FavoriteButton
+            dish={dish}
+            onToggle={onFavoriteChange}
+            className="absolute top-1/2 right-2 z-10 -translate-y-1/2"
+          />
+        ) : null}
+      </div>
     );
   }
 
   const frame = FRAMES[layout];
 
   return (
-    <Link {...linkProps} className={cn(surface, 'flex h-full flex-col py-6', className)}>
-      <PendingWatcher onSettled={settle} />
-      {badge}
-      <div aria-hidden className="flex justify-center px-7">
-        <DishPlate
-          src={dish.image}
-          sizes={PLATE_SIZES}
-          eager={eager}
-          soldOut={!dish.isAvailable}
-          className={cn(
-            frame.plate,
-            'transition-transform duration-200 motion-safe:group-hover:rotate-6',
-          )}
-        />
-      </div>
-      <div className="mt-6 flex flex-1 flex-col gap-3 px-6">
-        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-          <Heading className={cn('line-clamp-2 font-heading text-neutral-2', frame.name)}>
-            {name}
-          </Heading>
-          {showOffer && dish.offer ? (
-            // Read on the dish page; here it would split the card's link text.
-            <div aria-hidden>
-              <OfferCountdown endsAt={dish.offer.endsAt} />
-            </div>
+    <div className={wrapper}>
+      <Link {...linkProps} className={cn(surface, 'flex h-full flex-col py-6', className)}>
+        <PendingWatcher onSettled={settle} />
+        {badge}
+        <div aria-hidden className="flex justify-center px-7">
+          <DishPlate
+            src={dish.image}
+            sizes={PLATE_SIZES}
+            eager={eager}
+            soldOut={!dish.isAvailable}
+            className={cn(
+              frame.plate,
+              'transition-transform duration-200 motion-safe:group-hover:rotate-6',
+            )}
+          />
+        </div>
+        <div className="mt-6 flex flex-1 flex-col gap-3 px-6">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+            <Heading className={cn('line-clamp-2 font-heading text-neutral-2', frame.name)}>
+              {name}
+            </Heading>
+            {showOffer && dish.offer ? (
+              // Read on the dish page; here it would split the card's link text.
+              <div aria-hidden>
+                <OfferCountdown endsAt={dish.offer.endsAt} />
+              </div>
+            ) : null}
+          </div>
+          <Rating
+            decorative
+            average={dish.ratingAvg}
+            reviews={dish.ratingCount}
+            starClassName={frame.star}
+            textClassName={frame.ratingText}
+          />
+          {showOffer && flavors.length > 0 ? (
+            <p aria-hidden className="text-body-5 text-neutral-3 xl:text-body-4">
+              Flavors: {flavors.join(', ')}
+            </p>
           ) : null}
-        </div>
-        <Rating
-          decorative
-          average={dish.ratingAvg}
-          reviews={dish.ratingCount}
-          starClassName={frame.star}
-          textClassName={frame.ratingText}
-        />
-        {showOffer && flavors.length > 0 ? (
-          <p aria-hidden className="text-body-5 text-neutral-3 xl:text-body-4">
-            Flavors: {flavors.join(', ')}
-          </p>
-        ) : null}
-        <div aria-hidden className="mt-auto flex items-center justify-between gap-3 pt-1">
-          <span className={cn('font-heading text-brand-strong tabular-nums', frame.price)}>
-            {formatPrice(dish.priceCents)}
-          </span>
-          {dish.isAvailable ? (
-            <span
-              className={cn(
-                'inline-flex items-center rounded-lg bg-brand-strong px-4 font-medium text-white uppercase',
-                frame.button,
-              )}
-            >
-              Order now
+          <div aria-hidden className="mt-auto flex items-center justify-between gap-3 pt-1">
+            <span className={cn('font-heading text-brand-strong tabular-nums', frame.price)}>
+              {formatPrice(dish.priceCents)}
             </span>
-          ) : (
-            <span className="text-body-5 font-medium text-neutral-3">Sold out today</span>
-          )}
+            {dish.isAvailable ? (
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-lg bg-brand-strong px-4 font-medium text-white uppercase',
+                  frame.button,
+                )}
+              >
+                Order now
+              </span>
+            ) : (
+              <span className="text-body-5 font-medium text-neutral-3">Sold out today</span>
+            )}
+          </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+      {showHeart ? (
+        <FavoriteButton
+          dish={dish}
+          onToggle={onFavoriteChange}
+          className="absolute top-3 right-3 z-10"
+        />
+      ) : null}
+    </div>
   );
 }

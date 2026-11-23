@@ -142,6 +142,15 @@ export async function remove(ctx: DbContext, userId: string, id: string) {
   return result.count;
 }
 
+/** The caller's default address, if any. */
+export function findDefaultOwn(ctx: DbContext, userId: string) {
+  return db(ctx).address.findFirst({
+    where: { userId, isDefault: true },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: fields,
+  });
+}
+
 /** The most recently added address, to become the default after the default is deleted. */
 export function findNewest(ctx: DbContext, userId: string) {
   return db(ctx).address.findFirst({
@@ -175,9 +184,14 @@ interface AreaRow {
   inside: boolean | null;
   radius_km: number;
   address_text: string;
+  base_fee_cents: number;
+  per_km_fee_cents: number;
 }
 
-/** Straight-line distance from the kitchen and whether a point is inside the radius. */
+/**
+ * Straight-line distance from the kitchen and whether a point is inside the radius, with the
+ * fee settings the cart needs.
+ */
 export async function checkPoint(ctx: DbContext, lat: number, lng: number) {
   const rows = await db(ctx).$queryRaw<AreaRow[]>`
     SELECT
@@ -188,7 +202,9 @@ export async function checkPoint(ctx: DbContext, lat: number, lng: number) {
         delivery_radius_km * 1000
       ) AS inside,
       delivery_radius_km AS radius_km,
-      address_text
+      address_text,
+      base_delivery_fee_cents AS base_fee_cents,
+      per_km_fee_cents
     FROM site_settings
     WHERE id = 1`;
   return rows[0] ?? null;

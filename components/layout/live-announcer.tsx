@@ -1,22 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { subscribeToAnnouncements } from '@/lib/announce';
+import { announcementQueue, subscribeToAnnouncements } from '@/lib/announce';
 
 /** The site's one polite live region. Use `announce()` from lib/announce to speak through it. */
 export function LiveAnnouncer() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = subscribeToAnnouncements((next) => {
-      // Clearing first makes a repeated message ("Code copied" twice) read again.
-      setMessage('');
-      clearTimeout(timer);
-      timer = setTimeout(() => setMessage(next), 50);
-    });
+    const queue = announcementQueue(setMessage);
+    const unsubscribe = subscribeToAnnouncements((next) => queue.push(next));
     return () => {
-      clearTimeout(timer);
+      queue.dispose();
       unsubscribe();
     };
   }, []);

@@ -96,3 +96,30 @@ export function clientIpWarning(env: Env): string | null {
       return null;
   }
 }
+
+/**
+ * The network a client address stands for in per-network limits. An IPv4 address is itself.
+ * An IPv6 client usually holds a whole /64 and can pick any address in it, so IPv6 is counted
+ * by its /64. An IPv4 address written in IPv6 form ("::ffff:203.0.113.9") is counted as IPv4.
+ */
+export function networkOf(ip: string): string {
+  const address = (ip.split('%')[0] ?? ip).toLowerCase();
+  if (!address.includes(':')) return address;
+  const embedded = /:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(address);
+  if (embedded?.[1]) return embedded[1];
+  const halves = address.split('::');
+  if (halves.length > 2) return address;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const groups =
+    halves.length === 2
+      ? [...head, ...Array<string>(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail]
+      : head;
+  if (groups.length !== 8 || !groups.every((group) => /^[0-9a-f]{1,4}$/.test(group))) {
+    return address;
+  }
+  return `${groups
+    .slice(0, 4)
+    .map((group) => Number.parseInt(group, 16).toString(16))
+    .join(':')}::/64`;
+}

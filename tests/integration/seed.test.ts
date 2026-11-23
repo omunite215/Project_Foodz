@@ -8,13 +8,25 @@ import { runAs } from '@/server/db/context';
 import { PrismaClient } from '@/server/db/generated/client';
 import {
   DEMO_ACCOUNTS,
+  FANEUIL_HALL,
   SAMPLE_ACCOUNTS,
   sampleAccountsRefusal,
   type SeedResult,
   seedDatabase,
 } from '../../prisma/seeding';
+import { quoteCart } from '@/server/modules/cart/service';
+import { quote } from '@/server/modules/cart/pricing';
 import { currentTermsVersion, getLegalPage } from '@/server/modules/content/service';
+import { redis } from '@/server/redis';
+import {
+  coupons,
+  FAQ_COUPON_ANSWER,
+  FREE_DELIVERY_BAR,
+  SEED_CORRECTIONS,
+  WELCOME10_DESCRIPTION,
+} from '../../prisma/seeding/content';
 import { menuItems } from '../../prisma/seeding/menu';
+import { escapeHtml } from '../../prisma/seeding/rich-text';
 
 const config = {
   authSecret: 'integration-test-secret-integration-test-secret',
@@ -42,7 +54,22 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await migrator.$disconnect();
+  await redis.quit();
 });
+
+const customerActor = (userId: string, isDemo = false) =>
+  ({ kind: 'user', userId, role: 'customer', isDemo }) as const;
+
+const userIdOf = async (email: string) =>
+  (await migrator.user.findUniqueOrThrow({ where: { email }, select: { id: true } })).id;
+
+const faqHtml = async () =>
+  (
+    await migrator.contentPage.findUniqueOrThrow({
+      where: { slug: 'faq' },
+      select: { publishedVersion: { select: { contentHtml: true, version: true } } },
+    })
+  ).publishedVersion!;
 
 const credentialOf = (email: string) =>
   migrator.account.findFirstOrThrow({
@@ -76,7 +103,8 @@ describe('seed', () => {
     ]);
     for (const page of pages) expect(page.publishedVersion?.contentHtml).toMatch(/^<(p|h2|h3)>/);
 
-    expect(await migrator.coupon.count()).toBe(4);
+    const publicCodes = coupons(new Date()).map((coupon) => coupon.code);
+    expect(await migrator.coupon.count({ where: { code: { in: publicCodes } } })).toBe(4);
     const carousel = await migrator.campaign.findFirstOrThrow({
       where: { placement: 'HOME_CAROUSEL' },
       select: { coupon: { select: { code: true } }, _count: { select: { menuItems: true } } },
@@ -171,6 +199,91 @@ describe('seed', () => {
   });
 });
 
+describe('F3 cart settings and copy', () => {
+  it('charges Boston’s 7 % meals tax and talks about codes in the cart', async () => {
+    const settings = await migrator.siteSettings.findUniqueOrThrow({
+      where: { id: 1 },
+      select: { taxRateBps: true },
+    });
+    expect(settings.taxRateBps).toBe(700);
+    expect(
+      await migrator.coupon.findUniqueOrThrow({
+        where: { code: 'WELCOME10' },
+        select: { description: true, perUserLimit: true },
+      }),
+    ).toEqual({ description: WELCOME10_DESCRIPTION, perUserLimit: 1 });
+    const bar = await migrator.campaign.findFirstOrThrow({
+      where: { placement: 'ANNOUNCEMENT_BAR' },
+      select: { subtitle: true },
+    });
+    expect(bar.subtitle).toBe(FREE_DELIVERY_BAR);
+    expect((await faqHtml()).contentHtml).toContain(escapeHtml(FAQ_COUPON_ANSWER));
+    expect((await faqHtml()).contentHtml).not.toContain('at checkout. The discount');
+  });
+
+  it('corrects a database seeded before F3, once, and leaves edited values alone', async () => {
+    const { taxRateBps, welcome10Description, freeDeliveryBar, faqCouponAnswer } = SEED_CORRECTIONS;
+    // Put the old seeded values back, as an earlier run left them.
+    await migrator.siteSettings.update({ where: { id: 1 }, data: { taxRateBps: taxRateBps.from } });
+    await migrator.coupon.update({
+      where: { code: 'WELCOME10' },
+      data: { description: welcome10Description.from },
+    });
+    await migrator.campaign.updateMany({
+      where: { placement: 'ANNOUNCEMENT_BAR' },
+      data: { subtitle: freeDeliveryBar.from },
+    });
+    const page = await migrator.contentPage.findUniqueOrThrow({
+      where: { slug: 'faq' },
+      select: { publishedVersion: { select: { id: true, version: true, contentHtml: true } } },
+    });
+    const old = page.publishedVersion!;
+    await migrator.contentVersion.update({
+      where: { id: old.id },
+      data: {
+        contentHtml: old.contentHtml.replace(
+          escapeHtml(faqCouponAnswer.to),
+          escapeHtml(faqCouponAnswer.from),
+        ),
+      },
+    });
+    // Someone edited KBBQ5's description: never touched.
+    const kbbq = await migrator.coupon.update({
+      where: { code: 'KBBQ5' },
+      data: { description: 'Edited by staff' },
+      select: { description: true },
+    });
+
+    // The same passwords as the second run, which later tests expect.
+    const rerun = {
+      ...config,
+      demoPassword: 'demo-password-2',
+      samplePassword: 'sample-password-2',
+    };
+    const corrected = await seedDatabase(migrator, rerun);
+    expect(corrected.created).toMatchObject({ corrections: 3, contentVersions: 1 });
+    const faq = await faqHtml();
+    expect(faq.version).toBe(old.version + 1);
+    expect(faq.contentHtml).toContain(escapeHtml(faqCouponAnswer.to));
+    expect((await migrator.siteSettings.findUniqueOrThrow({ where: { id: 1 } })).taxRateBps).toBe(
+      700,
+    );
+    expect(
+      await migrator.coupon.findUniqueOrThrow({
+        where: { code: 'KBBQ5' },
+        select: { description: true },
+      }),
+    ).toEqual(kbbq);
+
+    const again = await seedDatabase(migrator, rerun);
+    expect(Object.values(again.created).every((n) => n === 0)).toBe(true);
+    await migrator.coupon.update({
+      where: { code: 'KBBQ5' },
+      data: { description: '$5 off Korean dishes over $25' },
+    });
+  });
+});
+
 describe('sample customers (local and CI only)', () => {
   it('adds an unconfirmed, a suspended and a second customer, none of them demo logins', async () => {
     const users = await migrator.user.findMany({
@@ -256,19 +369,162 @@ describe('sample customers (local and CI only)', () => {
   it('gives the second customer a Work address inside the area, and the demo Home its kind', async () => {
     const work = await migrator.address.findFirstOrThrow({
       where: { user: { email: 'second.customer@foodz.example' } },
-      select: { kind: true, label: true, line1: true, isDefault: true },
+      select: { kind: true, label: true, line1: true, isDefault: true, lat: true, lng: true },
     });
+    // Where the address search puts it, so a guest checking it gets the same distance (F6).
     expect(work).toEqual({
       kind: 'WORK',
       label: 'Work',
       line1: '1 Faneuil Hall Square',
       isDefault: true,
+      ...FANEUIL_HALL,
     });
     const home = await migrator.address.findFirstOrThrow({
       where: { user: { email: 'demo.customer@foodz.example' } },
       select: { kind: true },
     });
     expect(home.kind).toBe('HOME');
+  });
+});
+
+describe('F3 fixtures (local and CI only)', () => {
+  it('adds the codes for refusals nobody could reach otherwise', async () => {
+    const priya = await userIdOf('second.customer@foodz.example');
+    const rows = await migrator.coupon.findMany({
+      where: { code: { in: ['NEXTWEEK', 'FIRST100', 'PAUSED20', 'CREDIT-PRIYA-7Q2XK9'] } },
+      select: {
+        code: true,
+        startsAt: true,
+        usageLimit: true,
+        usedCount: true,
+        isActive: true,
+        ownerUserId: true,
+        isStoreCredit: true,
+        value: true,
+      },
+      orderBy: { code: 'asc' },
+    });
+    expect(rows.map((row) => row.code)).toEqual([
+      'CREDIT-PRIYA-7Q2XK9',
+      'FIRST100',
+      'NEXTWEEK',
+      'PAUSED20',
+    ]);
+    const [credit, usedUp, next, paused] = rows;
+    expect(credit).toMatchObject({ ownerUserId: priya, isStoreCredit: true, value: 800 });
+    expect(usedUp).toMatchObject({ usageLimit: 100, usedCount: 100 });
+    expect(next!.startsAt.getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    expect(paused!.isActive).toBe(false);
+  });
+
+  it('gives the second customer a delivered WELCOME10 order whose figures quote() agrees with', async () => {
+    const priya = await userIdOf('second.customer@foodz.example');
+    const order = await migrator.order.findFirstOrThrow({
+      where: { userId: priya, number: 'S1001' },
+      select: {
+        status: true,
+        subtotalCents: true,
+        discountCents: true,
+        deliveryFeeCents: true,
+        taxCents: true,
+        totalCents: true,
+        coupon: { select: { code: true } },
+        redemption: { select: { status: true, discountCents: true } },
+        items: { select: { quantity: true, unitPriceCents: true } },
+      },
+    });
+    expect(order).toMatchObject({
+      status: 'DELIVERED',
+      coupon: { code: 'WELCOME10' },
+      redemption: { status: 'REDEEMED', discountCents: 260 },
+      items: [{ quantity: 2, unitPriceCents: 1299 }],
+    });
+    const figures = quote({
+      lines: [
+        { key: 'gimbap', status: 'ok', cuisine: 'KOREAN', unitPriceCents: 1299, quantity: 2 },
+      ],
+      promo: {
+        kind: 'lookup',
+        code: 'WELCOME10',
+        customer: { userId: priya, redeemed: 0, heldBy: [] },
+        coupon: {
+          code: 'WELCOME10',
+          description: null,
+          type: 'PERCENT',
+          value: 10,
+          minSubtotalCents: 1500,
+          maxDiscountCents: 1000,
+          usageLimit: null,
+          usedCount: 0,
+          perUserLimit: 1,
+          cuisines: [],
+          ownerUserId: null,
+          isStoreCredit: false,
+          isActive: true,
+          startsAt: new Date(0),
+          endsAt: null,
+        },
+      },
+      delivery: { status: 'inside', distanceMeters: 1400 },
+      settings: {
+        taxRateBps: 700,
+        baseDeliveryFeeCents: 199,
+        perKmFeeCents: 50,
+        deliveryRadiusKm: 8,
+      },
+      now: new Date(),
+    });
+    expect([
+      order.subtotalCents,
+      order.discountCents,
+      order.deliveryFeeCents,
+      order.taxCents,
+      order.totalCents,
+    ]).toEqual([
+      figures.subtotalCents,
+      figures.promo!.amountCents,
+      figures.delivery.feeCents,
+      figures.tax.cents,
+      figures.totalCents,
+    ]);
+  });
+
+  it('makes R6 and the personal code testable in the cart (S4.4 table, S4.16)', async () => {
+    const priya = await userIdOf('second.customer@foodz.example');
+    const dana = await userIdOf('demo.customer@foodz.example');
+    const gimbap = await migrator.menuItem.findUniqueOrThrow({
+      where: { slug: 'gimbap' },
+      select: { id: true },
+    });
+    const cart = { lines: [{ key: 'a', menuItemId: gimbap.id, quantity: 2 }] };
+    const ip = { ip: `seed-${uuid()}` };
+
+    const welcome = await quoteCart(customerActor(priya), { ...cart, code: 'WELCOME10' }, ip);
+    expect(welcome.promo?.reason).toMatchObject({ code: 'alreadyUsed', rule: 'R6' });
+    const own = await quoteCart(customerActor(priya), { ...cart, code: 'credit-priya-7q2xk9' }, ip);
+    expect(own.promo).toMatchObject({ status: 'applied', foodDiscountCents: 800 });
+    const other = await quoteCart(
+      customerActor(dana, true),
+      { ...cart, code: 'CREDIT-PRIYA-7Q2XK9' },
+      ip,
+    );
+    expect(other.promo?.reason).toMatchObject({ code: 'notFound', rule: 'R1' });
+  });
+
+  it('gives the demo customer two favorites, one of them sold out, seen only by them', async () => {
+    const dana = await userIdOf('demo.customer@foodz.example');
+    const favorites = await runAs(
+      { kind: 'user', userId: dana, role: 'customer', isDemo: true },
+      (ctx) =>
+        db(ctx).favorite.findMany({
+          select: { menuItem: { select: { slug: true, isAvailable: true } } },
+          orderBy: { createdAt: 'desc' },
+        }),
+    );
+    expect(favorites.map((row) => row.menuItem)).toEqual([
+      { slug: 'bulgogi', isAvailable: true },
+      { slug: 'naengmyeon', isAvailable: false },
+    ]);
   });
 });
 

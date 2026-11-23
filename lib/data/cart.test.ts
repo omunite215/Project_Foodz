@@ -4,8 +4,12 @@ import {
   cartActions,
   cartCollection,
   cartLineId,
+  cartMetaCollection,
   cartSessionCheck,
+  legacyLineKey,
+  MAX_CART_LINES,
   MAX_LINE_QUANTITY,
+  sortLines,
 } from './cart';
 
 const RAMEN = '0196a1b2-0000-7000-8000-000000000001';
@@ -41,7 +45,12 @@ function fakeBrowser() {
     tabs.push({ storage, listeners });
 
     const client = new DbClient({ storage, storageEvents });
-    return { cart: client.collection(cartCollection), actions: cartActions(client) };
+    return {
+      client,
+      cart: client.collection(cartCollection),
+      meta: client.collection(cartMetaCollection),
+      actions: cartActions(client),
+    };
   };
 
   return { data, openTab };
@@ -211,9 +220,158 @@ describe('cart', () => {
     const one = new DbClient().collection(cartCollection);
     const other = new DbClient().collection(cartCollection);
 
-    one.insert({ id: 'x', menuItemId: RAMEN, flavors: [], quantity: 1 });
+    one.insert({ id: 'x', menuItemId: RAMEN, flavors: [], quantity: 1, key: 'a', addedAt: 0 });
 
     expect(other.size).toBe(0);
+  });
+});
+
+describe('cart lines keep their key and place (F3 S1.5, S1.7)', () => {
+  it('gives each new line its own short key and keeps the order they were added in', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    actions.add({ menuItemId: RAMEN });
+    actions.add({ menuItemId: PHO });
+    actions.add({ menuItemId: RAMEN, note: 'Extra egg' });
+
+    const lines = sortLines([...cart.values()]);
+    expect(lines.map((line) => line.menuItemId)).toEqual([RAMEN, PHO, RAMEN]);
+    const keys = lines.map((line) => line.key);
+    expect(new Set(keys).size).toBe(3);
+    for (const key of keys) expect(key).toMatch(/^[a-z0-9]{1,24}$/);
+  });
+
+  it('gives lines saved before keys existed a stable key and their saved order', () => {
+    const browser = fakeBrowser();
+    const first = { id: cartLineId(PHO), menuItemId: PHO, flavors: [], quantity: 1 };
+    const second = { id: cartLineId(RAMEN), menuItemId: RAMEN, flavors: [], quantity: 2 };
+    browser.data.set(
+      'foodz.cart.v1',
+      JSON.stringify({
+        [`s:${first.id}`]: { versionKey: 'a', data: first },
+        [`s:${second.id}`]: { versionKey: 'b', data: second },
+      }),
+    );
+
+    const lines = sortLines([...browser.openTab().cart.values()]);
+    expect(lines.map((line) => line.id)).toEqual([first.id, second.id]);
+    expect(lines[0]?.key).toBe(legacyLineKey(first.id));
+    expect(browser.openTab().cart.get(first.id)?.key).toBe(legacyLineKey(first.id));
+  });
+
+  it('edits a line in place, keeping its key and position', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    actions.add({ menuItemId: RAMEN, quantity: 2 });
+    actions.add({ menuItemId: PHO });
+    const before = cart.get(cartLineId(RAMEN))!;
+
+    const outcome = actions.edit(before.id, { flavors: ['spicy'], note: 'No cucumber' });
+
+    const id = cartLineId(RAMEN, ['spicy'], 'No cucumber');
+    expect(outcome).toEqual({ kind: 'updated', id });
+    expect(cart.has(before.id)).toBe(false);
+    expect(cart.get(id)).toMatchObject({ key: before.key, addedAt: before.addedAt, quantity: 2 });
+    expect(sortLines([...cart.values()]).map((line) => line.menuItemId)).toEqual([RAMEN, PHO]);
+    expect(actions.edit(id, { flavors: ['spicy'], note: ' No cucumber ' })).toEqual({
+      kind: 'unchanged',
+      id,
+    });
+  });
+
+  it('merges an edit that matches another line into the older one, up to 20', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    actions.add({ menuItemId: RAMEN, flavors: ['spicy'], quantity: 15 });
+    actions.add({ menuItemId: RAMEN, quantity: 8 });
+    const older = cart.get(cartLineId(RAMEN, ['spicy']))!;
+
+    const outcome = actions.edit(cartLineId(RAMEN), { flavors: ['spicy'] });
+
+    expect(outcome).toEqual({ kind: 'merged', id: older.id, quantity: 20, capped: true });
+    expect(cart.size).toBe(1);
+    expect(cart.get(older.id)).toMatchObject({ key: older.key, addedAt: older.addedAt });
+  });
+
+  it('puts a removed line back exactly as it was (S1.8)', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    actions.add({ menuItemId: PHO });
+    actions.add({ menuItemId: RAMEN, flavors: ['egg'], quantity: 3, note: 'Hot' });
+    actions.add({ menuItemId: PHO, note: 'Mild' });
+    const id = cartLineId(RAMEN, ['egg'], 'Hot');
+    const before = cart.get(id);
+
+    const removed = actions.remove(id);
+    expect(cart.has(id)).toBe(false);
+    expect(actions.restore(removed!)).toBe(true);
+
+    expect(cart.get(id)).toEqual(before);
+    expect(sortLines([...cart.values()])[1]?.id).toBe(id);
+  });
+});
+
+describe('cart limits (F3 S1.6, S1.11, S1.12)', () => {
+  it('adds nothing to a line that already holds 20', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    actions.add({ menuItemId: PHO, quantity: 19 });
+    expect(actions.add({ menuItemId: PHO, quantity: 3 })).toMatchObject({
+      kind: 'added',
+      quantity: 20,
+    });
+    expect(actions.add({ menuItemId: PHO })).toEqual({ kind: 'lineFull', id: cartLineId(PHO) });
+    expect(cart.get(cartLineId(PHO))?.quantity).toBe(20);
+  });
+
+  it('stops at 50 items, also through the stepper', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    actions.add({ menuItemId: PHO, quantity: 20 });
+    actions.add({ menuItemId: RAMEN, quantity: 20 });
+    actions.add({ menuItemId: PHO, note: 'a', quantity: 9 });
+
+    expect(actions.add({ menuItemId: RAMEN, note: 'b', quantity: 2 })).toEqual({
+      kind: 'cartFull',
+      limit: 'items',
+    });
+    actions.setQuantity(cartLineId(PHO, [], 'a'), 15);
+    expect(cart.get(cartLineId(PHO, [], 'a'))?.quantity).toBe(10);
+    expect([...cart.values()].reduce((sum, line) => sum + line.quantity, 0)).toBe(50);
+  });
+
+  it('stops at 25 different lines', () => {
+    const { actions, cart } = fakeBrowser().openTab();
+    for (let index = 0; index < MAX_CART_LINES; index += 1) {
+      expect(actions.add({ menuItemId: PHO, note: `n${index}` }).kind).toBe('added');
+    }
+    expect(actions.add({ menuItemId: RAMEN })).toEqual({ kind: 'cartFull', limit: 'lines' });
+    expect(cart.size).toBe(MAX_CART_LINES);
+  });
+});
+
+describe("the cart's code and address (F3 B15, D18)", () => {
+  it('keeps the code with the cart, synced to other tabs, and empties it with the cart', async () => {
+    const browser = fakeBrowser();
+    const first = browser.openTab();
+    const second = browser.openTab();
+    const metaOf = (tab: ReturnType<typeof browser.openTab>) => tab.meta.get('meta');
+
+    first.actions.add({ menuItemId: PHO });
+    first.actions.setCode('KBBQ5');
+    first.actions.setAddressId('0196a1b2-0000-7000-8000-0000000000aa');
+    await vi.waitFor(() => expect(metaOf(second)?.code).toBe('KBBQ5'));
+
+    second.actions.clear();
+    await vi.waitFor(() => expect(metaOf(first)?.code).toBeNull());
+    expect(metaOf(first)?.addressId).toBe('0196a1b2-0000-7000-8000-0000000000aa');
+    first.actions.forgetMeta();
+    expect(metaOf(first)).toBeUndefined();
+  });
+
+  it('ignores a tampered saved code', () => {
+    const browser = fakeBrowser();
+    browser.data.set(
+      'foodz.cart.meta.v1',
+      JSON.stringify({
+        's:meta': { versionKey: 'x', data: { id: 'meta', code: '<b>', addressId: 'no' } },
+      }),
+    );
+    expect(browser.openTab().meta.size).toBe(0);
   });
 });
 

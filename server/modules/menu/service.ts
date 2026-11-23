@@ -6,12 +6,15 @@ import { logger } from '@/server/logger';
 import { isValidTimeZone, openState, weekdayAt } from './hours';
 import {
   countByCuisine,
+  countSearchTerms,
   findActiveCampaigns,
   findBestSellerIds,
   findCouponCampaigns,
   findDishBySlug,
   findDishes,
+  findSearchMatches,
   findSimilarDishes,
+  findSimilarTitles,
   findStoreSettings,
 } from './repo';
 import {
@@ -29,11 +32,14 @@ import {
   dishSuggestionsInput,
   type FooterLinkGroup,
   footerLinkGroupSchema,
+  menuSearchInput,
+  type MenuSearchResult,
   openingHoursSchema,
   placementSchema,
   type StoreStatus,
   WEEKDAYS,
 } from './schema';
+import { searchTerms } from './search';
 
 /** Shown everywhere until it becomes a store setting. */
 export const DELIVERY_PROMISE_MINUTES = 45;
@@ -228,6 +234,59 @@ export async function listDishesByIds(input: DishIdsInput, at = new Date()): Pro
   );
 }
 
+/**
+ * Dish cards for ids the server already holds (a customer's favorites), without the 50-id cap
+ * of the browser-facing check. Unknown ids are left out; the caller orders the result.
+ */
+export async function listDishCards(ids: readonly string[], at = new Date()): Promise<DishCard[]> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  return readCatalog(async (ctx) => toCards(ctx, await findDishes(ctx, { ids: unique }), at));
+}
+
+// ------------------------------------------------------------------ search (F3 S6)
+
+const SEARCH_LIMIT = 50;
+const SUGGESTION_LIMIT = 5;
+/** word_similarity from which a dish name counts as close (bulgogy and Bulgogi score 0.75). */
+const SUGGESTION_SCORE = 0.5;
+const SUGGESTION_MIN_LETTERS = 3;
+
+/**
+ * Menu search across every cuisine: dish names, descriptions and cuisine names, without accents
+ * or case, the last word matching as the start of a word, and close names when nothing matches
+ * (S6.2 to S6.8). Called by the search action, and directly by the server render of
+ * `/menu?q=...` (S6.13).
+ */
+export async function searchMenu(input: unknown): Promise<MenuSearchResult> {
+  const { q } = menuSearchInput.parse(input);
+  const terms = searchTerms(q);
+  const { query } = terms;
+  return readCatalog(async (ctx): Promise<MenuSearchResult> => {
+    const counts = query ? await countSearchTerms(ctx, terms) : null;
+    if (!counts || (counts.full_nodes === 0 && counts.prefix_nodes === 0)) {
+      return { query, kind: 'all', ids: [], didYouMean: null };
+    }
+    const matches = await findSearchMatches(ctx, terms, SEARCH_LIMIT);
+    if (matches.length > 0) {
+      return { query, kind: 'matches', ids: matches.map((match) => match.id), didYouMean: null };
+    }
+    if (terms.letters >= SUGGESTION_MIN_LETTERS) {
+      const similar = await findSimilarTitles(ctx, query, SUGGESTION_SCORE, SUGGESTION_LIMIT);
+      const [best] = similar;
+      if (best) {
+        return {
+          query,
+          kind: 'suggestions',
+          ids: similar.map((match) => match.id),
+          didYouMean: best.title,
+        };
+      }
+    }
+    return { query, kind: 'none', ids: [], didYouMean: null };
+  });
+}
+
 // ------------------------------------------------------------------ campaigns
 
 /**
@@ -244,29 +303,35 @@ export async function listActiveCampaigns(
     const rows = await findActiveCampaigns(ctx, parsed, at);
     const context = await cardContext(ctx, at);
 
-    return rows
-      .filter((row) => row.coupon === null || isCouponLive(row.coupon, at))
-      .map((row) => {
-        const cta =
-          row.ctaLabel && row.ctaHref && SITE_PATH.test(row.ctaHref)
-            ? { label: row.ctaLabel, href: row.ctaHref }
-            : null;
-        if (row.ctaHref && !cta) {
-          logger.warn({ campaignId: row.id }, 'campaign link is not a path on this site; hidden');
-        }
-        return {
-          id: row.id,
-          placement: row.placement,
-          title: row.title,
-          subtitle: row.subtitle,
-          image: row.imageKey && isSafeLink(row.imageKey) ? row.imageKey : null,
-          cta,
-          startsAt: row.startsAt.toISOString(),
-          endsAt: row.endsAt.toISOString(),
-          coupon: row.coupon ? toCoupon(row.coupon) : null,
-          dishes: row.menuItems.map((dish) => toCard(dish, context)),
-        };
-      });
+    return (
+      rows
+        // A campaign's code may be hidden from this reader by row-level security (a personal
+        // code): then the campaign is hidden too, never shown without its code.
+        .filter((row) =>
+          row.couponId === null ? true : row.coupon !== null && isCouponLive(row.coupon, at),
+        )
+        .map((row) => {
+          const cta =
+            row.ctaLabel && row.ctaHref && SITE_PATH.test(row.ctaHref)
+              ? { label: row.ctaLabel, href: row.ctaHref }
+              : null;
+          if (row.ctaHref && !cta) {
+            logger.warn({ campaignId: row.id }, 'campaign link is not a path on this site; hidden');
+          }
+          return {
+            id: row.id,
+            placement: row.placement,
+            title: row.title,
+            subtitle: row.subtitle,
+            image: row.imageKey && isSafeLink(row.imageKey) ? row.imageKey : null,
+            cta,
+            startsAt: row.startsAt.toISOString(),
+            endsAt: row.endsAt.toISOString(),
+            coupon: row.coupon ? toCoupon(row.coupon) : null,
+            dishes: row.menuItems.map((dish) => toCard(dish, context)),
+          };
+        })
+    );
   });
 }
 

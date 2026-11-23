@@ -10,25 +10,44 @@ import {
 } from '@tanstack/react-db';
 import { useEffect, useRef } from 'react';
 import { z } from 'zod';
+import { clearPendingFavorite, clearPendingPromo } from '@/lib/sign-in-reason';
+import { type CartDishActions, useCartDishActions } from './cart-dishes';
+import { setCheckedAddress } from './checked-address';
 
 /*
  * The cart lives in the browser: saved in localStorage and kept in sync across tabs. It holds
  * only what the customer picked (item, flavors, quantity, a note for the kitchen), never prices. Totals always come
  * from the server.
  *
+ * Next to the lines it keeps the cart's promo code and chosen saved address (F3 B15, D18): the
+ * code only, never an amount, and the address id only.
+ *
  * Components use the hooks at the bottom of this file and never TanStack DB directly, so the
  * storage engine can change without touching the UI.
  */
 
 export const MAX_LINE_QUANTITY = 20;
+export const MAX_CART_LINES = 25;
+export const MAX_CART_ITEMS = 50;
 export const MAX_NOTE_LENGTH = 200;
+export const MAX_FLAVORS = 5;
+export const MAX_CODE_LENGTH = 32;
+
+const LINE_KEY = /^[a-z0-9]{1,24}$/;
 
 export const cartLineSchema = z.object({
   id: z.string().min(1),
   menuItemId: z.uuid(),
-  flavors: z.array(z.string().min(1).max(40)).max(5),
+  flavors: z.array(z.string().min(1).max(40)).max(MAX_FLAVORS),
   quantity: z.int().min(1).max(MAX_LINE_QUANTITY),
   note: z.string().min(1).max(MAX_NOTE_LENGTH).optional(),
+  /**
+   * The line's own short key, kept for its whole life (also when its flavors or note change, which
+   * changes `id`). The quote is sent this key, never the id, which holds the note.
+   */
+  key: z.string().regex(LINE_KEY),
+  /** Lines show in the order they were added; an edited line keeps its place. */
+  addedAt: z.int().min(0),
 });
 
 export type CartLine = z.infer<typeof cartLineSchema>;
@@ -60,7 +79,34 @@ export function cartLineId(menuItemId: string, flavors: readonly string[] = [], 
 const clampQuantity = (quantity: number) =>
   Math.min(MAX_LINE_QUANTITY, Math.max(1, Math.trunc(quantity)));
 
+/** A new line's key: 13 random base-36 characters. */
+export function newLineKey(): string {
+  const [a = 0, b = 0] = crypto.getRandomValues(new Uint32Array(2));
+  return `${a.toString(36)}${b.toString(36)}`.slice(0, 13) || '0';
+}
+
+/** FNV-1a, for the keys of lines saved before keys existed: the same id always gives the same key. */
+function fnv(text: string, seed: number): string {
+  let hash = seed;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+export const legacyLineKey = (id: string) => `${fnv(id, 0x811c9dc5)}${fnv(id, 0x01000193)}`;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 const storedLineSchema = z.object({ versionKey: z.string(), data: cartLineSchema });
+
+/** Lines saved by the first version of the cart have no key or order yet: give them one. */
+function upgradeSavedLine(entry: unknown, index: number): unknown {
+  if (!isRecord(entry) || !isRecord(entry.data) || typeof entry.data.id !== 'string') return entry;
+  return { ...entry, data: { key: legacyLineKey(entry.data.id), addedAt: index, ...entry.data } };
+}
 
 /**
  * Anyone can edit localStorage, so the saved cart is checked line by line on load. Lines that
@@ -75,13 +121,13 @@ const savedCartParser: Parser = {
     } catch {
       return {};
     }
-    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
-    return Object.fromEntries(
-      Object.entries(saved).filter(([key, entry]) => {
-        const line = storedLineSchema.safeParse(entry);
-        return line.success && key.replace(/^s:/, '') === line.data.data.id;
-      }),
-    );
+    if (!isRecord(saved)) return {};
+    const kept: Record<string, unknown> = {};
+    Object.entries(saved).forEach(([key, entry], index) => {
+      const line = storedLineSchema.safeParse(upgradeSavedLine(entry, index));
+      if (line.success && key.replace(/^s:/, '') === line.data.data.id) kept[key] = line.data;
+    });
+    return kept;
   },
 };
 
@@ -100,61 +146,246 @@ export const cartCollection = collectionOptions('cart', (client) =>
   }),
 );
 
+// ------------------------------------------------------------------ the cart's code and address
+
+const META_ID = 'meta';
+
+export const cartMetaSchema = z.object({
+  id: z.literal(META_ID),
+  /** The applied code, as the server normalised it ("KBBQ5"); checked again in every quote. */
+  code: z.string().min(1).max(MAX_CODE_LENGTH).regex(/^\S+$/u).nullable(),
+  /** The saved address chosen with "Change"; null means the default one. */
+  addressId: z.uuid().nullable(),
+});
+export type CartMeta = z.infer<typeof cartMetaSchema>;
+
+const storedMetaSchema = z.object({ versionKey: z.string(), data: cartMetaSchema });
+
+const savedMetaParser: Parser = {
+  stringify: (value) => JSON.stringify(value),
+  parse(raw) {
+    try {
+      const saved: unknown = JSON.parse(raw);
+      if (!isRecord(saved)) return {};
+      const meta = storedMetaSchema.safeParse(saved[`s:${META_ID}`]);
+      return meta.success ? { [`s:${META_ID}`]: meta.data } : {};
+    } catch {
+      return {};
+    }
+  },
+};
+
+export const cartMetaCollection = collectionOptions('cartMeta', (client) =>
+  localStorageCollectionOptions({
+    id: 'cartMeta',
+    storageKey: 'foodz.cart.meta.v1',
+    schema: cartMetaSchema,
+    getKey: (meta) => meta.id,
+    parser: savedMetaParser,
+    startSync: true,
+    storage: client.getDependency<StorageApi>('storage'),
+    storageEventApi: client.getDependency<StorageEventApi>('storageEvents'),
+  }),
+);
+
+const NO_META: Omit<CartMeta, 'id'> = { code: null, addressId: null };
+
+// ------------------------------------------------------------------ actions
+
+export type AddOutcome =
+  /** `quantity` is what the line holds now. */
+  | { kind: 'added'; id: string; quantity: number }
+  /** The line already holds 20: nothing was added (S1.11). */
+  | { kind: 'lineFull'; id: string }
+  /** 50 items or 25 lines: nothing was added (S1.12). */
+  | { kind: 'cartFull'; limit: 'items' | 'lines' };
+
+export type EditOutcome =
+  | { kind: 'unchanged'; id: string }
+  | { kind: 'updated'; id: string }
+  /** The edit made it the same as another line; the older line kept its place (S1.7). */
+  | { kind: 'merged'; id: string; quantity: number; capped: boolean };
+
+const itemsIn = (lines: Iterable<CartLine>) => {
+  let total = 0;
+  for (const line of lines) total += line.quantity;
+  return total;
+};
+
 export function cartActions(client: DbClient) {
   const cart = client.collection(cartCollection);
+  const meta = client.collection(cartMetaCollection);
+
+  const nextAddedAt = () => {
+    let latest = 0;
+    for (const line of cart.values()) latest = Math.max(latest, line.addedAt);
+    return Math.max(Date.now(), latest + 1);
+  };
+
+  const writeMeta = (change: Partial<Omit<CartMeta, 'id'>>) => {
+    const current = meta.get(META_ID);
+    if (current) {
+      meta.update(META_ID, (draft) => {
+        if ('code' in change) draft.code = change.code ?? null;
+        if ('addressId' in change) draft.addressId = change.addressId ?? null;
+      });
+    } else {
+      meta.insert({ id: META_ID, ...NO_META, ...change });
+    }
+  };
 
   return {
-    add({ menuItemId, flavors = [], quantity = 1, note }: NewCartLine) {
+    add({ menuItemId, flavors = [], quantity = 1, note }: NewCartLine): AddOutcome {
       const kept = cleanNote(note);
       const id = cartLineId(menuItemId, flavors, kept);
-      if (cart.has(id)) {
+      const items = itemsIn(cart.values());
+      const existing = cart.get(id);
+      if (existing) {
+        if (existing.quantity >= MAX_LINE_QUANTITY) return { kind: 'lineFull', id };
+        const next = clampQuantity(existing.quantity + quantity);
+        if (items - existing.quantity + next > MAX_CART_ITEMS) {
+          return { kind: 'cartFull', limit: 'items' };
+        }
         cart.update(id, (line) => {
-          line.quantity = clampQuantity(line.quantity + quantity);
+          line.quantity = next;
         });
-      } else {
-        cart.insert({
-          id,
-          menuItemId,
-          flavors: flavors.toSorted(),
-          quantity: clampQuantity(quantity),
-          ...(kept ? { note: kept } : {}),
-        });
+        return { kind: 'added', id, quantity: next };
       }
+      if (cart.size >= MAX_CART_LINES) return { kind: 'cartFull', limit: 'lines' };
+      const wanted = clampQuantity(quantity);
+      if (items + wanted > MAX_CART_ITEMS) return { kind: 'cartFull', limit: 'items' };
+      cart.insert({
+        id,
+        menuItemId,
+        flavors: flavors.toSorted(),
+        quantity: wanted,
+        ...(kept ? { note: kept } : {}),
+        key: newLineKey(),
+        addedAt: nextAddedAt(),
+      });
+      return { kind: 'added', id, quantity: wanted };
     },
 
-    /** A quantity below 1 removes the line. */
+    /** A quantity below 1 removes the line; the cart never holds more than 50 items. */
     setQuantity(id: string, quantity: number) {
-      if (!cart.has(id)) return;
+      const line = cart.get(id);
+      if (!line) return;
       if (quantity < 1) {
         cart.delete(id);
         return;
       }
-      cart.update(id, (line) => {
-        line.quantity = clampQuantity(quantity);
+      const room = MAX_CART_ITEMS - (itemsIn(cart.values()) - line.quantity);
+      const next = Math.min(clampQuantity(quantity), Math.max(line.quantity, room));
+      if (next === line.quantity) return;
+      cart.update(id, (draft) => {
+        draft.quantity = next;
       });
     },
 
-    remove(id: string) {
-      if (cart.has(id)) cart.delete(id);
+    /** Removes a line and hands it back, so it can be put back exactly (S1.8). */
+    remove(id: string): CartLine | undefined {
+      const line = cart.get(id);
+      if (!line) return undefined;
+      // A plain copy of the line's own fields, without the collection's bookkeeping.
+      const copy = cartLineSchema.parse(line);
+      cart.delete(id);
+      return copy;
     },
 
+    /** Puts a removed line back with its flavors, note, quantity and place. */
+    restore(line: CartLine): boolean {
+      const existing = cart.get(line.id);
+      if (existing) {
+        cart.update(line.id, (draft) => {
+          draft.quantity = clampQuantity(existing.quantity + line.quantity);
+        });
+        return true;
+      }
+      if (cart.size >= MAX_CART_LINES || itemsIn(cart.values()) + line.quantity > MAX_CART_ITEMS) {
+        return false;
+      }
+      cart.insert(line);
+      return true;
+    },
+
+    /** New flavors or note for a line, in the same place; merges into a matching line (S1.7). */
+    edit(id: string, change: { flavors: readonly string[]; note?: string }): EditOutcome {
+      const line = cart.get(id);
+      if (!line) return { kind: 'unchanged', id };
+      const kept = cleanNote(change.note);
+      const flavors = change.flavors.toSorted();
+      const nextId = cartLineId(line.menuItemId, flavors, kept);
+      if (nextId === id) return { kind: 'unchanged', id };
+
+      const other = cart.get(nextId);
+      if (other) {
+        const older = other.addedAt <= line.addedAt ? other : line;
+        const total = other.quantity + line.quantity;
+        const quantity = Math.min(MAX_LINE_QUANTITY, total);
+        cart.delete(id);
+        cart.update(nextId, (draft) => {
+          draft.quantity = quantity;
+          draft.key = older.key;
+          draft.addedAt = older.addedAt;
+        });
+        return { kind: 'merged', id: nextId, quantity, capped: total >= MAX_LINE_QUANTITY };
+      }
+      cart.delete(id);
+      cart.insert({
+        id: nextId,
+        menuItemId: line.menuItemId,
+        flavors,
+        quantity: line.quantity,
+        ...(kept ? { note: kept } : {}),
+        key: line.key,
+        addedAt: line.addedAt,
+      });
+      return { kind: 'updated', id: nextId };
+    },
+
+    /** Empties the cart and its code (every tab follows). */
     clear() {
       const ids = [...cart.keys()];
       if (ids.length > 0) cart.delete(ids);
+      if (meta.get(META_ID)?.code) writeMeta({ code: null });
+    },
+
+    setCode(code: string | null) {
+      if ((meta.get(META_ID)?.code ?? null) !== code) writeMeta({ code });
+    },
+
+    setAddressId(addressId: string | null) {
+      if ((meta.get(META_ID)?.addressId ?? null) !== addressId) writeMeta({ addressId });
+    },
+
+    /** Forgets the code and the chosen address: they belonged to the session that ended. */
+    forgetMeta() {
+      if (meta.has(META_ID)) meta.delete(META_ID);
     },
   };
 }
 
 export type CartActions = ReturnType<typeof cartActions>;
 
+/** Lines in the order they were added. */
+export const sortLines = (lines: readonly CartLine[]) =>
+  lines.toSorted((a, b) => a.addedAt - b.addedAt || a.id.localeCompare(b.id));
+
 export function useCart() {
   const { data, isReady } = useLiveQuery({ query: (q) => q.from({ line: cartCollection }) });
-  const lines: CartLine[] = data ?? [];
+  const lines: CartLine[] = sortLines(data ?? []);
   return {
     lines,
-    itemCount: lines.reduce((total, line) => total + line.quantity, 0),
+    itemCount: itemsIn(lines),
     isReady,
   };
+}
+
+/** The cart's code and chosen address. */
+export function useCartMeta(): Omit<CartMeta, 'id'> {
+  const { data } = useLiveQuery({ query: (q) => q.from({ meta: cartMetaCollection }) });
+  const row = data?.[0];
+  return row ? { code: row.code, addressId: row.addressId } : NO_META;
 }
 
 export function useCartActions(): CartActions {
@@ -217,9 +448,10 @@ export function useCartSession(
 ) {
   const { isReady, itemCount } = useCart();
   const actions = useCartActions();
-  const latest = useRef({ itemCount, actions, onEmptied, onSessionEnded });
+  const dishActions = useCartDishActions();
+  const latest = useRef({ itemCount, actions, dishActions, onEmptied, onSessionEnded });
   useEffect(() => {
-    latest.current = { itemCount, actions, onEmptied, onSessionEnded };
+    latest.current = { itemCount, actions, dishActions, onEmptied, onSessionEnded };
   });
 
   useEffect(() => {
@@ -227,12 +459,18 @@ export function useCartSession(
     const {
       itemCount: count,
       actions: cart,
+      dishActions: dishes,
       onEmptied: emptied,
       onSessionEnded: ended,
     } = latest.current;
     const saved = readCartOwner();
     const check = cartSessionCheck(saved, sessionKey, count > 0);
     writeCartOwner(check.owner);
+    // The chosen saved address, and what the ended session left in this browser, go with it.
+    if (saved !== null && saved !== sessionKey) {
+      cart.forgetMeta();
+      forgetSessionTraces(dishes);
+    }
     if (check.emptyCart) {
       cart.clear();
       emptied();
@@ -245,8 +483,23 @@ export function useCartSession(
 /** Signing out on purpose: the cart on this device is emptied (every tab follows). */
 export function useEndCartSession() {
   const actions = useCartActions();
+  const dishes = useCartDishActions();
   return () => {
     writeCartOwner(null);
     actions.clear();
+    actions.forgetMeta();
+    forgetSessionTraces(dishes);
   };
+}
+
+/**
+ * What a session leaves in this browser beyond the cart: the address checked without saving
+ * it, the dish names and photos kept for the cart, and a code or heart waiting for sign-in.
+ * On a shared device the next person must find none of it (F3 security S2).
+ */
+function forgetSessionTraces(dishes: Pick<CartDishActions, 'keepOnly'>) {
+  setCheckedAddress(null);
+  dishes.keepOnly(new Set());
+  clearPendingPromo();
+  clearPendingFavorite();
 }

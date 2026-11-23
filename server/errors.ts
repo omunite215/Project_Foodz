@@ -15,6 +15,8 @@ export type AppErrorCode =
   | 'RATE_LIMITED'
   | 'INVALID_INPUT'
   | 'UNAVAILABLE'
+  // The cart holds more than an online order can (F3 S1.12).
+  | 'CART_TOO_BIG'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'

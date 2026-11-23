@@ -1,5 +1,6 @@
 import type { DishCard, StoreStatus } from '@/server/modules/menu/schema';
 import { PageContainer } from '@/components/layout/page-container';
+import { displayPhone } from '@/lib/phone';
 import { Reveal } from './reveal';
 import { TastePicker } from './taste-picker';
 
@@ -31,6 +32,7 @@ export function TasteSection({
             <TastePicker
               dishes={dishes}
               closedUntil={status && !status.isOpen ? status.opensAt : null}
+              phone={status ? displayPhone(status.store.phone.replace(/\s+/g, '')).display : null}
             />
           </div>
         </Reveal>

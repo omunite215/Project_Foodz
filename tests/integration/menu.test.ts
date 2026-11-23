@@ -302,7 +302,8 @@ describe('campaigns', () => {
       await addCoupon('TEST-USED-UP', { usageLimit: 1, usedCount: 1 });
       // Codes that belong to one customer or cannot be used yet must never be advertised.
       await addCoupon('TEST-PERSONAL', { ownerUserId: uuid() });
-      await addCoupon('TEST-CREDIT', { isStoreCredit: true });
+      // Store credit always has an owner (coupons_store_credit_owner).
+      await addCoupon('TEST-CREDIT', { isStoreCredit: true, ownerUserId: uuid() });
       await addCoupon('TEST-COUPON-OFF', { isActive: false });
       await addCoupon('TEST-NOT-YET', { startsAt: new Date('2031-01-05T00:00:00Z') });
       await addCampaign('Window');
@@ -509,7 +510,7 @@ describe('store status', () => {
 });
 
 describe('catalog tables', () => {
-  it('have no row-level security, so the anonymous visitor reads them through the app role', async () => {
+  it('have no row-level security, except coupons, whose personal codes only their owner sees', async () => {
     const tables = await migrator.$queryRaw<{ name: string; rls: boolean }[]>`
       SELECT relname AS name, relrowsecurity AS rls
       FROM pg_class
@@ -519,7 +520,7 @@ describe('catalog tables', () => {
     expect(tables).toEqual([
       { name: '_CampaignToMenuItem', rls: false },
       { name: 'campaigns', rls: false },
-      { name: 'coupons', rls: false },
+      { name: 'coupons', rls: true },
       { name: 'menu_items', rls: false },
       { name: 'site_settings', rls: false },
     ]);
