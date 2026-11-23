@@ -8,6 +8,8 @@ export const isPhone = (testInfo: TestInfo) => testInfo.project.name === 'storef
 export async function open(page: Page, path: string) {
   const response = await page.goto(path);
   await page.waitForLoadState('networkidle');
+  // Set by the root providers once the page has hydrated (a busy machine can lag behind network quiet).
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 20_000 });
   return response;
 }
 
