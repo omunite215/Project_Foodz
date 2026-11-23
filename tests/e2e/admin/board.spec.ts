@@ -1,14 +1,60 @@
+import type { Page } from '@playwright/test';
 import {
   card,
   expect,
   expectNoAxeViolations,
   isPhone,
+  isTablet,
   showColumn,
   signInDemoAdmin,
   signInStaff,
   STAFF,
   test,
 } from './support';
+
+/**
+ * Nothing on the board runs past its edge (design 2.5, 1.3): no column list scrolls sideways,
+ * every visible part of a card stays inside it, the top bar's h1 is whole, and the status chips
+ * never slide under the controls at the end.
+ */
+async function expectNothingOverflows(page: Page) {
+  const problems = await page.evaluate(() => {
+    const found: string[] = [];
+    for (const list of document.querySelectorAll<HTMLElement>('#board ul')) {
+      if (list.clientWidth > 0 && list.scrollWidth > list.clientWidth + 1) {
+        found.push(
+          `list ${list.closest('section')?.id}: ${list.scrollWidth} > ${list.clientWidth}`,
+        );
+      }
+    }
+    for (const article of document.querySelectorAll<HTMLElement>('#board article')) {
+      const box = article.getBoundingClientRect();
+      if (box.width === 0) continue;
+      for (const part of article.querySelectorAll<HTMLElement>('p, span, button, a, li')) {
+        if (part.closest('.sr-only')) continue;
+        const rect = part.getBoundingClientRect();
+        if (rect.width === 0) continue;
+        if (rect.right > box.right + 1 || rect.left < box.left - 1) {
+          found.push(`${article.dataset.order}: "${part.textContent?.trim().slice(0, 40)}"`);
+        }
+      }
+    }
+    const title = document.querySelector<HTMLElement>('header h1');
+    const bar = title?.closest('header');
+    if (title && bar) {
+      if (title.scrollWidth > title.clientWidth + 1) found.push(`h1 cut: ${title.textContent}`);
+      if (bar.scrollWidth > bar.clientWidth + 1) found.push('top bar runs past its edge');
+      const status = title.nextElementSibling;
+      const end = bar.lastElementChild;
+      if (status && end && status !== end) {
+        const statusRight = status.getBoundingClientRect().right;
+        if (statusRight > end.getBoundingClientRect().left + 1) found.push('chips under controls');
+      }
+    }
+    return found;
+  });
+  expect(problems).toEqual([]);
+}
 
 /*
  * The order board with the seeded fixtures (F5 design 2, A2 to A5, A11, A14). Run
@@ -47,16 +93,30 @@ test.describe('the kitchen board (A2)', () => {
   test('moves an order in one tap, then takes it back with Undo (A4.2, A8.1)', async ({
     page,
   }, testInfo) => {
-    await showColumn(page, testInfo, /^Accepted/);
-    await card(page, 'S1103').getByRole('button', { name: 'Start cooking order S1103' }).click();
-    await showColumn(page, testInfo, /^Preparing/);
-    const moved = card(page, 'S1103');
+    // The viewports run side by side on shared fixtures, so each moves its own order; 1440
+    // only differs in width from 1024.
+    test.skip(!isPhone(testInfo) && !isTablet(testInfo), 'Covered at 375 and 1024.');
+    const move = isPhone(testInfo)
+      ? { number: 'S1103', from: 'Accepted', to: 'Preparing', button: 'Start cooking' }
+      : { number: 'S1104', from: 'Preparing', to: 'Ready', button: 'Mark ready' };
+    const press = `${move.button} order ${move.number}`;
+    // Reduced motion: nothing travels, so the moved card is outlined in its new column (D20).
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await showColumn(page, testInfo, new RegExp(`^${move.from}`));
+    await card(page, move.number).getByRole('button', { name: press }).click();
+    await showColumn(page, testInfo, new RegExp(`^${move.to}`));
+    const moved = card(page, move.number);
+    if (!isPhone(testInfo)) await expect(moved).toHaveCSS('outline-style', 'solid');
     await expect(moved.getByText('Moved just now')).toBeVisible({ timeout: 10_000 });
-    await moved.getByRole('button', { name: /^Undo, move order S1103 back to Accepted/ }).click();
-    await showColumn(page, testInfo, /^Accepted/);
-    await expect(
-      card(page, 'S1103').getByRole('button', { name: 'Start cooking order S1103' }),
-    ).toBeVisible({ timeout: 10_000 });
+    await moved
+      .getByRole('button', {
+        name: new RegExp(`^Undo, move order ${move.number} back to ${move.from}`),
+      })
+      .click();
+    await showColumn(page, testInfo, new RegExp(`^${move.from}`));
+    await expect(card(page, move.number).getByRole('button', { name: press })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test('finds an order by its number and keeps filters in the address (A11)', async ({ page }) => {
@@ -65,7 +125,9 @@ test.describe('the kitchen board (A2)', () => {
     await expect(card(page, 'S1105').getByRole('link', { name: 'Order S1105' })).toBeFocused();
     await page.getByLabel('Find order').fill('9999');
     await page.getByRole('button', { name: 'Find' }).click();
-    await expect(page.getByRole('search').getByText('No order 9999.')).toBeVisible();
+    await expect(page.getByRole('search').getByText('No order 9999.')).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.getByRole('button', { name: 'Late only' }).click();
     await expect(page).toHaveURL(/late=1/);
@@ -86,10 +148,61 @@ test.describe('the kitchen board (A2)', () => {
     const panel = page.getByRole('dialog', { name: 'Order S1101' });
     await expect(panel).toBeVisible();
     await expect(page).toHaveURL(/\/admin\/orders\/[0-9a-f-]{36}$/);
-    await expect(panel.getByRole('heading', { name: 'Timeline' })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'Timeline' })).toBeVisible({
+      timeout: 15_000,
+    });
     await expectNoAxeViolations(page);
     await page.keyboard.press('Escape');
     await expect(card(page, 'S1101').getByRole('link', { name: 'Order S1101' })).toBeFocused();
+  });
+});
+
+test.describe('fit and states (design review)', () => {
+  test('nothing runs past its edge, live or offline', async ({ page, context }) => {
+    await signInStaff(page, STAFF.kitchen, '/admin/orders');
+    await expect(page.getByText('Live', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expectNothingOverflows(page);
+    await context.setOffline(true);
+    await expect(page.getByText('Offline', { exact: true }).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectNothingOverflows(page);
+    await context.setOffline(false);
+  });
+
+  test("support's cards fit their columns, amounts included", async ({ page }) => {
+    await signInStaff(page, STAFF.support, '/admin/orders');
+    await expect(page.getByText(/to collect/).first()).toBeAttached();
+    await expectNothingOverflows(page);
+  });
+
+  test('signed out: the card takes focus and "Sign in again" works (1.7)', async ({
+    page,
+    context,
+  }) => {
+    await signInStaff(page, STAFF.kitchen, '/admin/orders');
+    // The session ends on the server; the board finds out on its next request. A search is
+    // used for that request because it changes nothing, whatever happens.
+    const origin = new URL(page.url()).origin;
+    const ended = await page.request.post('/api/auth/sign-out', {
+      headers: { origin, 'content-type': 'application/json' },
+      data: {},
+    });
+    expect(ended.ok()).toBe(true);
+    await context.clearCookies();
+    const heading = page.getByRole('heading', { name: "You've been signed out" });
+    // Realtime may notice first; then there is nothing to search for.
+    if (!(await heading.isVisible())) {
+      await page.getByLabel('Find order').fill('9999');
+      await page.getByRole('button', { name: 'Find' }).click();
+    }
+    await expect(heading).toBeFocused({ timeout: 15_000 });
+    await expectNothingOverflows(page);
+    await page.keyboard.press('Tab');
+    const again = page.getByRole('link', { name: 'Sign in again' });
+    await expect(again).toBeFocused();
+    await again.click();
+    await expect(page).toHaveURL(/\/sign-in\?callbackUrl=%2Fadmin%2Forders/);
   });
 });
 

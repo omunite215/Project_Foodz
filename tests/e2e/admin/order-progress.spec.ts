@@ -43,4 +43,37 @@ test.describe('the live order page', () => {
     await expect(page).toHaveTitle('Cooking · Order S1105 | Foodz');
     await expectNoAxeViolations(page);
   });
+
+  test("a cancellation in the page's HTML shows at once, never hidden by script", async ({
+    page,
+  }) => {
+    test.skip(!SAMPLE_PASSWORD, 'Needs the sample password (E2E_SEED_OUTPUT).');
+    await signIn(page, ACCOUNTS.second, SAMPLE_PASSWORD);
+    await open(page, '/account/orders');
+    const href = await page
+      .getByRole('link', { name: 'Order S1108', exact: true })
+      .getAttribute('href');
+    expect(href).toMatch(/^\/orders\/[0-9a-f-]{36}$/);
+
+    // The lowest opacity the card ever had, sampled every frame from the first paint.
+    await page.addInitScript(() => {
+      const record = { min: 1 };
+      Object.assign(window, { cancelCardOpacity: record });
+      const sample = () => {
+        const card = document.querySelector('section[aria-labelledby="cancel-title"]');
+        if (card) record.min = Math.min(record.min, Number(getComputedStyle(card).opacity));
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await open(page, href ?? '/account/orders');
+    await expect(page.locator('#cancel-title')).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(600);
+    const lowest = await page.evaluate(
+      () => (window as unknown as { cancelCardOpacity: { min: number } }).cancelCardOpacity.min,
+    );
+    expect(lowest).toBe(1);
+    await expectNoAxeViolations(page);
+  });
 });

@@ -40,6 +40,10 @@ test.describe('"Can\'t make it" (A6)', () => {
 
     await dialog.getByRole('button', { name: 'Keep order' }).click();
     await expect(dialog).toBeHidden();
+    // Back to the button that opened the menu, not the card's heading (3.1).
+    await expect(
+      card(page, 'S1101').getByRole('button', { name: 'More actions for order S1101' }),
+    ).toBeFocused();
   });
 });
 
@@ -54,9 +58,10 @@ test.describe('staff "Cancel order" (A7)', () => {
       .click();
     await page.getByRole('menuitem', { name: 'Cancel order' }).click();
     const dialog = page.getByRole('dialog', { name: 'Cancel order S1102?' });
+    // The refund line loads with the dialog ("Loading what will happen").
     await expect(
       dialog.getByText("Nothing was charged, so there's nothing to refund."),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
     await dialog.getByRole('radio', { name: 'Other' }).check();
     await dialog.getByRole('button', { name: 'Cancel order' }).click();
     await expect(
@@ -66,6 +71,9 @@ test.describe('staff "Cancel order" (A7)', () => {
     await expectNoAxeViolations(page);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+    await expect(
+      card(page, 'S1102').getByRole('button', { name: /Actions for order S1102/ }),
+    ).toBeFocused();
   });
 });
 

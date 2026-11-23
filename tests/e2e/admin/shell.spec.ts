@@ -42,9 +42,26 @@ test.describe('who may enter /admin (A1.2 to A1.5)', () => {
     await expectNoAxeViolations(page);
   });
 
+  test('staff without two-factor get the gate at /admin too, with the admin title', async ({
+    page,
+  }) => {
+    await signInStaff(page, STAFF.noFactor, '/admin');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Two-factor sign-in needed' }),
+    ).toBeVisible();
+    await expect(page).toHaveTitle('Two-factor sign-in needed | Foodz Admin');
+  });
+
   test('a content editor has nothing yet, and no access to the board', async ({ page }) => {
     await signInStaff(page, STAFF.editor);
     await expect(page.getByRole('heading', { level: 1, name: 'Nothing here yet' })).toBeVisible();
+    await expect(page).toHaveTitle('Staff tools | Foodz Admin');
+    // No screens yet, so no sidebar and no menu button (D3).
+    await expect(page.getByRole('navigation', { name: 'Staff' })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /^(Open menu|Collapse sidebar|Expand sidebar)$/ }),
+    ).toHaveCount(0);
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Foodz home' })).toBeVisible();
     await expectNoAxeViolations(page);
     await open(page, '/admin/orders');
     await expect(
@@ -55,11 +72,16 @@ test.describe('who may enter /admin (A1.2 to A1.5)', () => {
 });
 
 test.describe('frames (A1.6, A16.1)', () => {
-  test('the kitchen gets the top bar only, with a logo that is not a link', async ({ page }) => {
+  test('the kitchen gets the top bar only, with a logo that is not a link', async ({
+    page,
+  }, testInfo) => {
     await signInStaff(page, STAFF.kitchen);
     await expect(page).toHaveURL(/\/admin\/orders/);
     await expect(page.getByRole('navigation', { name: 'Staff' })).toHaveCount(0);
-    await expect(page.getByRole('banner').getByRole('img', { name: 'Foodz' })).toBeVisible();
+    // Phones leave the logo out: the h1 names the page (design 1.3).
+    await expect(page.getByRole('banner').getByRole('img', { name: 'Foodz' })).toHaveCount(
+      isPhone(testInfo) ? 0 : 1,
+    );
     await expect(page.getByRole('banner').getByRole('link', { name: /Foodz/ })).toHaveCount(0);
     // No storefront chrome under /admin (design 1.1).
     await expect(page.getByRole('contentinfo')).toHaveCount(0);
@@ -83,6 +105,12 @@ test.describe('frames (A1.6, A16.1)', () => {
       'aria-current',
       'page',
     );
+    if (isPhone(testInfo)) {
+      // Closing the drawer hands focus back to the button that opened it (design 1.2).
+      await page.keyboard.press('Escape');
+      await expect(nav).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Open menu' })).toBeFocused();
+    }
   });
 
   test('staff see "Staff tools" in the storefront account menu (A1.8)', async ({ page }) => {
