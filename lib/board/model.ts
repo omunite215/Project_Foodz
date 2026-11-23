@@ -10,6 +10,7 @@ import {
 } from '@/server/modules/board/schema';
 import { cardTiming, isLate } from '@/server/modules/board/timing';
 import type { OrderChangedEvent } from '@/lib/realtime/events';
+import type { OrderChangedDetails } from '@/server/modules/board/schema';
 
 /*
  * The order board's rules in the browser (F5 design 2): columns and their order, filters, how
@@ -178,6 +179,10 @@ export function withStatus(
   return next;
 }
 
+/** A step taken back (undo, move back), for "Order 1042 moved back to Accepted". */
+export const isStepBack = (from: OrderStatus, to: OrderStatus) =>
+  STEP_ORDER.indexOf(to) < STEP_ORDER.indexOf(from);
+
 export function applyEvent(card: BoardCard, event: OrderChangedEvent): BoardCard {
   if (!isBoardStatus(event.status)) return card;
   if (event.status === card.status) return { ...card, version: event.version };
@@ -262,3 +267,26 @@ export function columnFromHash(
 
 /** "Out for delivery" starts collapsed when five 232 px columns don't fit (design 2.1, D8). */
 export const FIVE_COLUMNS_REM = 76.5;
+
+/** `serverError.details` of an ORDER_CHANGED refusal (contract §2.1). */
+export function isOrderChangedDetails(value: unknown): value is OrderChangedDetails {
+  if (typeof value !== 'object' || value === null) return false;
+  const current: unknown = Reflect.get(value, 'current');
+  return (
+    typeof Reflect.get(value, 'number') === 'string' &&
+    typeof current === 'object' &&
+    current !== null &&
+    typeof Reflect.get(current, 'status') === 'string' &&
+    typeof Reflect.get(current, 'version') === 'number'
+  );
+}
+
+/** The staff name in an UNDO_NOT_ALLOWED refusal, for "Only Alex Kim can undo this…". */
+export function undoMovedByName(details: unknown): string | null {
+  if (typeof details !== 'object' || details === null) return null;
+  const movedBy: unknown = Reflect.get(details, 'movedBy');
+  if (typeof movedBy !== 'object' || movedBy === null) return null;
+  if (Reflect.get(movedBy, 'kind') !== 'staff') return null;
+  const name: unknown = Reflect.get(movedBy, 'name');
+  return typeof name === 'string' ? name : null;
+}

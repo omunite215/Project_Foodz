@@ -51,7 +51,16 @@ function line(
   };
 }
 
-const base = {
+type BaseFields =
+  | 'acceptedAt'
+  | 'preparingAt'
+  | 'readyAt'
+  | 'pickedUpAt'
+  | 'kitchenNote'
+  | 'undo'
+  | 'masked';
+
+const base: Pick<BoardCard, BaseFields> = {
   acceptedAt: null,
   preparingAt: null,
   readyAt: null,

@@ -275,6 +275,10 @@ const STATUS_FOR_MOVES: Partial<Record<OrderStatus, string>> = {
 export const movedAnnouncement = (number: string, status: OrderStatus) =>
   `Order ${number} moved to ${STATUS_FOR_MOVES[status] ?? STAFF_STATUS_WORDS[status]}`;
 
+/** The rest of the Undo button's name: "Undo, move order S1103 back to Accepted". */
+export const undoSpoken = (number: string, status: OrderStatus) =>
+  `move order ${number} back to ${STATUS_FOR_MOVES[status] ?? STAFF_STATUS_WORDS[status]}`;
+
 export const movedBackAnnouncement = (number: string, status: OrderStatus) =>
   `Order ${number} moved back to ${STATUS_FOR_MOVES[status] ?? STAFF_STATUS_WORDS[status]}`;
 

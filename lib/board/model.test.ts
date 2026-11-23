@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { OrderStatus } from '@/server/db/enums';
 import { LATENESS } from '@/server/modules/board/schema';
+import type { OrderChangedEvent } from '@/lib/realtime/events';
 import {
   at,
   fullCard,
@@ -28,8 +30,12 @@ import {
 } from './model';
 
 const now = new Date(NOW);
-const event = (status: string, version: number, orderId = ORDER_ID(3)) =>
-  ({ orderId, status, version, at: at('19:31') }) as const;
+const event = (status: OrderStatus, version: number, orderId = ORDER_ID(3)): OrderChangedEvent => ({
+  orderId,
+  status,
+  version,
+  at: at('19:31'),
+});
 
 describe('columns (A2.1, A2.2)', () => {
   it('fills the kitchen board oldest first, with no Out for delivery', () => {
