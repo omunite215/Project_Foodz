@@ -123,7 +123,6 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     [meta.asOf, meta.receivedAt],
   );
   const boardRef = useRef<HTMLDivElement>(null);
-  const capture = useBoardFlip(boardRef);
 
   // ---------------------------------------------------------------- the server's clock (B14)
   const [now, setNow] = useState(() => new Date(initial.asOf));
@@ -249,6 +248,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
       return next;
     });
   }, []);
+  // Reduced motion: nothing travels, so a card that changed column gets the 2 s outline (D20).
+  const outlineMoved = useCallback((ids: string[]) => highlight(ids, 'flash'), [highlight]);
+  const capture = useBoardFlip(boardRef, outlineMoved);
   const [newIds, setNewIds] = useState<string[]>([]);
   const [hiddenNew, setHiddenNew] = useState<string[]>([]);
   const [unseen, setUnseen] = useState(0);
@@ -475,8 +477,11 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
 
   // ---------------------------------------------------------------- dialogs and the menu
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const openDialog = (kind: DialogKind, card: BoardCard) => {
-    const opener = document.activeElement;
+  const openDialog = (
+    kind: DialogKind,
+    card: BoardCard,
+    opener: Element | null = document.activeElement,
+  ) => {
     setDialog({
       kind,
       cardId: card.id,
@@ -491,8 +496,12 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
       return;
     }
     if (meta.can.readOnly) return;
-    // After the menu has closed and handed focus back to its button, the dialog's opener.
-    setTimeout(() => openDialog(item, card), 0);
+    // The menu's button is the opener: Escape or Cancel goes back to it (3.1). The menu may
+    // still be closing when the dialog opens, so it is found rather than read from focus.
+    const trigger = document.querySelector(
+      `[data-card-id="${CSS.escape(card.id)}"] [data-card-menu]`,
+    );
+    setTimeout(() => openDialog(item, card, trigger), 0);
   };
 
   const focusAfter = useCallback(
@@ -646,76 +655,79 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
         selected={selectedTab}
         onSelect={selectTab}
       />
-      <div className="relative flex min-h-0 flex-1 flex-col" inert={signedOut || undefined}>
-        <div
-          ref={boardRef}
-          id="board"
-          style={{ '--board-cols': boardCols }}
-          onFocus={(event) => {
-            // Keyboard focus only: scrolling under a mouse press would move the card away
-            // from the pointer before the click lands.
-            if (!event.target.matches(':focus-visible')) return;
-            const target = event.target.closest('article, section');
-            target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-          }}
-          className={cn(
-            'flex flex-col gap-3 px-4 pt-2 pb-4 md:flex-row md:snap-x md:snap-mandatory md:overflow-x-auto lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-(--board-cols) lg:overflow-y-hidden xl:gap-4 xl:px-6 xl:pb-6',
-            empty === 'board' && 'lg:flex-none',
-            signedOut && 'opacity-40',
-          )}
-        >
-          {meta.columns.map((column) => {
-            const visible = grouped[column].filter(shown);
-            return (
-              <BoardColumn
-                key={column}
-                column={column}
-                count={counts[column]}
-                collapsed={collapsed(column)}
-                collapsible={!isPhone}
-                hiddenOnPhone={column !== selectedTab}
-                tabPanel={isPhone && column === selectedTab}
-                newIds={newIds.filter((id) => visible.some((card) => card.id === id))}
-                empty={empty === 'board' ? 'board' : visible.length === 0 ? 'column' : null}
-                onToggle={() => toggleColumn(column)}
-                onShowNew={(id) => {
-                  scrollToCard(id);
-                  focusCardOrColumn(id, column);
-                  setNewIds((current) => current.filter((item) => item !== id));
-                }}
-                className={columnClass}
-              >
-                {visible.map((card) => (
-                  <li key={card.id} data-card-id={card.id} data-flip-id={card.id}>
-                    <OrderCard
-                      card={card}
-                      now={now}
-                      offset={offset}
-                      timeZone={timeZone}
-                      thresholds={meta.thresholds}
-                      can={meta.can}
-                      progress={moves.progress[card.id] ?? null}
-                      reason={moves.reasonFor(card)}
-                      blocked={blocked}
-                      highlight={highlights[card.id] ?? null}
-                      onPrimary={onPrimary}
-                      onMenu={onMenu}
-                      onUndo={(undone) => void onUndo(undone)}
-                    />
-                  </li>
-                ))}
-              </BoardColumn>
-            );
-          })}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* The overlay stays outside the inert block, or "Sign in again" can't be reached. */}
+        <div className="flex min-h-0 flex-1 flex-col" inert={signedOut || undefined}>
+          <div
+            ref={boardRef}
+            id="board"
+            style={{ '--board-cols': boardCols }}
+            onFocus={(event) => {
+              // Keyboard focus only: scrolling under a mouse press would move the card away
+              // from the pointer before the click lands.
+              if (!event.target.matches(':focus-visible')) return;
+              const target = event.target.closest('article, section');
+              target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }}
+            className={cn(
+              'flex flex-col gap-3 px-4 pt-2 pb-4 md:flex-row md:snap-x md:snap-mandatory md:overflow-x-auto lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-(--board-cols) lg:overflow-y-hidden xl:gap-4 xl:px-6 xl:pb-6',
+              empty === 'board' && 'lg:flex-none',
+              signedOut && 'opacity-40',
+            )}
+          >
+            {meta.columns.map((column) => {
+              const visible = grouped[column].filter(shown);
+              return (
+                <BoardColumn
+                  key={column}
+                  column={column}
+                  count={counts[column]}
+                  collapsed={collapsed(column)}
+                  collapsible={!isPhone}
+                  hiddenOnPhone={column !== selectedTab}
+                  tabPanel={isPhone && column === selectedTab}
+                  newIds={newIds.filter((id) => visible.some((card) => card.id === id))}
+                  empty={empty === 'board' ? 'board' : visible.length === 0 ? 'column' : null}
+                  onToggle={() => toggleColumn(column)}
+                  onShowNew={(id) => {
+                    scrollToCard(id);
+                    focusCardOrColumn(id, column);
+                    setNewIds((current) => current.filter((item) => item !== id));
+                  }}
+                  className={columnClass}
+                >
+                  {visible.map((card) => (
+                    <li key={card.id} data-card-id={card.id} data-flip-id={card.id}>
+                      <OrderCard
+                        card={card}
+                        now={now}
+                        offset={offset}
+                        timeZone={timeZone}
+                        thresholds={meta.thresholds}
+                        can={meta.can}
+                        progress={moves.progress[card.id] ?? null}
+                        reason={moves.reasonFor(card)}
+                        blocked={blocked}
+                        highlight={highlights[card.id] ?? null}
+                        onPrimary={onPrimary}
+                        onMenu={onMenu}
+                        onUndo={(undone) => void onUndo(undone)}
+                      />
+                    </li>
+                  ))}
+                </BoardColumn>
+              );
+            })}
+          </div>
+          {empty ? (
+            <BoardEmpty
+              kind={empty === 'board' ? 'board' : 'filtered'}
+              soundOn={sound.state === 'on'}
+              onTurnOnSound={() => void sound.toggle()}
+              onClearFilters={() => setFilters({ late: false, pay: null })}
+            />
+          ) : null}
         </div>
-        {empty ? (
-          <BoardEmpty
-            kind={empty === 'board' ? 'board' : 'filtered'}
-            soundOn={sound.state === 'on'}
-            onTurnOnSound={() => void sound.toggle()}
-            onClearFilters={() => setFilters({ late: false, pay: null })}
-          />
-        ) : null}
         {signedOut ? <SignedOutOverlay /> : null}
       </div>
       <BoardDialogs

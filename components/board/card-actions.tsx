@@ -178,7 +178,13 @@ export function CardActions({
   const captionId = useId();
   const slow = useSlowPending(progress === 'moving');
   const demo = blocked === 'demo';
-  const caption = demo ? READ_ONLY_CAPTION : blocked === 'offline' ? OFFLINE_CAPTION : null;
+  // Offline blocks moves only: the caption sits under a blocked button, never under "Waiting
+  // for pickup" or support's menu, which still opens.
+  const caption = demo
+    ? READ_ONLY_CAPTION
+    : blocked === 'offline' && (undo || actions.primary)
+      ? OFFLINE_CAPTION
+      : null;
 
   if (undo) {
     return (
@@ -253,6 +259,7 @@ export function CardActions({
               type="button"
               variant="outline"
               size={support ? 'kitchen' : 'icon-kitchen'}
+              data-card-menu=""
               className={cn(support && 'flex-1', demo && BLOCKED_BUTTON_CLASS)}
               aria-describedby={demo ? captionId : undefined}
             >
@@ -291,12 +298,19 @@ export function CardActions({
                       onSelect={() => onMenu(item)}
                       className={cn(
                         'h-12',
-                        destructive && 'text-destructive data-[highlighted]:text-destructive',
-                        disabled && 'text-neutral-3',
+                        disabled
+                          ? 'text-neutral-3'
+                          : destructive && 'text-destructive data-[highlighted]:text-destructive',
                       )}
                     >
                       <Icon
-                        className={destructive ? 'text-destructive' : 'text-neutral-3'}
+                        className={
+                          disabled
+                            ? 'text-neutral-4'
+                            : destructive
+                              ? 'text-destructive'
+                              : 'text-neutral-3'
+                        }
                         aria-hidden
                       />
                       {MENU_WORDS[item]}

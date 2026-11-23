@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CircleCheck, CircleX, Clock, Phone, Undo2 } from 'lucide-react';
+import { CircleCheck, Clock, Phone, Undo2 } from 'lucide-react';
 import { type ReactNode, type Ref, useEffect, useId, useRef, useState } from 'react';
 import {
   moveOrderAction,
@@ -467,12 +467,8 @@ function DetailActions({
         : []),
       ...(actions.cancel
         ? [
-            {
-              kind: 'cancel' as const,
-              label: MENU_WORDS.cancel,
-              icon: <CircleX className="size-5" aria-hidden />,
-              destructive: true,
-            },
+            // No icon, as "Can't make it": the red outline carries it (5.2).
+            { kind: 'cancel' as const, label: MENU_WORDS.cancel, destructive: true },
           ]
         : []),
     ];
