@@ -23,7 +23,7 @@ import {
   MONEY_FLAG_WORDS,
   orderDateText,
   orderHref,
-  STATUS_WORDS,
+  chipWord,
 } from '@/lib/order-text';
 import { arrivalText } from '@/lib/order-progress';
 import { cn } from '@/lib/utils';
@@ -64,7 +64,7 @@ export function StatusChip({
       )}
     >
       <Icon className={cn('size-3.5', chip.iconClass)} aria-hidden />
-      {word === 'pickedUp' && collected ? 'Collected' : STATUS_WORDS[word]}
+      {chipWord({ statusWord: word, collected })}
     </span>
   );
 }
@@ -115,14 +115,15 @@ export function OrderRow({
           <StatusChip word={order.statusWord} collected={order.collected} />
           <span className="sr-only">,</span>
         </span>
-        {/* From 1280 px the arrival leaves the date and sits under the dishes (7.2). */}
+        {/* From 1280 px the arrival is its own line under the date, across the first two
+            columns, so it reads on one line (7.2, design review R2-2). */}
         <span className="col-start-1 row-start-2 mt-0.5 block text-body-5 text-neutral-3 xl:contents">
           <span className="xl:col-start-1 xl:row-start-2 xl:mt-0.5 xl:block">
             {date}
             <span className="sr-only">,</span>
           </span>
           {arrival ? (
-            <span className="mt-1 flex items-center gap-1.5 text-body-5 text-neutral-1 tabular-nums xl:col-start-2 xl:row-start-2 xl:self-start">
+            <span className="mt-1 flex items-center gap-1.5 text-body-5 text-neutral-1 tabular-nums xl:col-span-2 xl:col-start-1 xl:row-start-3">
               {arrival.tone === 'late' ? (
                 <TriangleAlert className="size-3.5 text-warning-strong" aria-hidden />
               ) : (
@@ -133,12 +134,7 @@ export function OrderRow({
             </span>
           ) : null}
         </span>
-        <span
-          className={cn(
-            'col-span-2 row-start-3 mt-3 line-clamp-2 block text-body-5 text-neutral-2 [overflow-wrap:anywhere] xl:col-span-1 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:line-clamp-1',
-            arrival ? 'xl:row-span-1 xl:self-end' : 'xl:row-span-2',
-          )}
-        >
+        <span className="col-span-2 row-start-3 mt-3 line-clamp-2 block text-body-5 text-neutral-2 [overflow-wrap:anywhere] xl:col-span-1 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:mt-0 xl:line-clamp-1">
           {dishes}
           <span className="sr-only">,</span>
         </span>
