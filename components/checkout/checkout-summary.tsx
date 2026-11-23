@@ -164,8 +164,6 @@ export function CheckoutSummary({
         <button
           type="button"
           aria-expanded={open}
-          // The name says what the row holds; "Show" and "Hide" are what aria-expanded says.
-          aria-label={`Summary${loading ? '' : `, ${itemsText(itemCount)}`}${totalWords}`}
           aria-controls="summary-body"
           onClick={onToggle}
           className="flex min-h-14 w-full items-center gap-3 rounded-lg py-2 text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
@@ -182,6 +180,8 @@ export function CheckoutSummary({
             </span>
           </span>
           <SummaryTotal quote={quote} status={status} dim={dim} />
+          {/* Out of the name: aria-expanded says it. No aria-label on the button, so the rest of
+              its visible words stay its name (WCAG 2.5.3). */}
           <span
             aria-hidden
             className="inline-flex items-center gap-1 text-body-5 font-medium text-brand-strong"
