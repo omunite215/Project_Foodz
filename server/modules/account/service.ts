@@ -13,6 +13,11 @@ import {
   reauthRequired,
 } from '@/server/errors';
 import { countMyAddresses, listMyAddresses } from '@/server/modules/addresses/service';
+import {
+  assertPartnerErasable,
+  partnerExportFor,
+  removePartnerFiles,
+} from '@/server/modules/partners/service';
 import { audit } from '@/server/modules/audit/service';
 import { logger } from '@/server/logger';
 import { countMyFavorites, listMyFavoritesForExport } from '@/server/modules/favorites/service';
@@ -35,6 +40,7 @@ import { describeDevice } from './devices';
 import {
   anonymizeAccount,
   countDeliveriesInProgress,
+  erasePartnerData,
   countSessions,
   deleteOtherSessions,
   deleteSession,
@@ -233,6 +239,7 @@ export async function exportMyData(
   const favorites = await listMyFavoritesForExport(actor);
   const orders = await exportMyOrders(actor);
   const savedCards = await exportSavedCards(actor);
+  const partner = await partnerExportFor(actor);
   if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
 
   const data: AccountExport = {
@@ -270,6 +277,7 @@ export async function exportMyData(
     favorites,
     orders,
     savedCards,
+    ...(partner && { partner }),
   };
 
   await runAs(actor, (ctx) =>
@@ -326,6 +334,8 @@ export async function deleteAccount(
     });
   }
   if (blocking.paying) throw paymentConfirming(blocking.paying);
+  // F6 P15.5: a partner goes offline first.
+  await assertPartnerErasable(actor);
   // Saved cards go with the Stripe customer, before anything here is erased.
   try {
     await deleteStripeCustomer(actor.userId);
@@ -345,6 +355,15 @@ export async function deleteAccount(
     if (again.paying) throw paymentConfirming(again.paying);
     const profile = await findProfile(ctx, actor.userId);
     if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
+    const partner = await erasePartnerData(ctx);
+    if (partner.outcome === 'withdrawn' && partner.partnerId) {
+      await audit(ctx, {
+        action: 'partner.withdrawn',
+        targetType: 'partner',
+        targetId: partner.partnerId,
+        data: { how: 'account-deleted' },
+      });
+    }
     await anonymizeMyOrders(ctx);
     await anonymizeAccount(ctx, actor.userId, now);
     await audit(ctx, { action: 'account.deleted', targetType: 'user', targetId: actor.userId });
@@ -352,8 +371,10 @@ export async function deleteAccount(
       email: profile.email,
       // Greeted by name only when the address was confirmed (the name may be a stranger's).
       name: profile.emailVerified ? profile.name : undefined,
+      partnerFiles: partner.uploadIds ?? [],
     };
   });
+  await removePartnerFiles(person.partnerFiles);
 
   // Addressed before the details were erased; sent once the deletion is committed.
   await queueAccountEmail({ kind: 'account-deleted', to: person.email, name: person.name });

@@ -25,15 +25,17 @@ import { DOCUMENT_WORDS, longDate, storeDate, weekdayDate } from './text';
 
 export interface TabFacts {
   status: PartnerStatus;
-  changesRequestedAt: string | null;
-  fixedAt: string | null;
+  changesRequestedAt: string | Date | null;
+  fixedAt: string | Date | null;
 }
+
+const instantOf = (value: string | Date) => new Date(value).getTime();
 
 /** Sent back and not fixed since (A19.1). */
 export const isWaitingForApplicant = (facts: TabFacts): boolean =>
   facts.status === 'APPLIED' &&
   facts.changesRequestedAt !== null &&
-  (facts.fixedAt === null || Date.parse(facts.fixedAt) < Date.parse(facts.changesRequestedAt));
+  (facts.fixedAt === null || instantOf(facts.fixedAt) < instantOf(facts.changesRequestedAt));
 
 const TAB_OF_STATUS: Record<PartnerStatus, Exclude<PartnerTab, 'all'>> = {
   APPLIED: 'review',

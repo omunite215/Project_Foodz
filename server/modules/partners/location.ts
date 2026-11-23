@@ -88,7 +88,10 @@ export function speedKmh(from: AcceptedPoint, to: AcceptedPoint): number {
  * Checks one point on its own (P16.4, P16.5): accuracy and recorded time. A point that passes
  * may still be a repeat or a jump against the last accepted one.
  */
-export function pointRefusal(point: LocationPoint, now: Date): PointRefusal | null {
+export function pointRefusal(
+  point: LocationPoint,
+  now: Date,
+): Exclude<PointRefusal, 'IMPLAUSIBLE_JUMP'> | null {
   if (point.accuracy > MAX_ACCURACY_M) return 'LOW_ACCURACY';
   const at = Date.parse(point.recordedAt);
   if (at > now.getTime() + MAX_FUTURE_MS) return 'FUTURE_POINT';

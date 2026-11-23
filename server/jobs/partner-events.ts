@@ -67,3 +67,8 @@ export const partnerWentOffline = eventType('partner.went-offline', {
     })
     .strict(),
 });
+
+/** A session ended (sign-out): if it was sharing a location, the partner goes offline (B9). */
+export const partnerSessionEnded = eventType('partner.session-ended', {
+  schema: z.object({ userId: z.uuid(), sessionId: z.uuid() }).strict(),
+});

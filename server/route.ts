@@ -1,0 +1,94 @@
+import 'server-only';
+import { ZodError } from 'zod';
+import { isStaff } from '@/server/auth/roles';
+import { getActor, getSession, type UserActor } from '@/server/auth/session';
+import { AppError, forbidden, unauthenticated } from '@/server/errors';
+import { logger } from '@/server/logger';
+import { enforceRateLimit, type RateLimitPolicy } from '@/server/security/rate-limit';
+import { isSameOrigin } from '@/server/security/origin';
+
+/*
+ * The wrapper every partner REST route goes through (F6 contract §0): same-origin check on
+ * writes, the session (banned accounts resolve to signed out), staff refused, the rate limit,
+ * the JSON body (16 KB at most), then the handler. Errors leave as the same object Server
+ * Actions answer, with Retry-After on 429; every answer is `no-store`.
+ */
+
+export const MAX_BODY_BYTES = 16 * 1024;
+
+export interface RouteContext {
+  actor: UserActor;
+  /** The caller's session: the one that goes online owns the location (B9). */
+  sessionId: string | null;
+  body: unknown;
+}
+
+const NO_STORE = { 'cache-control': 'no-store' } as const;
+
+function errorResponse(error: AppError) {
+  const headers: Record<string, string> = { ...NO_STORE };
+  if (error.retryAfterSeconds !== undefined)
+    headers['retry-after'] = String(error.retryAfterSeconds);
+  return Response.json(error.toJSON(), { status: error.status, headers });
+}
+
+const STAFF_REFUSAL = () =>
+  new AppError('NOT_A_CUSTOMER', "Staff accounts can't use the partner app.", 403);
+
+async function readBody(request: Request): Promise<unknown> {
+  if (request.method === 'GET' || request.method === 'HEAD') return undefined;
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
+    throw new AppError('INVALID_INPUT', 'That request is too large.', 413);
+  }
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new AppError('INVALID_INPUT', 'That request could not be read.', 400);
+  }
+}
+
+export function partnerRoute<T>(options: {
+  name: string;
+  rateLimit: RateLimitPolicy;
+  handler: (context: RouteContext) => Promise<T>;
+}) {
+  return async function handle(request: Request): Promise<Response> {
+    const started = performance.now();
+    try {
+      if (request.method !== 'GET' && !isSameOrigin(request)) throw forbidden();
+      const actor = await getActor();
+      if (actor.kind !== 'user') throw unauthenticated();
+      if (isStaff(actor.role)) throw STAFF_REFUSAL();
+      await enforceRateLimit(options.rateLimit, `user:${actor.userId}`);
+      const body = await readBody(request);
+      const session = await getSession();
+      const result = await options.handler({
+        actor,
+        sessionId: session && session.user.id === actor.userId ? session.session.id : null,
+        body,
+      });
+      return Response.json(result, { headers: NO_STORE });
+    } catch (error) {
+      if (error instanceof AppError) return errorResponse(error);
+      if (error instanceof ZodError) {
+        const fieldErrors: Record<string, string[]> = {};
+        for (const issue of error.issues) {
+          const key = issue.path.join('.') || 'body';
+          (fieldErrors[key] ??= []).push(issue.message);
+        }
+        return errorResponse(
+          new AppError('INVALID_INPUT', 'Check the request.', 422, { fieldErrors }),
+        );
+      }
+      logger.error({ err: error, route: options.name }, 'route failed');
+      return Response.json(
+        { code: 'INTERNAL', message: 'Something went wrong. Please try again.' },
+        { status: 500, headers: NO_STORE },
+      );
+    } finally {
+      logger.info({ route: options.name, ms: Math.round(performance.now() - started) }, 'route');
+    }
+  };
+}

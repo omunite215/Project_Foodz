@@ -69,6 +69,41 @@ ${footer.map((line) => `<p style="${SMALL_STYLE}">${escape(line)}</p>`).join('\n
   };
 }
 
+const QUOTE_STYLE =
+  'font-size:16px;line-height:1.5;color:#353945;margin:0 0 24px;border-left:3px solid #e6e8ec;padding-left:12px;white-space:pre-wrap';
+
+/**
+ * Several paragraphs and one button (F6 design 11). A `quote` paragraph is someone else's text,
+ * escaped into its own block with a left border; links in it are never made clickable.
+ */
+export function letterEmail(options: {
+  heading: string;
+  paragraphs: (string | { quote: string })[];
+  action: string;
+  url: string;
+  footer?: string[];
+}) {
+  const { heading, paragraphs, action, url, footer = [] } = options;
+  const plain = paragraphs.map((p) => (typeof p === 'string' ? p : p.quote));
+  return {
+    text: [heading, ...plain, `${action}: ${url}`, ...footer].join('\n\n'),
+    html: layout(
+      heading,
+      `${paragraphs
+        .map((p) =>
+          typeof p === 'string'
+            ? `<p style="${TEXT_STYLE}">${escape(p)}</p>`
+            : `<p style="${QUOTE_STYLE}">${escape(p.quote)}</p>`,
+        )
+        .join('\n')}
+<p style="margin:0 0 24px"><a href="${escape(url)}" style="${BUTTON_STYLE}">${escape(action)}</a></p>
+<p style="${SMALL_STYLE}">Or paste this link into your browser:</p>
+<p style="${SMALL_STYLE};word-break:break-all">${escape(url)}</p>
+${footer.map((line) => `<p style="${SMALL_STYLE}">${escape(line)}</p>`).join('\n')}`,
+    ),
+  };
+}
+
 /** A message with no button. */
 export function noticeEmail(options: { heading: string; message: string; footer?: string[] }) {
   const { heading, message, footer = [] } = options;

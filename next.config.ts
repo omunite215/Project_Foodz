@@ -50,6 +50,9 @@ const nextConfig: NextConfig = {
         '/.well-known/:path*',
       ].map((source) => ({ source, headers: lockedDownHeaders })),
       { source: '/admin/:path*', headers: adminHeaders },
+      // The partner app and its API (F6 B15): never indexed, never cached by the browser.
+      { source: '/partner/:path*', headers: adminHeaders },
+      { source: '/api/v1/partner/:path*', headers: adminHeaders },
     ];
   },
   async redirects() {

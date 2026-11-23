@@ -8,6 +8,10 @@ import { orderRefund } from './functions/order-refund';
 import { orderRefundSweep } from './functions/order-refund-sweep';
 import { orderStepNotice } from './functions/order-step-notice';
 import { orderSweep } from './functions/order-sweep';
+import { partnerAutoOffline } from './functions/partner-auto-offline';
+import { partnerEmail } from './functions/partner-email';
+import { partnerFilesCleanup } from './functions/partner-files-cleanup';
+import { partnerSessionEndedJob } from './functions/partner-session-ended';
 import { processUploadJob } from './functions/process-upload';
 
 /** Every background function the app serves at /api/inngest. */
@@ -21,4 +25,8 @@ export const functions: InngestFunction.Any[] = [
   orderRefundSweep,
   orderSweep,
   orderStepNotice,
+  partnerEmail,
+  partnerAutoOffline,
+  partnerFilesCleanup,
+  partnerSessionEndedJob,
 ];

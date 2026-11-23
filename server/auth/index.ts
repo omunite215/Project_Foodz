@@ -7,6 +7,8 @@ import { admin, twoFactor } from 'better-auth/plugins';
 import { after } from 'next/server';
 import { v7 as uuidv7 } from 'uuid';
 import { prisma } from '@/server/db/client';
+import { inngest } from '@/server/jobs/client';
+import { partnerSessionEnded } from '@/server/jobs/partner-events';
 import { logger } from '@/server/logger';
 import { passwordWasReset, receivesAccountEmail } from '@/server/modules/account/identity';
 import { currentTermsVersion } from '@/server/modules/content/service';
@@ -172,6 +174,21 @@ export const auth = betterAuth({
           const ends = staffSessionEnd(new Date());
           const asked = new Date(session.expiresAt);
           return { data: { ...session, expiresAt: asked < ends ? asked : ends } };
+        },
+      },
+      delete: {
+        // F6 B9: a partner signing out of the session that shares the location goes offline.
+        async after(session) {
+          try {
+            await inngest.send(
+              partnerSessionEnded.create(
+                { userId: session.userId, sessionId: session.id },
+                { id: `partner-session-ended-${session.id}` },
+              ),
+            );
+          } catch (error) {
+            logger.warn({ err: error }, 'could not queue the partner sign-out check');
+          }
         },
       },
       update: {
