@@ -75,7 +75,8 @@ export async function StorefrontChrome({ children }: { children: ReactNode }) {
       </main>
       <SiteFooter status={status} />
       {/* F5 S6.4: order notices, last in the page so keyboard users reach them at its end. */}
-      {user ? <OrderNoticeStack userId={user.id} /> : null}
+      {/* Keyed by the person: a different sign-in never inherits the last one's notices. */}
+      {user ? <OrderNoticeStack key={user.id} userId={user.id} /> : null}
     </FavoritesProvider>
   );
 }
