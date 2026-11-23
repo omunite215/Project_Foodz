@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { REQUEST_PATH_HEADER } from '@/lib/request-path';
-import { buildCsp, originOf, permissionsPolicy } from '@/server/security/csp';
+import { buildCsp, originOf, permissionsPolicy, usesPrivateBucket } from '@/server/security/csp';
 
 // Runs before every page request. Authorization is NOT decided here (that happens in the
 // data access layer); this only attaches per-request security headers and a request id.
@@ -36,6 +36,9 @@ export function proxy(request: NextRequest) {
     isHttps: process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://') ?? false,
     imageOrigins: [originOf(process.env.S3_PUBLIC_URL)].filter((v): v is string => Boolean(v)),
     socketOrigins,
+    privateBucketOrigins: usesPrivateBucket(request.nextUrl.pathname)
+      ? [originOf(process.env.S3_ENDPOINT)].filter((v): v is string => Boolean(v))
+      : [],
   });
 
   const requestHeaders = new Headers(request.headers);

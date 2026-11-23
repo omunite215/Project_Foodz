@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCsp, originOf, permissionsPolicy } from './csp';
+import { buildCsp, originOf, permissionsPolicy, usesPrivateBucket } from './csp';
 
 const directive = (csp: string, name: string) =>
   csp
@@ -73,6 +73,16 @@ describe('buildCsp', () => {
 });
 
 describe('permissionsPolicy', () => {
+  it('lets the partner app and the staff tools reach the private bucket, and nothing else', () => {
+    const bucket = 'https://private.example.com';
+    const csp = buildCsp({ nonce: 'n', isDev: false, privateBucketOrigins: [bucket] });
+    expect(directive(csp, 'connect-src')).toContain(bucket);
+    expect(directive(csp, 'img-src')).toContain(bucket);
+    expect(usesPrivateBucket('/partner/apply')).toBe(true);
+    expect(usesPrivateBucket('/admin/partners/1')).toBe(true);
+    expect(usesPrivateBucket('/menu')).toBe(false);
+  });
+
   it('offers geolocation only to the partner app and checkout', () => {
     expect(permissionsPolicy('/partner/active')).toContain('geolocation=(self)');
     expect(permissionsPolicy('/checkout')).toContain('geolocation=(self)');

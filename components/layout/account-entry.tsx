@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Bike,
   ChevronDown,
   CircleUserRound,
   Heart,
@@ -13,7 +14,7 @@ import {
 import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,8 @@ export interface HeaderAccount {
   isDemo: boolean;
   /** Staff see "Staff tools" first (F5 A1.8); customers and couriers never do. */
   staffTools: boolean;
+  /** F6 P6.7: applicants get "Partner application", partners "Partner app". */
+  partner?: 'app' | 'application' | null;
 }
 
 /** The "Sign in" link, returning to this page afterwards. */
@@ -149,16 +152,26 @@ function AccountMenu({ account }: { account: HeaderAccount }) {
             const Icon = link.icon;
             const current = pathname === link.href;
             return (
-              <DropdownMenuItem key={link.href} asChild>
-                <Link
-                  href={link.href}
-                  aria-current={current ? 'page' : undefined}
-                  className={cn(current && 'font-semibold')}
-                >
-                  <Icon className="text-neutral-3" aria-hidden />
-                  {link.label}
-                </Link>
-              </DropdownMenuItem>
+              <Fragment key={link.href}>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href={link.href}
+                    aria-current={current ? 'page' : undefined}
+                    className={cn(current && 'font-semibold')}
+                  >
+                    <Icon className="text-neutral-3" aria-hidden />
+                    {link.label}
+                  </Link>
+                </DropdownMenuItem>
+                {link.href === '/account/orders' && account.partner ? (
+                  <DropdownMenuItem asChild>
+                    <Link href="/partner">
+                      <Bike className="text-neutral-3" aria-hidden />
+                      {account.partner === 'app' ? 'Partner app' : 'Partner application'}
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
+              </Fragment>
             );
           })}
           <DropdownMenuSeparator />

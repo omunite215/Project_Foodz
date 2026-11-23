@@ -35,7 +35,14 @@ export const siteSettings = {
         { label: 'Blog', href: '/blog' },
       ],
     },
-    { title: 'Help', links: [{ label: 'Contact us', href: '/contact' }] },
+    {
+      title: 'Help',
+      links: [
+        { label: 'Contact us', href: '/contact' },
+        // F6 P1.1: the partner landing.
+        { label: 'Deliver with Foodz', href: '/deliver' },
+      ],
+    },
   ],
   seo: {
     title: 'Foodz: Korean, Thai and Vietnamese food, delivered',

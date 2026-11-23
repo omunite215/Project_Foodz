@@ -357,6 +357,18 @@ export async function getMyPartnerState(
   };
 }
 
+/**
+ * The storefront account menu's partner entry (P6.7, contract 8): "Partner app" for approved and
+ * suspended partners, "Partner application" for applicants, nothing for everyone else. One read.
+ */
+export async function partnerMenuEntry(actor: Actor): Promise<'app' | 'application' | null> {
+  if (actor.kind !== 'user' || isStaff(actor.role)) return null;
+  if (actor.role === 'partner') return 'app';
+  const row = await runAs(actor, (ctx) => findPartnerByUser(ctx, actor.userId));
+  if (!row) return null;
+  return row.status === 'APPROVED' || row.status === 'SUSPENDED' ? 'app' : 'application';
+}
+
 async function applyState(
   account: { name: string; phone: string | null },
   mode: 'new' | 'reapply',

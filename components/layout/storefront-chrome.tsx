@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import { isRole, isStaff } from '@/server/auth/roles';
+import { getActor } from '@/server/auth/session';
+import { partnerMenuEntry } from '@/server/modules/partners/service';
 import { readNotices } from '@/server/modules/account/notices';
 import { firstNameOf } from '@/server/modules/account/schema';
 import { FavoritesProvider } from '@/components/favorites/favorites-provider';
@@ -11,6 +13,7 @@ import {
   loadFavoriteIds,
   loadSignedIn,
   loadStoreStatus,
+  readOrNull,
   storePhone,
 } from '@/lib/storefront-data';
 import type { HeaderAccount } from './account-entry';
@@ -35,7 +38,12 @@ export async function StorefrontChrome({ children }: { children: ReactNode }) {
     loadSignedIn(),
     readNotices(),
   ]);
-  const favoriteIds = session ? await loadFavoriteIds() : null;
+  const [favoriteIds, partner] = session
+    ? await Promise.all([
+        loadFavoriteIds(),
+        readOrNull('partner menu', async () => partnerMenuEntry(await getActor())),
+      ])
+    : [null, null];
   const showAnnouncement =
     announcement !== null && cookieStore.get(ANNOUNCEMENT_COOKIE)?.value !== announcement.id;
 
@@ -49,6 +57,8 @@ export async function StorefrontChrome({ children }: { children: ReactNode }) {
         isDemo: Boolean(user.isDemo),
         // F5 A1.8: "Staff tools" in the account menu, for staff only.
         staffTools: isRole(user.role) && isStaff(user.role),
+        // F6 P6.7: "Partner application" or "Partner app", after "Orders".
+        partner,
       }
     : null;
   const emailVerified = Boolean(user && (user.emailVerified || user.isDemo));

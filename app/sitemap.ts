@@ -10,12 +10,14 @@ export const dynamic = 'force-dynamic';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const pages: MetadataRoute.Sitemap = ['', '/menu', '/blog', '/contact'].map((path) => ({
-    url: `${site}${path}`,
-    lastModified: now,
-    changeFrequency: path === '/menu' ? 'daily' : 'weekly',
-    priority: path === '' ? 1 : 0.7,
-  }));
+  const pages: MetadataRoute.Sitemap = ['', '/menu', '/blog', '/contact', '/deliver'].map(
+    (path) => ({
+      url: `${site}${path}`,
+      lastModified: now,
+      changeFrequency: path === '/menu' ? 'daily' : 'weekly',
+      priority: path === '' ? 1 : 0.7,
+    }),
+  );
   const dishes = (await readOrNull('sitemap dishes', () => listMenu())) ?? [];
 
   return [

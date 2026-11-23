@@ -13,6 +13,11 @@ export interface CspOptions {
   imageOrigins?: string[];
   /** Realtime (Pusher/Soketi) socket origins. */
   socketOrigins?: string[];
+  /**
+   * The private bucket's origin (F6 contract 11.6): the partner app PUTs uploads to presigned
+   * URLs there, and staff and partners load 5-minute image links from it.
+   */
+  privateBucketOrigins?: string[];
   reportUri?: string;
 }
 
@@ -30,7 +35,13 @@ const MAP_TILES = 'https://tiles.openfreemap.org';
 const SENTRY = 'https://*.ingest.sentry.io';
 
 export function buildCsp(options: CspOptions): string {
-  const { nonce, isDev, imageOrigins = [], socketOrigins = [] } = options;
+  const {
+    nonce,
+    isDev,
+    imageOrigins = [],
+    socketOrigins = [],
+    privateBucketOrigins = [],
+  } = options;
 
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
@@ -43,7 +54,7 @@ export function buildCsp(options: CspOptions): string {
     ],
     // Components set inline style attributes (positioning, animation); scripts stay nonce-only.
     'style-src': ["'self'", "'unsafe-inline'"],
-    'img-src': ["'self'", 'data:', 'blob:', MAP_TILES, ...imageOrigins],
+    'img-src': ["'self'", 'data:', 'blob:', MAP_TILES, ...imageOrigins, ...privateBucketOrigins],
     'font-src': ["'self'"],
     'connect-src': [
       "'self'",
@@ -52,6 +63,7 @@ export function buildCsp(options: CspOptions): string {
       TURNSTILE,
       SENTRY,
       ...socketOrigins,
+      ...privateBucketOrigins,
       ...(isDev ? ['ws:'] : []),
     ],
     'frame-src': [...STRIPE_FRAMES, TURNSTILE],
@@ -69,6 +81,10 @@ export function buildCsp(options: CspOptions): string {
   if (options.reportUri) parts.push(`report-uri ${options.reportUri}`);
   return parts.join('; ');
 }
+
+/** Pages that upload to, or show images from, the private bucket (F6 contract 11.6). */
+export const usesPrivateBucket = (pathname: string) =>
+  pathname.startsWith('/partner') || pathname.startsWith('/admin');
 
 /** Geolocation is only offered where it is needed: the partner app and checkout. */
 export function permissionsPolicy(pathname: string): string {
