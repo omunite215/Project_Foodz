@@ -161,6 +161,9 @@ export function PriceBreakdown({
         />
         {promo ? (
           <Row
+            // Green figures stay at full strength while a new total is on its way: at 75 % they
+            // drop under 4.5:1. The neutral ones still dim.
+            dim={false}
             label={`Promo · ${promo.code}`}
             value={
               promo.freeDelivery ? (
@@ -169,7 +172,6 @@ export function PriceBreakdown({
                 <Money cents={promo.foodDiscountCents} negative className="text-brand-strong" />
               )
             }
-            dim={dim}
           />
         ) : null}
         <Row
@@ -184,7 +186,7 @@ export function PriceBreakdown({
             </>
           }
           value={show(deliveryValue)}
-          dim={dim}
+          dim={dim && !freeAnywhere && !promo?.freeDelivery}
         />
         <Row
           label={quote ? `Tax (${taxRateText(quote.tax.rateBps)})` : 'Tax'}

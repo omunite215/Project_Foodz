@@ -104,7 +104,8 @@ export function ContactFields({
         Contact
       </h2>
       <div className="mt-4 space-y-6">
-        <div className="grid gap-6 md:grid-cols-2 md:gap-3">
+        {/* Stacked at every width: beside the name, the phone field was too narrow for the number. */}
+        <div className="grid gap-6">
           <form.Field name="contactName">
             {(field) => {
               const error = visibleError(

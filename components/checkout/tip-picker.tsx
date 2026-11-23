@@ -160,9 +160,10 @@ export function TipPicker({
         })}
       </div>
       {tile.kind === 'other' ? (
-        <div data-tip-amount className="mt-4 max-w-[200px]">
+        <div data-tip-amount className="mt-4">
           <FieldLabel htmlFor={TIP_AMOUNT_ID}>Tip amount</FieldLabel>
-          <div className="relative mt-2">
+          {/* Only the field is narrow; its error uses the column's width. */}
+          <div className="relative mt-2 max-w-[200px]">
             <span
               aria-hidden
               className="pointer-events-none absolute inset-y-0 left-5 flex items-center text-body-4 text-neutral-3"
