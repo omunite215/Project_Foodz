@@ -4,6 +4,7 @@ import { isRole, isStaff } from '@/server/auth/roles';
 import { readNotices } from '@/server/modules/account/notices';
 import { firstNameOf } from '@/server/modules/account/schema';
 import { FavoritesProvider } from '@/components/favorites/favorites-provider';
+import { OrderNoticeStack } from '@/components/orders/order-notices';
 import { initialOf } from '@/lib/account-text';
 import {
   loadAnnouncement,
@@ -73,6 +74,8 @@ export async function StorefrontChrome({ children }: { children: ReactNode }) {
         {children}
       </main>
       <SiteFooter status={status} />
+      {/* F5 S6.4: order notices, last in the page so keyboard users reach them at its end. */}
+      {user ? <OrderNoticeStack userId={user.id} /> : null}
     </FavoritesProvider>
   );
 }
