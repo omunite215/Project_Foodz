@@ -133,14 +133,15 @@ export function BoardFiltersBar({
   onChange,
 }: {
   filters: BoardFilters;
-  onChange: (filters: BoardFilters) => void;
+  /** Given a change, not a whole set: quick taps build on each other (A11.2). */
+  onChange: (next: BoardFilters | ((current: BoardFilters) => BoardFilters)) => void;
 }) {
   const active = filters.late || filters.pay !== null;
   return (
     <>
       <Toggle
         pressed={filters.late}
-        onPressedChange={(late) => onChange({ ...filters, late })}
+        onPressedChange={(late) => onChange((current) => ({ ...current, late }))}
         className={CHIP}
       >
         <ChipCheck />
@@ -151,7 +152,10 @@ export function BoardFiltersBar({
         aria-label="Payment"
         value={filters.pay ?? ''}
         onValueChange={(value) =>
-          onChange({ ...filters, pay: value === 'cash' || value === 'card' ? value : null })
+          onChange((current) => ({
+            ...current,
+            pay: value === 'cash' || value === 'card' ? value : null,
+          }))
         }
         className="gap-2"
       >

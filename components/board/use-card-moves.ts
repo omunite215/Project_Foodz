@@ -13,6 +13,7 @@ import { DEMO_CANNOT_CHANGE, undoRefusedMessage } from '@/server/modules/board/t
 import { showBoardNotice } from '@/components/admin/board-notices';
 import { type ActionFailure, callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
+import { undoDeadline } from '@/lib/board/clock';
 import { isOrderChangedDetails, undoMovedByName, withStatus } from '@/lib/board/model';
 import {
   conflictText,
@@ -161,14 +162,21 @@ export function useCardMoves({
               Object.assign(draft, withStatus(draft, to, draft.version, serverNow()));
             },
             async () => {
+              const sentAt = Date.now();
               const outcome = await callAction(() =>
                 moveOrderAction({ orderId: card.id, to, expectedVersion: card.version }),
               );
               if (!outcome.ok) throw new Refused(outcome.error);
               const result = outcome.data;
+              // Undo shows only while the server would still take it (A4.7).
+              const offset = Date.parse(serverNow()) - Date.now();
               return {
                 ...withStatus(card, result.status, result.version, result.at),
-                undo: { eventId: result.eventId, type: result.status, until: result.undoUntil },
+                undo: {
+                  eventId: result.eventId,
+                  type: result.status,
+                  until: undoDeadline(result, sentAt, offset),
+                },
               };
             },
           );

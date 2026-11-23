@@ -48,14 +48,17 @@ export function orderHref(id: string): Route {
 
 /** True while the card's own Undo can still be pressed (until the server's `undoUntil`). */
 function useUndoOpen(undo: BoardCard['undo'], offset: number): boolean {
-  const [, setTick] = useState(0);
-  const left = undo ? msUntil(undo.until, offset) : 0;
+  // The clock is state, read in the effect: a clock read while rendering would be kept by the
+  // compiler between renders, and Undo stayed until the next refresh (about a minute) instead
+  // of closing with the server's window (A4.7).
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!undo || left <= 0) return undefined;
-    const timer = setTimeout(() => setTick((tick) => tick + 1), left + 20);
+    if (!undo) return undefined;
+    const left = msUntil(undo.until, offset);
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, left) + 20);
     return () => clearTimeout(timer);
-  }, [undo, left]);
-  return Boolean(undo) && left > 0;
+  }, [undo, offset]);
+  return Boolean(undo) && msUntil(undo?.until ?? '', offset, now) > 0;
 }
 
 /**
@@ -166,7 +169,7 @@ export function OrderCard({
             href={orderHref(card.id)}
             scroll={false}
             onClick={onOpen ? (event) => onOpen(card, event) : undefined}
-            className="rounded-md text-title-2 font-semibold whitespace-nowrap text-neutral-1 tabular-nums after:absolute after:inset-0 after:rounded-xl focus-visible:outline-offset-4"
+            className="rounded-md text-title-2 font-semibold whitespace-nowrap text-neutral-1 tabular-nums after:absolute after:inset-0 after:rounded-xl focus-visible:outline-offset-4 max-md:inline-flex max-md:min-h-11 max-md:items-center"
           >
             <span className="sr-only">Order </span>
             {card.number}
