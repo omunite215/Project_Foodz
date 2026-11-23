@@ -180,6 +180,11 @@ export const auth = betterAuth({
         // F6 B9: a partner signing out of the session that shares the location goes offline.
         async after(session) {
           try {
+            const user = await prisma.user.findUnique({
+              where: { id: session.userId },
+              select: { role: true },
+            });
+            if (user?.role !== 'partner') return;
             await inngest.send(
               partnerSessionEnded.create(
                 { userId: session.userId, sessionId: session.id },
