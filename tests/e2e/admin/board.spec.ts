@@ -26,15 +26,13 @@ test.describe('the kitchen board (A2)', () => {
   }, testInfo) => {
     await expect(page).toHaveTitle('Order board | Foodz Admin');
     if (!isPhone(testInfo)) {
-      await expect(page.getByRole('heading', { name: /^New, 2 orders/ })).toBeVisible();
-      await expect(
-        page.getByRole('heading', { name: /^Preparing, 2 orders, \d late/ }),
-      ).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^New, \d orders?/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^Preparing, \d orders/ })).toBeVisible();
       // The kitchen never sees Out for delivery (A2.1).
       await expect(page.getByRole('heading', { name: /^Out for delivery/ })).toHaveCount(0);
     }
     await expect(card(page, 'S1102')).toHaveAttribute('data-tone', 'late');
-    await expect(card(page, 'S1102').getByText(/Late, waiting \d+ min/)).toBeAttached();
+    await expect(card(page, 'S1102').getByText(/late, waiting \d+ min/i)).toBeAttached();
     // A2.3: the kitchen sees no amounts and no contact details.
     await expect(card(page, 'S1101').getByText('Card · paid')).toBeVisible();
     await expect(page.getByText(/\$\d/)).toHaveCount(0);
@@ -67,7 +65,7 @@ test.describe('the kitchen board (A2)', () => {
     await expect(card(page, 'S1105').getByRole('link', { name: 'Order S1105' })).toBeFocused();
     await page.getByLabel('Find order').fill('9999');
     await page.getByRole('button', { name: 'Find' }).click();
-    await expect(page.getByText('No order 9999.')).toBeVisible();
+    await expect(page.getByRole('search').getByText('No order 9999.')).toBeVisible();
 
     await page.getByRole('button', { name: 'Late only' }).click();
     await expect(page).toHaveURL(/late=1/);

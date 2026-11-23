@@ -29,7 +29,7 @@ test.describe('who may enter /admin (A1.2 to A1.5)', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: "We couldn't find that page" }),
     ).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Foodz home' })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Foodz home' })).toBeVisible();
   });
 
   test('staff without two-factor see the gate on every address', async ({ page }) => {
@@ -63,8 +63,13 @@ test.describe('frames (A1.6, A16.1)', () => {
     await expect(page.getByRole('banner').getByRole('link', { name: /Foodz/ })).toHaveCount(0);
     // No storefront chrome under /admin (design 1.1).
     await expect(page.getByRole('contentinfo')).toHaveCount(0);
-    await page.getByRole('button', { name: /^Account menu for Alex Kim/ }).click();
-    await expect(page.getByRole('menuitem')).toHaveText(['Sign out']);
+    // Headless Chrome refuses the screen wake lock just after load, and the notice that says so
+    // can land while the menu opens; open it again if it closed.
+    await expect(async () => {
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: /^Account menu for Alex Kim/ }).click();
+      await expect(page.getByRole('menuitem')).toHaveText(['Sign out'], { timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
   });
 
   test('support gets the sidebar listing only the order board', async ({ page }, testInfo) => {

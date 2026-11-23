@@ -1,5 +1,6 @@
 import {
   card,
+  orderHrefOnBoard,
   expect,
   expectNoAxeViolations,
   open,
@@ -73,9 +74,7 @@ test.describe('the order detail (A10)', () => {
     page,
   }) => {
     await signInStaff(page, STAFF.support, '/admin/orders');
-    const href = await card(page, 'S1105')
-      .getByRole('link', { name: 'Order S1105' })
-      .getAttribute('href');
+    const href = await orderHrefOnBoard(page, 'S1105');
     expect(href).toMatch(/^\/admin\/orders\/[0-9a-f-]{36}$/);
     await open(page, href ?? '/admin/orders');
     await expect(page.getByRole('heading', { level: 1, name: 'Order S1105' })).toBeVisible();

@@ -53,6 +53,8 @@ export async function signInStaff(page: Page, email: string, path = '/admin') {
     await page.getByRole('button', { name: 'Continue' }).click();
   }
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+  // Interactive: the page's scripts have taken over the server's HTML.
+  await page.waitForLoadState('networkidle');
 }
 
 /** The demo admin signs in without a code (F2) with the shared demo password. */
@@ -62,6 +64,8 @@ export async function signInDemoAdmin(page: Page, path = '/admin/orders') {
   await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+  // Interactive: the page's scripts have taken over the server's HTML.
+  await page.waitForLoadState('networkidle');
 }
 
 /** WCAG 2.2 AA on the page as it is now (A16.9). */
@@ -71,6 +75,10 @@ export async function expectNoAxeViolations(page: Page) {
     .analyze();
   expect(results.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
 }
+
+/** An order's staff address from its card, also when its column is another phone tab. */
+export const orderHrefOnBoard = (page: Page, number: string) =>
+  page.locator(`article[data-order="${number}"] h3 a`).getAttribute('href');
 
 /** A card on the board by its order number. */
 export const card = (page: Page, number: string) =>
