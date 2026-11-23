@@ -103,7 +103,12 @@ less, plus their plans). There is no NAT gateway, WAF or VPC endpoint, which wou
 
 ### Known limits
 
-The database URLs use TLS without verifying the RDS certificate chain (the CA bundle is not in the
-image yet). Browser uploads straight to S3 need the bucket origin in the CSP `connect-src`, which
-`server/security/csp.ts` does not include yet. Nothing has been deployed, so the Inngest start
+Database connections verify the server certificate: both images carry the Amazon RDS global CA
+bundle (`docker/rds/global-bundle.pem`, downloaded from `truststore.pki.rds.amazonaws.com`, sha256
+`90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b`), and the URLs use
+`sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem` (Prisma's migration engine takes
+`sslcert` and `sslaccept=strict`). AWS rotates the bundle occasionally: download it again, check the
+new checksum against the source, and commit it.
+
+Nothing has been deployed, so the Inngest start
 flags and the CloudFront-to-ALB secret header are untested against a real account.

@@ -48,6 +48,8 @@ COPY prisma ./prisma
 # The seed builds the menu from the original constants.
 COPY constants ./constants
 COPY scripts/storage-setup.mjs ./scripts/
+# Amazon RDS CA bundle: database URLs on AWS use sslmode=verify-full against it.
+COPY docker/rds/global-bundle.pem /etc/ssl/rds/global-bundle.pem
 USER node
 # Prepare the roles when an admin URL is given (RDS), apply migrations, seed (idempotent:
 # existing rows are left alone), prepare storage buckets (skipped without S3_ENDPOINT, as on AWS
@@ -70,6 +72,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Amazon RDS CA bundle: database URLs on AWS use sslmode=verify-full against it.
+COPY docker/rds/global-bundle.pem /etc/ssl/rds/global-bundle.pem
 
 USER nextjs
 EXPOSE 3000

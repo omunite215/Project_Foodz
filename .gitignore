@@ -18,6 +18,8 @@
 # misc
 .DS_Store
 *.pem
+# Amazon RDS public CA bundle (public certificates, see docker/rds/README)
+!docker/rds/global-bundle.pem
 
 # debug
 npm-debug.log*

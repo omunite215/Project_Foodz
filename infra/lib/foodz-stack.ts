@@ -26,6 +26,8 @@ import { REPOSITORY_NAME } from './registry-stack';
 
 const DB_NAME = 'foodz';
 const DB_ADMIN_USER = 'foodz_admin';
+/** Where both images keep the Amazon RDS CA bundle. */
+const RDS_CA = '/etc/ssl/rds/global-bundle.pem';
 const NAMESPACE = 'foodz.internal';
 const WEB_PORT = 3000;
 const SOKETI_PORT = 6001;
@@ -172,23 +174,22 @@ export class FoodzStack extends Stack {
     });
     const dbHost = database.dbInstanceEndpointAddress;
     const adminPassword = plain(database.secret!);
-    // TLS is required by the instance. The app's pg client accepts the RDS certificate without
-    // verifying the chain (sslmode=no-verify); Prisma's migration engine does the same through
-    // sslaccept. Baking the RDS CA bundle into the image would allow full verification.
+    // TLS is required by the instance and the certificate chain and host name are verified
+    // against the RDS CA bundle that both images carry (docker/rds/global-bundle.pem).
     const databaseUrl = composed(
       'DatabaseUrl',
       'database-url',
-      `postgresql://foodz_app:${plain(appPassword)}@${dbHost}:5432/${DB_NAME}?sslmode=no-verify`,
+      `postgresql://foodz_app:${plain(appPassword)}@${dbHost}:5432/${DB_NAME}?sslmode=verify-full&sslrootcert=${RDS_CA}`,
     );
     const migratorUrl = composed(
       'MigratorUrl',
       'database-migrator-url',
-      `postgresql://foodz_migrator:${plain(migratorPassword)}@${dbHost}:5432/${DB_NAME}?sslmode=require&sslaccept=accept_invalid_certs`,
+      `postgresql://foodz_migrator:${plain(migratorPassword)}@${dbHost}:5432/${DB_NAME}?sslmode=require&sslcert=${RDS_CA}&sslaccept=strict`,
     );
     const adminUrl = composed(
       'AdminUrl',
       'database-admin-url',
-      `postgresql://${DB_ADMIN_USER}:${adminPassword}@${dbHost}:5432/${DB_NAME}?sslmode=no-verify`,
+      `postgresql://${DB_ADMIN_USER}:${adminPassword}@${dbHost}:5432/${DB_NAME}?sslmode=verify-full&sslrootcert=${RDS_CA}`,
     );
 
     // ------------------------------------------------------------------ cache

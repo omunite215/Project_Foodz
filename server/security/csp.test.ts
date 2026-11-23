@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCsp, originOf, permissionsPolicy } from './csp';
+import { buildCsp, storageOrigins, originOf, permissionsPolicy } from './csp';
 
 const directive = (csp: string, name: string) =>
   csp
@@ -69,6 +69,48 @@ describe('buildCsp', () => {
     });
     expect(directive(custom, 'img-src')).toContain('https://cdn.example.com');
     expect(directive(custom, 'connect-src')).toContain('wss://ws.example.com');
+  });
+});
+
+describe('storage origins', () => {
+  it('allows signed uploads and downloads from the storage origin', () => {
+    const csp = buildCsp({
+      nonce: 'n',
+      isDev: false,
+      storageOrigins: ['https://foodz-private.s3.us-east-1.amazonaws.com'],
+    });
+    expect(directive(csp, 'connect-src')).toContain(
+      'https://foodz-private.s3.us-east-1.amazonaws.com',
+    );
+    expect(directive(csp, 'img-src')).toContain('https://foodz-private.s3.us-east-1.amazonaws.com');
+  });
+
+  it('uses the endpoint origin when one is set (RustFS locally)', () => {
+    expect(
+      storageOrigins({
+        S3_ENDPOINT: 'http://127.0.0.1:9000/',
+        S3_REGION: 'auto',
+        S3_PRIVATE_BUCKET: 'p',
+      }),
+    ).toEqual(['http://127.0.0.1:9000']);
+  });
+
+  it('uses the regional bucket addresses on AWS, where there is no endpoint', () => {
+    expect(
+      storageOrigins({
+        S3_REGION: 'eu-west-1',
+        S3_PRIVATE_BUCKET: 'priv',
+        S3_PUBLIC_BUCKET: 'pub',
+      }),
+    ).toEqual([
+      'https://priv.s3.eu-west-1.amazonaws.com',
+      'https://pub.s3.eu-west-1.amazonaws.com',
+    ]);
+  });
+
+  it('adds nothing when storage is not configured', () => {
+    expect(storageOrigins({})).toEqual([]);
+    expect(buildCsp({ nonce: 'n', isDev: false })).not.toContain('amazonaws.com');
   });
 });
 
