@@ -21,6 +21,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "seed:board": "tsx prisma/seed-board.ts",
+    "seed:partners": "tsx prisma/seed-partners.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",

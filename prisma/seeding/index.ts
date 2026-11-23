@@ -16,6 +16,12 @@ import {
   tags,
 } from './content';
 import { resetBoardFixtures } from './board';
+import {
+  fixtureAccounts,
+  PARTNER_ACCOUNTS,
+  type PartnerSeedKeys,
+  resetPartnerFixtures,
+} from './partners';
 import { menuItems } from './menu';
 import { escapeHtml } from './rich-text';
 
@@ -39,6 +45,11 @@ export interface SeedConfig {
    * never the shared demo password, since they are ordinary, writable accounts.
    */
   samplePassword?: string;
+  /**
+   * F6: the keys that encrypt and hash the sample partners' ID numbers (FIELD_ENCRYPTION_KEY,
+   * ID_NUMBER_HASH_KEY). Without them the partner fixtures are skipped.
+   */
+  partnerKeys?: PartnerSeedKeys;
   now?: Date;
 }
 
@@ -251,12 +262,18 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
             ratingAvg: 4.8,
             ratingCount: 126,
             approvedAt: now,
+            submittedAt: now,
+            welcomedAt: now,
           },
         });
-        // Parked near the kitchen, so the courier simulator starts somewhere sensible.
-        await tx.$executeRaw`UPDATE delivery_partners SET last_location = ST_SetSRID(ST_MakePoint(${siteSettings.lng + 0.002}, ${siteSettings.lat + 0.001}), 4326)::geography WHERE id = ${partnerId}::uuid`;
         count('partners', true);
       }
+      // F6 U20, B12: the demo partner keeps no parked position (it gets a pretend one when
+      // online) and never sees the first-time welcome.
+      await tx.deliveryPartner.updateMany({
+        where: { userId: demo.partner, welcomedAt: null },
+        data: { welcomedAt: now },
+      });
 
       const addressId = seedId('demo-customer-home');
       const address = await tx.address.findUnique({
@@ -406,6 +423,41 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
           now,
         );
         created.boardFixtures = (created.boardFixtures ?? 0) + fixtures;
+
+        // F6: sample applicants and partners in every state (local and CI only).
+        const partnerAccounts: Record<string, string> = {};
+        for (const account of PARTNER_ACCOUNTS) {
+          const user = await upsertUser(tx, {
+            email: account.email,
+            name: account.name,
+            role: account.role,
+            isDemo: false,
+            passwordHash: sampleHash,
+            resetPassword: true,
+            state: {
+              emailVerified: true,
+              banned: account.banned,
+              banReason: account.banReason,
+              isSample: true,
+              phone: account.phone,
+            },
+          });
+          partnerAccounts[account.key] = user.id;
+          count('users', user.created);
+        }
+        if (config.partnerKeys) {
+          const written = await resetPartnerFixtures(
+            tx,
+            {
+              accounts: fixtureAccounts(partnerAccounts),
+              morgan: { id: staff['support@foodz.example']!, name: 'Morgan Diaz' },
+              admin: { id: admin.id, name: 'Foodz Admin' },
+            },
+            config.partnerKeys,
+            now,
+          );
+          created.partnerFixtures = (created.partnerFixtures ?? 0) + written;
+        }
 
         const favoriteDishes = await tx.menuItem.findMany({
           where: { slug: { in: [...DEMO_FAVORITE_SLUGS] } },
