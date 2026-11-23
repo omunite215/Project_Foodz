@@ -284,7 +284,14 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
     step === 'accepted' || step === 'preparing' || step === 'ready' || step === 'pickedUp';
 
   // A live change removed the focused control: focus lands on what replaced it (D25).
+  // Either slot counts: the Cancel button, or the sentence and its phone link that replace it.
   const cancelHadFocus = useRef(false);
+  const slotFocus = () => {
+    cancelHadFocus.current = true;
+  };
+  const slotBlur = () => {
+    cancelHadFocus.current = false;
+  };
   useEffect(() => {
     if (!cancelHadFocus.current) return;
     cancelHadFocus.current = false;
@@ -371,7 +378,11 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
         <OrderStatusCard view={view} state={state} now={new Date(minute)} timeline={false} />
       )}
       {canCancel && step === 'placed' ? (
-        <div className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center">
+        <div
+          className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
+          onFocus={slotFocus}
+          onBlur={slotBlur}
+        >
           <Button
             ref={cancelButtonRef}
             type="button"
@@ -379,12 +390,6 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
             size="touch"
             aria-disabled={!online || undefined}
             aria-describedby={online ? undefined : 'cancel-offline'}
-            onFocus={() => {
-              cancelHadFocus.current = true;
-            }}
-            onBlur={() => {
-              cancelHadFocus.current = false;
-            }}
             onClick={() => {
               if (!online) {
                 announce("You're offline.");
@@ -404,7 +409,11 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
           )}
         </div>
       ) : kitchenHas && !cancelRefusal ? (
-        <div className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center">
+        <div
+          className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
+          onFocus={slotFocus}
+          onBlur={slotBlur}
+        >
           <p
             ref={sentenceRef}
             tabIndex={-1}
