@@ -17,6 +17,7 @@ const values = {
   NEXT_PUBLIC_PUSHER_KEY: secret(12),
   BETTER_AUTH_SECRET: secret(32),
   FIELD_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+  ID_NUMBER_HASH_KEY: randomBytes(32).toString('base64'),
   SEED_ADMIN_PASSWORD: secret(18),
   DEMO_PASSWORD: secret(12),
 };

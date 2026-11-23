@@ -72,6 +72,7 @@ describe('checkAndReencode', () => {
   ])('rejects %s', async (_label, input) => {
     expect(await checkAndReencode(input, 512)).toEqual({
       ok: false,
+      code: 'BAD_TYPE',
       reason: 'Only JPEG, PNG, WebP and AVIF images are accepted.',
     });
   });
@@ -86,6 +87,7 @@ describe('checkAndReencode', () => {
     const result = await checkAndReencode(jpeg.subarray(0, 200), 512);
     expect(result).toEqual({
       ok: false,
+      code: 'UNREADABLE',
       reason: 'The image could not be read. Try a different file.',
     });
   });

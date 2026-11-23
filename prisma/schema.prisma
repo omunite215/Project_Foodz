@@ -405,34 +405,95 @@ enum VehicleType {
   CAR
 }
 
+enum IdDocumentType {
+  DRIVER_LICENSE
+  STATE_ID
+  PASSPORT
+}
+
+/// One row per account (F6). Row-level security and the delivery_partners_guard_write trigger
+/// decide who may change what; staff read it through partner_directory.
 model DeliveryPartner {
-  id               String                                 @id @default(uuid(7)) @db.Uuid
-  userId           String                                 @unique @map("user_id") @db.Uuid
-  status           PartnerStatus                          @default(APPLIED)
-  vehicleType      VehicleType                            @map("vehicle_type")
-  vehiclePlate     String?                                @map("vehicle_plate")
-  licenseNumberEnc String?                                @map("license_number_enc")
-  idDocumentKey    String?                                @map("id_document_key")
-  photoKey         String?                                @map("photo_key")
-  isOnline         Boolean                                @default(false) @map("is_online")
-  lastLocation     Unsupported("geography(Point, 4326)")? @map("last_location")
-  lastSeenAt       DateTime?                              @map("last_seen_at")
-  ratingAvg        Float                                  @default(0) @map("rating_avg")
-  ratingCount      Int                                    @default(0) @map("rating_count")
-  reviewNote       String?                                @map("review_note")
-  approvedAt       DateTime?                              @map("approved_at")
-  createdAt        DateTime                               @default(now()) @map("created_at")
-  updatedAt        DateTime                               @updatedAt @map("updated_at")
-  user             User                                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deliveries       Delivery[]
-  offers           DeliveryOffer[]
-  earnings         PartnerEarning[]
-  ratings          PartnerRating[]
-  reports          PartnerReport[]
+  id                     String                                 @id @default(uuid(7)) @db.Uuid
+  userId                 String                                 @unique @map("user_id") @db.Uuid
+  status                 PartnerStatus                          @default(APPLIED)
+  vehicleType            VehicleType                            @map("vehicle_type")
+  vehiclePlate           String?                                @map("vehicle_plate")
+  /// AES-256-GCM, bound to `delivery_partners.license_number:<id>`; never decrypted by the app.
+  licenseNumberEnc       String?                                @map("license_number_enc")
+  photoUploadId          String?                                @map("photo_upload_id") @db.Uuid
+  idDocumentUploadId     String?                                @map("id_document_upload_id") @db.Uuid
+  idDocumentType         IdDocumentType?                        @map("id_document_type")
+  idDocumentExpiresOn    DateTime?                              @map("id_document_expires_on") @db.Date
+  idNumberLast4          String?                                @map("id_number_last4")
+  /// HMAC-SHA256 with ID_NUMBER_HASH_KEY, for the "same ID number" flag only.
+  idNumberHash           String?                                @map("id_number_hash")
+  isOnline               Boolean                                @default(false) @map("is_online")
+  lastLocation           Unsupported("geography(Point, 4326)")? @map("last_location")
+  lastSeenAt             DateTime?                              @map("last_seen_at")
+  ratingAvg              Float                                  @default(0) @map("rating_avg")
+  ratingCount            Int                                    @default(0) @map("rating_count")
+  reviewNote             String?                                @map("review_note")
+  approvedAt             DateTime?                              @map("approved_at")
+  submittedAt            DateTime?                              @map("submitted_at")
+  editedAt               DateTime?                              @map("edited_at")
+  fixedAt                DateTime?                              @map("fixed_at")
+  decidedAt              DateTime?                              @map("decided_at")
+  decidedBy              String?                                @map("decided_by") @db.Uuid
+  decisionReason         String?                                @map("decision_reason")
+  changesRequestedAt     DateTime?                              @map("changes_requested_at")
+  changesRequestedNote   String?                                @map("changes_requested_note")
+  changesRequestedBy     String?                                @map("changes_requested_by") @db.Uuid
+  reapplyAfter           DateTime?                              @map("reapply_after") @db.Date
+  filesDeletedAt         DateTime?                              @map("files_deleted_at")
+  suspendedAt            DateTime?                              @map("suspended_at")
+  suspensionReason       String?                                @map("suspension_reason")
+  onlineSince            DateTime?                              @map("online_since")
+  onlineSessionId        String?                                @map("online_session_id") @db.Uuid
+  offlineReason          String?                                @map("offline_reason")
+  offlineAt              DateTime?                              @map("offline_at")
+  partnerTermsVersion    Int?                                   @map("partner_terms_version")
+  partnerTermsAcceptedAt DateTime?                              @map("partner_terms_accepted_at")
+  adultConfirmedAt       DateTime?                              @map("adult_confirmed_at")
+  welcomedAt             DateTime?                              @map("welcomed_at")
+  version                Int                                    @default(0)
+  plateKey               String?                                @default(dbgenerated("upper(regexp_replace(vehicle_plate, '[[:space:]-]'::text, ''::text, 'g'::text))")) @map("plate_key")
+  createdAt              DateTime                               @default(now()) @map("created_at")
+  updatedAt              DateTime                               @updatedAt @map("updated_at")
+  user                   User                                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photoUpload            Upload?                                @relation("PartnerPhoto", fields: [photoUploadId], references: [id])
+  idDocumentUpload       Upload?                                @relation("PartnerDocument", fields: [idDocumentUploadId], references: [id])
+  deliveries             Delivery[]
+  offers                 DeliveryOffer[]
+  earnings               PartnerEarning[]
+  ratings                PartnerRating[]
+  reports                PartnerReport[]
+  history                PartnerApplicationEvent[]
 
   @@index([status, isOnline])
   @@index([lastLocation], type: Gist)
+  @@index([status, submittedAt])
   @@map("delivery_partners")
+}
+
+/// The application's history (F6 A31.1): append-only for the app.
+model PartnerApplicationEvent {
+  id            String          @id @db.Uuid
+  partnerId     String          @map("partner_id") @db.Uuid
+  type          String
+  actorKind     String          @map("actor_kind")
+  actorId       String?         @map("actor_id") @db.Uuid
+  actorName     String?         @map("actor_name")
+  actorRole     String?         @map("actor_role")
+  at            DateTime        @default(now())
+  applicantText String?         @map("applicant_text")
+  staffNote     String?         @map("staff_note")
+  changedParts  String[]        @default([]) @map("changed_parts")
+  versionAfter  Int?            @map("version_after")
+  partner       DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, at])
+  @@map("partner_application_events")
 }
 
 enum DeliveryStatus {
@@ -893,20 +954,24 @@ enum UploadPurpose {
 }
 
 model Upload {
-  id             String        @id @default(uuid(7)) @db.Uuid
-  key            String        @unique
-  bucket         UploadBucket
-  purpose        UploadPurpose
-  status         UploadStatus  @default(PENDING)
-  ownerId        String        @map("owner_id") @db.Uuid
-  contentType    String        @map("content_type")
-  sizeBytes      Int           @map("size_bytes")
-  width          Int?
-  height         Int?
-  rejectedReason String?       @map("rejected_reason")
-  processedAt    DateTime?     @map("processed_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  owner          User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id               String            @id @default(uuid(7)) @db.Uuid
+  key              String            @unique
+  bucket           UploadBucket
+  purpose          UploadPurpose
+  status           UploadStatus      @default(PENDING)
+  ownerId          String            @map("owner_id") @db.Uuid
+  contentType      String            @map("content_type")
+  sizeBytes        Int               @map("size_bytes")
+  width            Int?
+  height           Int?
+  rejectedReason   String?           @map("rejected_reason")
+  /// TOO_LARGE, BAD_TYPE, UNREADABLE or NOT_RECEIVED (F6 design 4.4).
+  rejectCode       String?           @map("reject_code")
+  processedAt      DateTime?         @map("processed_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  partnerPhotos    DeliveryPartner[] @relation("PartnerPhoto")
+  partnerDocuments DeliveryPartner[] @relation("PartnerDocument")
 
   @@index([ownerId, purpose])
   @@map("uploads")

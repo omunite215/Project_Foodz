@@ -102,12 +102,22 @@ describe('upload pipeline', () => {
 
     // The owner gets a short-lived link that works; nobody else learns it exists.
     const status = await getUpload(asUser(customer), { uploadId });
-    expect(status).toMatchObject({ status: 'READY' });
+    if (status.status !== 'READY') throw new Error(`upload is ${status.status}`);
     expect(status.url).toContain('X-Amz-Signature');
-    expect((await fetch(status.url!)).status).toBe(200);
+    expect(status.expiresAt).not.toBeNull();
+    expect((await fetch(status.url)).status).toBe(200);
     await expect(getUpload(asUser(otherCustomer), { uploadId })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+    // F6 T4: staff, the demo admin included, never get a link to someone else's private file.
+    for (const role of ['support', 'admin'] as const) {
+      await expect(getUpload(asUser(uuid(), role), { uploadId })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    }
+    await expect(
+      getUpload({ ...asUser(uuid(), 'admin'), isDemo: true }, { uploadId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('serves menu photos from the public bucket', async () => {
@@ -127,7 +137,10 @@ describe('upload pipeline', () => {
     expect(await processUpload(uploadId)).toBe('ready');
 
     const status = await getUpload(editor, { uploadId });
-    expect(status.url).toBe(`${process.env.S3_PUBLIC_URL}/menu-image/${uploadId}.webp`);
+    expect(status).toMatchObject({
+      status: 'READY',
+      url: `${process.env.S3_PUBLIC_URL}/menu-image/${uploadId}.webp`,
+    });
     const row = await runAsSystem('check', (ctx) =>
       db(ctx).upload.findUniqueOrThrow({ where: { id: uploadId }, select: { width: true } }),
     );
@@ -144,6 +157,7 @@ describe('upload pipeline', () => {
     expect(await getUpload(asUser(customer), { uploadId })).toEqual({
       uploadId,
       status: 'REJECTED',
+      code: 'BAD_TYPE',
       reason: 'Only JPEG, PNG, WebP and AVIF images are accepted.',
     });
     expect(await objectSize('PRIVATE', `quarantine/${uploadId}`)).toBeNull();

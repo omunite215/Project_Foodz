@@ -115,6 +115,29 @@ export async function findPasswordHash(ctx: DbContext, userId: string) {
   return account?.password ?? null;
 }
 
+/**
+ * The account's partner row on deletion (F6 P15.5), through the database function that owns
+ * the rule: a waiting application is withdrawn, any other row is anonymised, an online partner
+ * is refused (55006, "Go offline first."). Returns the uploads whose files go after commit.
+ */
+export async function erasePartnerData(ctx: DbContext): Promise<{
+  outcome: 'none' | 'withdrawn' | 'anonymised';
+  partnerId?: string;
+  uploadIds?: string[];
+}> {
+  const rows = await db(ctx).$queryRaw<
+    {
+      result: {
+        outcome: 'none' | 'withdrawn' | 'anonymised';
+        partnerId?: string;
+        uploadIds?: string[];
+      };
+    }[]
+  >`
+    SELECT app_erase_own_partner_data() AS result`;
+  return rows[0]?.result ?? { outcome: 'none' };
+}
+
 /** Deliveries a partner is carrying right now. */
 export function countDeliveriesInProgress(ctx: DbContext, userId: string) {
   return db(ctx).delivery.count({
@@ -138,17 +161,6 @@ export async function anonymizeAccount(ctx: DbContext, userId: string, now: Date
   await tx.address.deleteMany({ where: { userId } });
   await tx.favorite.deleteMany({ where: { userId } });
   await tx.notification.deleteMany({ where: { userId } });
-  await tx.deliveryPartner.updateMany({
-    where: { userId },
-    data: {
-      vehiclePlate: null,
-      licenseNumberEnc: null,
-      idDocumentKey: null,
-      photoKey: null,
-      isOnline: false,
-    },
-  });
-  await tx.$executeRaw`UPDATE delivery_partners SET last_location = NULL WHERE user_id = ${userId}::uuid`;
   await tx.user.update({
     where: { id: userId },
     data: {

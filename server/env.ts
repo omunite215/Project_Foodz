@@ -53,6 +53,10 @@ export const env = createEnv({
     FIELD_ENCRYPTION_KEY: z
       .string()
       .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64-encoded'),
+    // F6 B4: flags the same partner ID number on two applications.
+    ID_NUMBER_HASH_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64-encoded'),
 
     SENTRY_DSN: z.url().optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
