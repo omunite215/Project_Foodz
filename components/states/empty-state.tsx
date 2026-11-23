@@ -24,9 +24,8 @@ export const ILLUSTRATIONS = {
   emptyCart: '/illustrations/order-food.svg',
   searching: '/illustrations/cooking.svg',
   favorites: '/illustrations/order-food.svg',
-  // F5's empty board and "Nothing here yet". Until the unDraw "No data" artwork is added
-  // (F5 design, Illustrations), they use the shipped cook from the same set.
-  noData: '/illustrations/cooking.svg',
+  // F5's empty board and "Nothing here yet".
+  noData: '/illustrations/no-data.svg',
 } as const;
 
 export interface EmptyStateProps {

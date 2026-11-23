@@ -7,10 +7,10 @@ import { loadStaffShell } from './staff-access';
 
 export async function generateMetadata(): Promise<Metadata> {
   const shell = await loadStaffShell();
-  return {
-    title:
-      shell.kind === 'twoFactorRequired' ? GATE_TAB_TITLES.twoFactor : GATE_TAB_TITLES.nothingHere,
-  };
+  const title =
+    shell.kind === 'twoFactorRequired' ? GATE_TAB_TITLES.twoFactor : GATE_TAB_TITLES.nothingHere;
+  // The layout's template reaches child segments only, not this page in its own segment.
+  return { title: { absolute: `${title} | Foodz Admin` } };
 }
 
 /**
