@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Clock, Info } from 'lucide-react';
+import { ArrowLeft, Clock, Info, WifiOff } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -48,7 +48,12 @@ import {
 import { focusFirstInvalid } from '@/components/forms/feedback';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
-import { type ActionFailure, callAction, withoutFieldError } from '@/lib/action-result';
+import {
+  type ActionFailure,
+  callAction,
+  readActionResult,
+  withoutFieldError,
+} from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { onAuthEvent } from '@/lib/auth-channel';
 import { openCart, useCartOpen } from '@/lib/cart-dialog';
@@ -62,6 +67,7 @@ import {
   readAttempt,
   readChoices,
   readPlacedHere,
+  takeClearCart,
   writeAttempt,
   writeChoices,
   writePlacedHere,
@@ -323,7 +329,15 @@ export function Checkout({
   const [removedCount, setRemovedCount] = useState(0);
   const [codeEnded, setCodeEnded] = useState<string | null>(null);
   const pressing = press === 'pressing' || press === 'bank';
+  /** Nothing in the Summary or the form can change while a press may still be going through (D21). */
+  const locked = pressing || press === 'slow';
   const pendingAttempt = useRef<string | null>(null);
+  /** The press's own request, until it settles: a late answer still counts (S7.3). */
+  const inFlight = useRef<Promise<unknown> | null>(null);
+  const pressRef = useRef<Press>(press);
+  useEffect(() => {
+    pressRef.current = press;
+  });
 
   // ---------------------------------------------------------------- refs for focus
   const formRef = useRef<HTMLFormElement>(null);
@@ -339,6 +353,18 @@ export function Checkout({
   const undoRef = useRef<HTMLButtonElement>(null);
   const removeRefs = useRef(new Map<string, HTMLButtonElement>());
   const dialogOpener = useRef<HTMLElement | null>(null);
+  /** An address just saved or edited: focus its radio once the refreshed list shows it (2.8). */
+  const focusSaved = useRef<string | null>(null);
+  useEffect(() => {
+    const id = focusSaved.current;
+    if (!id) return;
+    const radio = addressGroupRef.current?.querySelector<HTMLInputElement>(
+      `input[type="radio"][value="${CSS.escape(id)}"]`,
+    );
+    if (!radio) return;
+    focusSaved.current = null;
+    radio.focus();
+  });
   const focusUndo = useRef(false);
 
   // ---------------------------------------------------------------- contact form
@@ -388,6 +414,52 @@ export function Checkout({
     // Once, on arrival.
     // oxlint-disable-next-line react/exhaustive-deps
   }, []);
+
+  // Back here while a card payment this tab made is still being confirmed: ask until the server
+  // knows (every 2 s for a minute, and when the tab is shown again), then say so (S7.4, B7).
+  const confirmingId = placed?.confirming ? placed.orderId : null;
+  useEffect(() => {
+    if (!confirmingId) return undefined;
+    let stopped = false;
+    const started = Date.now();
+    const ask = async () => {
+      const outcome = await callAction(() =>
+        orderStatusAction({ orderId: confirmingId, confirmed: true }),
+      );
+      if (stopped || !outcome.ok || outcome.data.status === 'PENDING_PAYMENT') return;
+      stopped = true;
+      const view = outcome.data;
+      if (view.status === 'FAILED' || view.status === 'CANCELLED') {
+        writePlacedHere(null);
+        setPlaced(null);
+        return;
+      }
+      const here = { orderId: view.id, number: view.number, confirming: false };
+      writePlacedHere(here);
+      setPlaced(here);
+      if (takeClearCart(view.id)) {
+        cart.clear();
+        cart.setPlaced({ orderId: view.id, number: view.number });
+      }
+      announce(`Order ${view.number} is placed.`);
+    };
+    const timer = setInterval(() => {
+      if (Date.now() - started > 60_000) clearInterval(timer);
+      else void ask();
+    }, 2000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void ask();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    void ask();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // `cart` is a fresh object each render; the effect is about the order only.
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [confirmingId]);
 
   useEffect(() => {
     if (!choicesLoaded) return;
@@ -696,6 +768,7 @@ export function Checkout({
     summaryNotices.push({
       key: 'offline',
       variant: 'info',
+      icon: WifiOff,
       text: "You're offline. Your total will update when you're back online.",
     });
   }
@@ -847,13 +920,16 @@ export function Checkout({
   };
 
   async function checkAttempt() {
-    const key = pendingAttempt.current;
+    // The press that timed out keeps its key; after a reload it is still in this tab's storage.
+    const key = pendingAttempt.current ?? readAttempt()?.key ?? null;
     if (!key || checking) return;
     setChecking(true);
     const outcome = await callAction(() => attemptStatusAction({ attemptKey: key }));
     setChecking(false);
-    if (!outcome.ok) return;
+    if (!outcome.ok || pressRef.current !== 'slow') return;
     const status = outcome.data;
+    // Not there yet while the press itself is still out: keep checking, never offer a fresh Pay.
+    if (status.kind === 'notFound' && inFlight.current) return;
     if (status.kind === 'placed') placedNow(status.orderId, status.number, false);
     else if (status.kind === 'awaitingPayment') goToOrder(status.orderId);
     else if (status.kind === 'failed') {
@@ -891,6 +967,12 @@ export function Checkout({
 
   /** Refusals at the press: each shows where it belongs (design 2.19). */
   function refused(error: ActionFailure) {
+    // No answer in 15 s, or the connection dropped: the status panel asks again with the same
+    // key, so the key stays (S7.3, D22).
+    if (error.code === 'TIMEOUT' || error.code === 'OFFLINE') {
+      setPress('slow');
+      return;
+    }
     backToForm();
     const newQuote = quoteOf(error);
     if (newQuote) queryClient.setQueryData(quoteQueryKey(requestKey(request)), newQuote);
@@ -1009,10 +1091,6 @@ export function Checkout({
       case 'UNAVAILABLE':
         writeAttempt(null);
         alertPayment({ key: 'unavailable', variant: 'error', text: error.message }, error.message);
-        return;
-      case 'TIMEOUT':
-      case 'OFFLINE':
-        setPress('slow');
         return;
       default:
         showNotSent();
@@ -1156,7 +1234,23 @@ export function Checkout({
     };
 
     setPress('pressing');
-    const outcome = await callAction(() => placeOrderAction(input));
+    const call = placeOrderAction(input);
+    inFlight.current = call;
+    // An answer that comes after the 15 s panel took over: show it, or let the check move on.
+    void call.then(
+      (raw) => {
+        if (inFlight.current === call) inFlight.current = null;
+        if (pressRef.current !== 'slow' || pendingAttempt.current !== attemptKey) return;
+        const late = readActionResult(raw);
+        if (!late.ok) refused(late.error);
+        else void checkRef.current();
+      },
+      () => {
+        if (inFlight.current === call) inFlight.current = null;
+        if (pressRef.current === 'slow') void checkRef.current();
+      },
+    );
+    const outcome = await callAction(() => call);
     if (!outcome.ok) {
       refused(outcome.error);
       return;
@@ -1333,7 +1427,7 @@ export function Checkout({
           }}
           editCartRef={editCartRef}
           loading={!isReady}
-          inert={pressing}
+          inert={locked}
         />
 
         <div className="lg:col-start-1 lg:row-start-2 xl:col-span-5">
@@ -1342,7 +1436,7 @@ export function Checkout({
             id="checkout"
             method="post"
             noValidate
-            inert={pressing}
+            inert={locked}
             onSubmit={(event) => {
               // Enter in a field never places the order (D47): only the pay button does.
               event.preventDefault();
@@ -1491,10 +1585,13 @@ export function Checkout({
           cart.setAddressId(address.id);
           setDeliverError(null);
           dialogOpener.current = null;
+          focusSaved.current = address.id;
           announce(edited ? 'Address updated' : 'Address saved');
           router.refresh();
         }}
         returnFocus={() => {
+          // Saved: the effect above focuses the new card when the refreshed list has it.
+          if (focusSaved.current) return;
           const opener = dialogOpener.current;
           if (opener?.isConnected) opener.focus();
           else
