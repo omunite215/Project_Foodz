@@ -73,6 +73,13 @@ export interface OrderPageProps {
   } | null;
 }
 
+/** Focus without scrolling when the element is already in view, so a live change keeps her place. */
+function focusInPlace(element: HTMLElement | null) {
+  if (!element) return;
+  const box = element.getBoundingClientRect();
+  const inView = box.top >= 0 && box.bottom <= window.innerHeight;
+  element.focus({ preventScroll: inView });
+}
 export function OrderPage({ view: initial, payment }: OrderPageProps) {
   const online = useOnline();
   const minute = useMinuteClock();
@@ -269,6 +276,8 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
 
   const step = currentStep(view);
   const storeCancelled = view.progress.cancellation?.by === 'store' && view.status === 'CANCELLED';
+  // In the server's HTML it shows at once; only a cancellation that arrives live fades in.
+  const [cancelledAtLoad] = useState(storeCancelled);
   const cancelHeadingRef = useRef<HTMLHeadingElement>(null);
   const sentenceRef = useRef<HTMLParagraphElement>(null);
   const kitchenHas =
@@ -281,7 +290,7 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
     cancelHadFocus.current = false;
     requestAnimationFrame(() => {
       if (storeCancelled) cancelHeadingRef.current?.focus();
-      else if (kitchenHas) sentenceRef.current?.focus();
+      else if (kitchenHas) focusInPlace(sentenceRef.current);
     });
   }, [kitchenHas, storeCancelled]);
   // Cancelled by the store while the cancel dialog was open: it closes, focus to the h1 (6.7).
@@ -341,7 +350,15 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
         <CancellationCard
           view={view}
           headingRef={cancelHeadingRef}
-          orderAgain={<OrderAgainButton orderId={view.id} number={view.number} variant="outline" />}
+          animateIn={!cancelledAtLoad}
+          orderAgain={
+            <OrderAgainButton
+              orderId={view.id}
+              number={view.number}
+              variant="outline"
+              className="max-sm:items-stretch max-sm:text-center"
+            />
+          }
         />
       ) : null}
       {view.progress.steps ? (
@@ -496,7 +513,10 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
         <AlertDialogContent
           onCloseAutoFocus={(event) => {
             event.preventDefault();
+            // The opener can be gone ("Too late to cancel"): its replacement takes focus (D25).
             if (cancelButtonRef.current?.isConnected) cancelButtonRef.current.focus();
+            else if (sentenceRef.current?.isConnected) focusInPlace(sentenceRef.current);
+            else headingRef.current?.focus();
           }}
         >
           {tooLate ? (

@@ -100,7 +100,7 @@ export function OrderRow({
   return (
     <div
       data-order-row
-      className="group relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-2xl border border-neutral-6 bg-white p-4 transition-colors has-[a:hover]:border-neutral-5 has-[a:hover]:bg-neutral-8 md:p-5 xl:grid-cols-[9.5rem_minmax(0,1fr)_7.5rem_10.5rem_auto] xl:items-center xl:gap-x-6"
+      className="group relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-2xl border border-neutral-6 bg-white p-4 transition-colors has-[a:hover]:border-neutral-5 has-[a:hover]:bg-neutral-8 md:p-5 xl:grid-cols-[9.5rem_minmax(0,1fr)_7.5rem_10.5rem_8.5rem] xl:items-center xl:gap-x-6"
     >
       <Link
         ref={linkRef}
@@ -111,15 +111,18 @@ export function OrderRow({
         Order {order.number}
       </Link>
       <div id={metaId} className="contents">
-        <span className="col-start-2 row-span-2 row-start-1 xl:col-start-4 xl:row-span-2 xl:self-center">
+        <span className="col-start-2 row-span-2 row-start-1 justify-self-end xl:col-start-4 xl:row-span-2 xl:self-center xl:justify-self-start">
           <StatusChip word={order.statusWord} collected={order.collected} />
           <span className="sr-only">,</span>
         </span>
-        <span className="col-start-1 row-start-2 mt-0.5 block text-body-5 text-neutral-3">
-          {date}
-          <span className="sr-only">,</span>
+        {/* From 1280 px the arrival leaves the date and sits under the dishes (7.2). */}
+        <span className="col-start-1 row-start-2 mt-0.5 block text-body-5 text-neutral-3 xl:contents">
+          <span className="xl:col-start-1 xl:row-start-2 xl:mt-0.5 xl:block">
+            {date}
+            <span className="sr-only">,</span>
+          </span>
           {arrival ? (
-            <span className="mt-1 flex items-center gap-1.5 text-body-5 text-neutral-1 tabular-nums">
+            <span className="mt-1 flex items-center gap-1.5 text-body-5 text-neutral-1 tabular-nums xl:col-start-2 xl:row-start-2 xl:self-start">
               {arrival.tone === 'late' ? (
                 <TriangleAlert className="size-3.5 text-warning-strong" aria-hidden />
               ) : (
@@ -130,7 +133,12 @@ export function OrderRow({
             </span>
           ) : null}
         </span>
-        <span className="col-span-2 row-start-3 mt-3 line-clamp-2 block text-body-5 text-neutral-2 [overflow-wrap:anywhere] xl:col-span-1 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:mt-0 xl:line-clamp-1">
+        <span
+          className={cn(
+            'col-span-2 row-start-3 mt-3 line-clamp-2 block text-body-5 text-neutral-2 [overflow-wrap:anywhere] xl:col-span-1 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:line-clamp-1',
+            arrival ? 'xl:row-span-1 xl:self-end' : 'xl:row-span-2',
+          )}
+        >
           {dishes}
           <span className="sr-only">,</span>
         </span>

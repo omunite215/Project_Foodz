@@ -32,6 +32,9 @@ const withProgress = (
     progress: { ...orderViewFixture().progress, ...extra },
   });
 
+const promised = (from: string, to: string) =>
+  arrivalText({ kind: 'promised', from, to, lateMinutes: null, behind: false }, null, TZ);
+
 describe('the stepper (design 6.4)', () => {
   it('names each step with its state in words', () => {
     const steps = stepsAt('preparing');
@@ -83,8 +86,21 @@ describe('the hero (design 6.3)', () => {
   });
 
   it('says when it was delivered (S2.6)', () => {
-    const view = withProgress('DELIVERED', { deliveredAt: '2026-11-20T01:14:00.000Z' });
+    const view = withProgress('DELIVERED', {
+      deliveredAt: '2026-11-20T01:14:00.000Z',
+      asOf: '2026-11-20T02:00:00.000Z',
+    });
     expect(stepLine(view, 'delivered', false)).toBe('Delivered at 8:14 pm. Enjoy your meal.');
+  });
+
+  it('dates a delivery from another day (S1.4)', () => {
+    const view = withProgress('DELIVERED', {
+      deliveredAt: '2026-11-20T07:37:00.000Z',
+      asOf: '2026-11-23T08:00:00.000Z',
+    });
+    expect(stepLine(view, 'delivered', false)).toBe(
+      'Delivered on Fri, Nov 20 at 2:37 am. Enjoy your meal.',
+    );
   });
 
   it('announces a status change and titles the tab (S8.1, design 6.12)', () => {
@@ -123,8 +139,23 @@ describe('arrival lines (design 6.5)', () => {
     expect(
       arrivalText({ kind: 'pastDue', ...window, lateMinutes: null, behind: false }, null, TZ),
     ).toMatchObject({ tone: 'late', headline: 'Due by 8:19 pm', note: { phone: true } });
-    expect(arrivalText(null, '2026-11-20T01:14:00.000Z', TZ)?.headline).toBe(
-      'Delivered at 8:14 pm',
+    expect(
+      arrivalText(null, '2026-11-20T01:14:00.000Z', TZ, '2026-11-20T02:00:00.000Z')?.headline,
+    ).toBe('Delivered at 8:14 pm');
+    expect(
+      arrivalText(null, '2026-11-20T07:37:00.000Z', TZ, '2026-11-23T08:00:00.000Z')?.headline,
+    ).toBe('Delivered Fri, Nov 20 at 2:37 am');
+  });
+
+  it('keeps ":00" on the hour unless both ends are on it', () => {
+    expect(promised('2026-11-20T08:00:00.000Z', '2026-11-20T08:10:00.000Z')?.headline).toBe(
+      'Arriving about 3:00–3:10 am',
+    );
+    expect(promised('2026-11-20T08:50:00.000Z', '2026-11-20T09:00:00.000Z')?.spoken).toBe(
+      'Arriving about 3:50 to 4:00 am',
+    );
+    expect(promised('2026-11-20T08:00:00.000Z', '2026-11-20T09:00:00.000Z')?.headline).toBe(
+      'Arriving about 3–4 am',
     );
   });
 
@@ -182,6 +213,9 @@ describe('the cancellation card (design 6.8)', () => {
   it('says it at once, assertively (S5.8)', () => {
     expect(cancellationAnnouncement('1046', notice)).toBe(
       "Order 1046 was cancelled. The kitchen ran out of Pad Thai, so we couldn't make your order. We're refunding $53.97 to Visa ending 4242.",
+    );
+    expect(cancellationAnnouncement('1046', { ...notice, moneyLine: 'sample' })).toMatch(
+      /so we couldn't make your order\. This sample order had no real card payment, so there's nothing to refund\.$/,
     );
   });
 });

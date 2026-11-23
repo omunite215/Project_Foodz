@@ -122,10 +122,14 @@ export function stepLine(view: OrderView, step: ProgressStep, collected: boolean
     case 'pickedUp':
       return collected ? 'Your order has been handed over.' : 'Your order has left the kitchen.';
     case 'delivered':
-    default:
-      return view.progress.deliveredAt
-        ? `Delivered at ${clockAt(view.progress.deliveredAt, tz)}. Enjoy your meal.`
-        : 'Enjoy your meal.';
+    default: {
+      const at = view.progress.deliveredAt;
+      if (!at) return 'Enjoy your meal.';
+      const when = stepTime(at, new Date(view.progress.asOf), tz);
+      return when.date
+        ? `Delivered on ${when.date} at ${when.clock}. Enjoy your meal.`
+        : `Delivered at ${when.clock}. Enjoy your meal.`;
+    }
   }
 }
 
@@ -154,9 +158,17 @@ export interface ArrivalText {
   note: { text: string; phone: boolean } | null;
 }
 
+/** "3:00 am": the minutes even on the hour, so a window reads "3:00–3:10 am". */
+function clockWithMinutes(iso: string, timeZone: string): string {
+  const clock = clockAt(iso, timeZone);
+  return clock.includes(':') ? clock : clock.replace(' ', ':00 ');
+}
+
 function range(from: string, to: string, timeZone: string) {
-  const start = clockAt(from, timeZone);
-  const end = clockAt(to, timeZone);
+  const onTheHour = !clockAt(from, timeZone).includes(':') && !clockAt(to, timeZone).includes(':');
+  const clock = onTheHour ? clockAt : clockWithMinutes;
+  const start = clock(from, timeZone);
+  const end = clock(to, timeZone);
   const same = start.slice(-2) === end.slice(-2);
   return {
     text: same ? `${start.slice(0, -3)}–${end}` : `${start}–${end}`,
@@ -168,9 +180,14 @@ export function arrivalText(
   arrival: ArrivalWindow | null,
   deliveredAt: string | null,
   timeZone: string,
+  /** The server's clock (`progress.asOf`): another day's delivery carries its date (S1.4). */
+  now: string | Date = new Date(),
 ): ArrivalText | null {
   if (deliveredAt) {
-    const text = `Delivered at ${clockAt(deliveredAt, timeZone)}`;
+    const when = stepTime(deliveredAt, new Date(now), timeZone);
+    const text = when.date
+      ? `Delivered ${when.date} at ${when.clock}`
+      : `Delivered at ${when.clock}`;
     return { tone: 'done', headline: text, spoken: text, note: null };
   }
   if (!arrival) return null;
@@ -285,6 +302,9 @@ export function cancellationAnnouncement(number: string, notice: CancellationNot
     const card = notice.cardLabel?.replace('•••• ', 'ending ') ?? 'your card';
     money = ` We're refunding ${formatPrice(notice.amountCents)} to ${card}.`;
   } else if (notice.moneyLine === 'nothing') money = ' Nothing was charged.';
+  else if (notice.moneyLine === 'sample') {
+    money = " This sample order had no real card payment, so there's nothing to refund.";
+  }
   return `Order ${number} was cancelled. ${reason}${money}`;
 }
 

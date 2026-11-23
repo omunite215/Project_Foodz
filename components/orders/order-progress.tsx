@@ -23,7 +23,8 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { type ReactNode, type Ref, useRef } from 'react';
+import { gsap } from 'gsap';
+import { type ReactNode, type Ref, type RefObject, useRef } from 'react';
 import type { OrderView } from '@/server/modules/orders/schema';
 import type { OrderStep, StepKey } from '@/server/modules/orders/progress-schema';
 import { SignInAgain } from '@/components/forms/sign-in-again';
@@ -86,7 +87,7 @@ function StepDisc({ step }: { step: OrderStep }) {
         aria-hidden
         className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-strong"
       >
-        <Check className="size-4 text-white" strokeWidth={3} />
+        <Check data-check="" className="size-4 text-white" strokeWidth={3} />
       </span>
     );
   }
@@ -95,15 +96,101 @@ function StepDisc({ step }: { step: OrderStep }) {
       aria-hidden
       className={cn(
         'relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full',
-        step.state === 'current'
-          ? 'bg-brand-soft ring-2 ring-brand-strong'
-          : 'border-2 border-neutral-4 bg-white',
+        step.state === 'current' ? 'bg-brand-soft' : 'border-2 border-neutral-4 bg-white',
       )}
     >
+      {step.state === 'current' ? (
+        <span data-ring="" className="absolute inset-0 rounded-full ring-2 ring-brand-strong" />
+      ) : null}
       <Icon
         className={cn('size-4', step.state === 'current' ? 'text-brand-strong' : 'text-neutral-4')}
       />
     </span>
+  );
+}
+
+/** "ddcuuu": each step's state by its first letter, to tell what a live change did. */
+function stepStates(steps: readonly OrderStep[]): string {
+  return steps.map((step) => step.state.charAt(0)).join('');
+}
+
+/**
+ * A step reached while the page is open (motion table): the connector into the newly done
+ * step fills, that disc's check scales in, then the next disc's ring fades in, about 600 ms.
+ * A step taken back crossfades its discs; nothing runs backwards. Reduced motion: all swap.
+ * Never on first paint.
+ */
+function useStepperMotion(list: RefObject<HTMLOListElement | null>, states: string) {
+  const seen = useRef<string | null>(null);
+  useMotion(
+    (motion) => {
+      const before = seen.current;
+      seen.current = states;
+      const root = list.current;
+      if (!root || before === null || before === states || motion.reduced) return;
+      const pick = (selector: string) => root.querySelector<HTMLElement | SVGElement>(selector);
+      const done = (from: string, index: number) => from.charAt(index) === 'd';
+      const forward = states
+        .split('')
+        .some((state, index) => state === 'd' && !done(before, index));
+      if (!forward) {
+        const changed = states
+          .split('')
+          .map((state, index) => (state === before.charAt(index) ? null : index))
+          .filter((index) => index !== null);
+        for (const index of changed) {
+          const item = pick(`[data-step="${index}"]`);
+          if (item) gsap.from(item, { opacity: 0.3, duration: 0.15, ease: 'power2.out' });
+        }
+        return;
+      }
+      const wide = window.matchMedia('(min-width: 48rem)').matches;
+      const timeline = gsap.timeline();
+      let at = 0;
+      const connectors: Element[] = [];
+      const checks: Element[] = [];
+      for (let index = 0; index < states.length; index += 1) {
+        if (!done(states, index) || done(before, index)) continue;
+        const check = pick(`[data-step="${index}"] [data-check]`);
+        if (check) checks.push(check);
+        // The connector into this step fills when the step before it is done too.
+        if (index > 0 && done(states, index - 1)) {
+          const connector = pick(`[data-connector="${index - 1}"]`);
+          if (connector) connectors.push(connector);
+        }
+      }
+      if (connectors.length > 0) {
+        timeline.fromTo(
+          connectors,
+          wide
+            ? { scaleX: 0, transformOrigin: 'left center' }
+            : { scaleY: 0, transformOrigin: 'center top' },
+          { scaleX: 1, scaleY: 1, duration: 0.4, ease: 'power2.out' },
+          0,
+        );
+        at = 0.4;
+      }
+      if (checks.length > 0) {
+        timeline.fromTo(
+          checks,
+          { scale: 0.6, transformOrigin: '50% 50%' },
+          { scale: 1, duration: 0.2, ease: 'back.out(2)' },
+          at,
+        );
+        at += 0.2;
+      }
+      const ring = pick('[data-ring]');
+      const current = states.indexOf('c');
+      if (ring && current !== before.indexOf('c')) {
+        timeline.fromTo(
+          ring,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.15, ease: 'power2.out' },
+          at,
+        );
+      }
+    },
+    { scope: list, dependencies: [states] },
   );
 }
 
@@ -121,6 +208,8 @@ export function OrderStepper({
   const last = steps.at(-1);
   const delivered = last?.state === 'done';
   const currentKey = delivered ? last?.key : current?.key;
+  const listRef = useRef<HTMLOListElement>(null);
+  useStepperMotion(listRef, stepStates(steps));
   return (
     <div>
       {current && !delivered ? (
@@ -131,7 +220,7 @@ export function OrderStepper({
           </span>
         </p>
       ) : null}
-      <ol aria-label="Order progress" className="mt-4 md:grid md:grid-cols-6">
+      <ol ref={listRef} aria-label="Order progress" className="mt-4 md:grid md:grid-cols-6">
         {steps.map((step, index) => {
           const next = steps[index + 1];
           const time =
@@ -140,12 +229,14 @@ export function OrderStepper({
           return (
             <li
               key={step.key}
+              data-step={index}
               aria-current={step.key === currentKey ? 'step' : undefined}
               className="relative flex min-h-12 gap-3 pb-4 last:pb-0 md:flex-col md:items-center md:gap-2 md:pb-0 md:text-center"
             >
               {next ? (
                 <span
                   aria-hidden
+                  data-connector={index}
                   className={cn(
                     'absolute top-9 bottom-0 left-4 w-0.5 md:top-4 md:right-[calc(-50%+1rem)] md:bottom-auto md:left-[calc(50%+1rem)] md:h-0.5 md:w-auto',
                     filled ? 'bg-brand-strong' : 'bg-neutral-6',
@@ -184,7 +275,12 @@ export function OrderStepper({
 
 /** The arrival row and at most one amber note box (design 6.5). */
 export function ArrivalRow({ view }: { view: OrderView }) {
-  const text = arrivalText(view.progress.arrival, view.progress.deliveredAt, view.store.timeZone);
+  const text = arrivalText(
+    view.progress.arrival,
+    view.progress.deliveredAt,
+    view.store.timeZone,
+    view.progress.asOf,
+  );
   if (!text) return null;
   const late = text.tone === 'late';
   const Icon = late ? TriangleAlert : text.tone === 'done' ? Check : Clock;
@@ -274,17 +370,20 @@ export function CancellationCard({
   view,
   headingRef,
   orderAgain,
+  animateIn = false,
 }: {
   view: OrderView;
   headingRef?: Ref<HTMLHeadingElement>;
   orderAgain?: ReactNode;
+  /** Fade in when it arrives live; off when it is in the server's HTML (nothing first painted hides). */
+  animateIn?: boolean;
 }) {
   const notice = view.progress.cancellation;
   const ref = useRef<HTMLElement>(null);
   useMotion(
     (motion) => {
-      if (!ref.current) return;
-      motion.from(ref.current, { opacity: 0, duration: motion.reduced ? 0 : 0.2 });
+      if (!ref.current || !animateIn || motion.reduced) return;
+      motion.from(ref.current, { opacity: 0, duration: 0.2, ease: 'power2.out' });
     },
     { scope: ref },
   );
@@ -344,7 +443,7 @@ export function CancellationCard({
           </li>
         ) : null}
       </ul>
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-6 flex flex-col gap-3 max-sm:*:w-full sm:flex-row">
         <Button asChild size="touch" className="uppercase">
           <Link href="/menu">Browse the menu</Link>
         </Button>
