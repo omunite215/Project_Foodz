@@ -18,6 +18,8 @@ const metadataSchema = z.object({
    * shared demo accounts may not do.
    */
   write: z.boolean().optional(),
+  /** What the shared demo accounts are told when they try this change. */
+  demoMessage: z.string().optional(),
 });
 
 export interface ActionError {
@@ -64,10 +66,15 @@ export const publicAction = base.use(async ({ next, ctx, metadata }) => {
 /** Requires a signed-in user (and the permission, when the action declares one). */
 export const userAction = base.use(async ({ next, metadata }) => {
   const actor = metadata.permission
-    ? await requirePermission(metadata.permission, { write: metadata.write })
+    ? await requirePermission(metadata.permission, {
+        write: metadata.write,
+        demoMessage: metadata.demoMessage,
+      })
     : await getActor();
   if (actor.kind !== 'user') throw unauthenticated();
-  if (!metadata.permission && metadata.write && actor.isDemo) throw demoReadOnly();
+  if (!metadata.permission && metadata.write && actor.isDemo) {
+    throw demoReadOnly(metadata.demoMessage);
+  }
   await enforceRateLimit(metadata.rateLimit ?? 'action.default', `user:${actor.userId}`);
   return next({ ctx: { actor } });
 });
