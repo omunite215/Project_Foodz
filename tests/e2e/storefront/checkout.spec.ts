@@ -58,9 +58,10 @@ const priceRow = (page: Page, label: string | RegExp) =>
 /** The store keeps hours: when it is closed nothing can be placed (S3.4). */
 async function storeOpen(page: Page) {
   // Decide on the settled quote, not on the first paint: before the quote the button still reads
-  // "Pay" whatever the hours. The Arrival box says one of these once the quote is in.
+  // "Pay" whatever the hours. The Arrival box says one of these once the quote is in ("…when your
+  // total updates" is the in-between state, so it doesn't count).
   await expect(page.getByRole('region', { name: 'Arrival' })).toContainText(
-    /Arrives in about|Choose an address to see when it arrives|Ordering opens|when your total updates/,
+    /Arrives in about|Choose an address to see when it arrives|Ordering opens/,
     { timeout: 30_000 },
   );
   const closed =
