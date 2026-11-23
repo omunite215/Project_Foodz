@@ -1,3 +1,4 @@
+import path from 'node:path';
 import {
   expect,
   expectNoAxeViolations,
@@ -224,4 +225,63 @@ test('the demo partner goes online with a pretend location', async ({ page }, te
   await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Go offline' }).click();
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
+});
+
+test('Marco applies with a photo and his license, then withdraws', async ({ page }, testInfo) => {
+  test.skip(projectOf(testInfo) !== 'partner-375', "One project sends Marco's application.");
+  test.setTimeout(150_000);
+  // A drawn picture from the site's own files: never a real face or ID.
+  const picture = path.join(process.cwd(), 'public', 'noimage.png');
+  await signInTo(page, PARTNERS.marco, '/partner/apply');
+  await expect(page.getByRole('heading', { level: 1, name: 'About you' })).toBeVisible();
+
+  // Step 1: the photo goes up with real progress, is checked, then shows (design 4.4).
+  await page.getByLabel('Choose a photo').setInputFiles(picture);
+  await expect(page.getByText('Photo added')).toBeVisible({ timeout: 45_000 });
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 2: a scooter needs a plate, shown back in capitals.
+  await expect(page.getByRole('heading', { level: 1, name: 'Your vehicle' })).toBeVisible();
+  await page.getByText('Scooter or moped', { exact: true }).click();
+  await page.getByLabel('Plate number').fill('7kt 342');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 3: the license, its number and expiry, and a photo of its front.
+  await expect(page.getByRole('heading', { level: 1, name: 'Your ID' })).toBeVisible();
+  await expect(page.getByText("You need a driver's license to deliver by scooter.")).toBeVisible();
+  await page.getByLabel('License number').fill('S4820 4821');
+  await page.getByLabel('Expiry date').fill('2029-03-03');
+  await page.getByLabel('Choose a photo').setInputFiles(picture);
+  await expect(page.getByText('Photo added')).toBeVisible({ timeout: 45_000 });
+  await expectNoAxeViolations(page);
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Step 4: the summary shows only the last four; both boxes are needed.
+  await expect(page.getByRole('heading', { level: 1, name: 'Check and send' })).toBeVisible();
+  await expect(page.getByText(/Driver's license ending 4821 · expires Mar 3, 2029/)).toBeVisible();
+  await expect(page.getByText('S48204821')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Send application' }).click();
+  await expect(page.getByText('Please fix these before you send:')).toBeVisible();
+  await page.getByLabel("I'm 18 or older.").check();
+  await page.getByLabel('I agree to the Foodz Partner Terms').check();
+  await page.getByRole('button', { name: 'Send application' }).click();
+
+  await expect(
+    page.getByRole('heading', { level: 1, name: "We're checking your application" }),
+  ).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByText('Scooter or moped · 7KT 342')).toBeVisible();
+
+  // Withdrawing deletes it and opens an empty form with the confirmation (design 5.3).
+  await page.getByRole('button', { name: 'Withdraw application' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Withdraw your application?' })
+    .getByRole('button', { name: 'Withdraw', exact: true })
+    .click();
+  await expect(
+    page.getByText("Application withdrawn. We've deleted your photos and ID details."),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
 });
