@@ -154,10 +154,10 @@ CREATE TRIGGER order_items_snapshot_prep
 -- ---------------------------------------------------------------- what staff may change
 
 -- orders_update lets non-demo operations staff update orders (F4). This narrows it: staff may
--- change only the status, its step times and the cancellation, and only along their role's
--- transitions (server/modules/board/state.ts keeps the same table). Money stays the platform's,
--- except a cash order marked delivered by an admin turning PAID. The table owner and the
--- platform ('system') pass.
+-- change only the status, the one step time that goes with it and the cancellation, only along
+-- their role's transitions (server/modules/board/state.ts keeps the same table), and only by
+-- moving the version on. Money stays the platform's, except a cash order marked delivered by an
+-- admin turning PAID. The table owner and the platform ('system') pass.
 CREATE OR REPLACE FUNCTION orders_guard_staff_write() RETURNS trigger
   LANGUAGE plpgsql
   SET search_path = public
@@ -171,6 +171,23 @@ DECLARE
     'payment_status', 'version', 'status_changed_version', 'updated_at'
   ];
   bookkeeping constant text[] := ARRAY['version', 'status_changed_version', 'updated_at'];
+  step_times constant text[] := ARRAY[
+    'accepted_at', 'preparing_at', 'ready_at', 'picked_up_at', 'delivered_at'
+  ];
+  -- The step time a move enters (forward) or clears (back); null for a cancellation.
+  step text := CASE move
+    WHEN 'PLACED>ACCEPTED' THEN 'accepted_at'
+    WHEN 'ACCEPTED>PREPARING' THEN 'preparing_at'
+    WHEN 'PREPARING>READY' THEN 'ready_at'
+    WHEN 'READY>PICKED_UP' THEN 'picked_up_at'
+    WHEN 'PICKED_UP>DELIVERED' THEN 'delivered_at'
+    WHEN 'ACCEPTED>PLACED' THEN 'accepted_at'
+    WHEN 'PREPARING>ACCEPTED' THEN 'preparing_at'
+    WHEN 'READY>PREPARING' THEN 'ready_at'
+    WHEN 'PICKED_UP>READY' THEN 'picked_up_at'
+  END;
+  back boolean := move IN ('ACCEPTED>PLACED', 'PREPARING>ACCEPTED', 'READY>PREPARING', 'PICKED_UP>READY');
+  column_name text;
 BEGIN
   IF actor = 'system'
     OR pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE oid = TG_RELID), 'MEMBER') THEN
@@ -178,6 +195,11 @@ BEGIN
   END IF;
   IF actor NOT IN ('kitchen', 'support', 'admin') OR app_is_demo() THEN
     RAISE EXCEPTION 'permission denied: % may not change orders', actor
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  -- Every staff change moves the version on, so the board's conflict check always sees it.
+  IF NEW.version <= OLD.version THEN
+    RAISE EXCEPTION 'permission denied: a staff change must move the order''s version on'
       USING ERRCODE = 'insufficient_privilege';
   END IF;
   IF (to_jsonb(NEW) - free) IS DISTINCT FROM (to_jsonb(OLD) - free) THEN
@@ -210,10 +232,25 @@ BEGIN
       USING ERRCODE = 'insufficient_privilege';
   END IF;
 
+  -- Only the step time of this move changes: entered going forward, cleared going back.
+  FOREACH column_name IN ARRAY step_times LOOP
+    IF (to_jsonb(NEW) -> column_name) IS DISTINCT FROM (to_jsonb(OLD) -> column_name)
+      AND column_name IS DISTINCT FROM step THEN
+      RAISE EXCEPTION 'permission denied: moving % to % does not change %', OLD.status, NEW.status, column_name
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
+  END LOOP;
+  IF step IS NOT NULL AND ((to_jsonb(NEW) ->> step) IS NULL) IS DISTINCT FROM back THEN
+    RAISE EXCEPTION 'permission denied: moving % to % must % %', OLD.status, NEW.status,
+      CASE WHEN back THEN 'clear' ELSE 'enter' END, step
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
   IF NEW.status = 'CANCELLED' THEN
     -- The kitchen refuses; support and admin cancel. Only a staff-cancel refund may be decided.
-    IF NEW.cancel_reason IS DISTINCT FROM (CASE WHEN actor = 'kitchen' THEN 'kitchen-refused' ELSE 'staff' END) THEN
-      RAISE EXCEPTION 'permission denied: a staff cancellation is recorded as the role''s own'
+    IF NEW.cancel_reason IS DISTINCT FROM (CASE WHEN actor = 'kitchen' THEN 'kitchen-refused' ELSE 'staff' END)
+      OR NEW.cancelled_at IS NULL THEN
+      RAISE EXCEPTION 'permission denied: a staff cancellation is recorded as the role''s own, with its time'
         USING ERRCODE = 'insufficient_privilege';
     END IF;
     IF NEW.auto_refund_reason IS DISTINCT FROM OLD.auto_refund_reason
@@ -235,10 +272,6 @@ BEGIN
     AND OLD.payment_status = 'UNPAID' AND NEW.payment_status = 'PAID'
   ) THEN
     RAISE EXCEPTION 'permission denied: staff mark only collected cash as paid'
-      USING ERRCODE = 'insufficient_privilege';
-  END IF;
-  IF NEW.delivered_at IS DISTINCT FROM OLD.delivered_at AND NEW.status <> 'DELIVERED' THEN
-    RAISE EXCEPTION 'permission denied: the delivery time is set by marking an order delivered'
       USING ERRCODE = 'insufficient_privilege';
   END IF;
   RETURN NEW;
@@ -456,8 +489,9 @@ JOIN orders o ON o.id = i.order_id
 CROSS JOIN LATERAL (SELECT app_masks_owner(o.user_id) AS masked) m
 WHERE app_is_operations() OR o.user_id = app_user_id();
 
--- An order's timeline for staff. A real customer's order loses its staff notes for the demo
--- admin, and the demo admin never reads the name of a real (not demo or sample) staff member.
+-- An order's timeline for staff. A real customer's order loses its staff notes and the code it
+-- gave back for the demo admin, and the demo admin never reads the name of a real (not demo or
+-- sample) staff member.
 CREATE VIEW order_event_directory WITH (security_barrier = true) AS
 SELECT
   e.id,
@@ -478,7 +512,7 @@ FROM order_events e
 JOIN orders o ON o.id = e.order_id
 CROSS JOIN LATERAL (SELECT app_masks_owner(o.user_id) AS masked) m
 CROSS JOIN LATERAL (
-  SELECT CASE WHEN m.masked AND jsonb_typeof(e.data) = 'object' THEN e.data - 'note' ELSE e.data END AS base
+  SELECT CASE WHEN m.masked AND jsonb_typeof(e.data) = 'object' THEN e.data - 'note' - 'codeReleased' ELSE e.data END AS base
 ) d
 WHERE app_is_operations() OR o.user_id = app_user_id();
 

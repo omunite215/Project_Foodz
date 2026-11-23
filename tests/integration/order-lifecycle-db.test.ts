@@ -189,7 +189,10 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
   it('lets the kitchen move one step at a time and refuse a New order, nothing more', async () => {
     const id = await order();
     await runAs(kitchen(), (ctx) =>
-      db(ctx).order.update({ where: { id }, data: { status: 'ACCEPTED', acceptedAt: new Date() } }),
+      db(ctx).order.update({
+        where: { id },
+        data: { version: { increment: 1 }, status: 'ACCEPTED', acceptedAt: new Date() },
+      }),
     );
     expect(await read(id)).toMatchObject({
       status: 'ACCEPTED',
@@ -199,16 +202,24 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
 
     // Skipping a step, money, cancelling after Accept, or a cancellation recorded as support's.
     await expect(
-      runAs(kitchen(), (ctx) => db(ctx).order.update({ where: { id }, data: { status: 'READY' } })),
+      runAs(kitchen(), (ctx) =>
+        db(ctx).order.update({
+          where: { id },
+          data: { version: { increment: 1 }, status: 'READY' },
+        }),
+      ),
     ).rejects.toThrow(/permission denied/);
     await expect(
-      runAs(kitchen(), (ctx) => db(ctx).order.update({ where: { id }, data: { totalCents: 1 } })),
+      runAs(kitchen(), (ctx) =>
+        db(ctx).order.update({ where: { id }, data: { totalCents: 1, version: { increment: 1 } } }),
+      ),
     ).rejects.toThrow(/permission denied/);
     await expect(
       runAs(kitchen(), (ctx) =>
         db(ctx).order.update({
           where: { id },
           data: {
+            version: { increment: 1 },
             status: 'CANCELLED',
             cancelReason: 'kitchen-refused',
             cancelCode: 'too-busy',
@@ -224,6 +235,7 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
         db(ctx).order.update({
           where: { id: fresh },
           data: {
+            version: { increment: 1 },
             status: 'CANCELLED',
             cancelReason: 'staff',
             cancelCode: 'too-busy',
@@ -236,6 +248,7 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
       db(ctx).order.update({
         where: { id: fresh },
         data: {
+          version: { increment: 1 },
           status: 'CANCELLED',
           cancelReason: 'kitchen-refused',
           cancelCode: 'too-busy',
@@ -250,11 +263,46 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
     expect((await read(id)).totalCents).toBe(3194);
   });
 
+  it('lets staff enter or clear only the step time of their move, moving the version on (S16)', async () => {
+    const id = await order();
+    const write = (data: Prisma.OrderUpdateInput) =>
+      runAs(kitchen(), (ctx) => db(ctx).order.update({ where: { id }, data }));
+    const step = { increment: 1 };
+    await expect(write({ status: 'ACCEPTED', acceptedAt: new Date() })).rejects.toThrow(
+      /move the order's version on/,
+    );
+    await expect(
+      write({ status: 'ACCEPTED', acceptedAt: new Date(), readyAt: new Date(), version: step }),
+    ).rejects.toThrow(/does not change ready_at/);
+    await expect(write({ status: 'ACCEPTED', version: step })).rejects.toThrow(
+      /must enter accepted_at/,
+    );
+    await write({ status: 'ACCEPTED', acceptedAt: new Date(), version: step });
+    await expect(write({ status: 'PLACED', version: step })).rejects.toThrow(
+      /must clear accepted_at/,
+    );
+    await write({ status: 'PLACED', acceptedAt: null, version: step });
+    await expect(
+      write({
+        status: 'CANCELLED',
+        cancelReason: 'kitchen-refused',
+        cancelCode: 'too-busy',
+        cancelledAt: new Date(),
+        preparingAt: new Date(),
+        version: step,
+      }),
+    ).rejects.toThrow(/does not change preparing_at/);
+    expect(await read(id)).toMatchObject({ status: 'PLACED', version: 2 });
+  });
+
   it('lets support cancel New to Ready with a staff-cancel refund, never move or decide other refunds', async () => {
     const id = await order({ status: 'ACCEPTED' });
     await expect(
       runAs(support(), (ctx) =>
-        db(ctx).order.update({ where: { id }, data: { status: 'PREPARING' } }),
+        db(ctx).order.update({
+          where: { id },
+          data: { version: { increment: 1 }, status: 'PREPARING' },
+        }),
       ),
     ).rejects.toThrow(/permission denied/);
     await expect(
@@ -262,6 +310,7 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
         db(ctx).order.update({
           where: { id },
           data: {
+            version: { increment: 1 },
             status: 'CANCELLED',
             cancelReason: 'staff',
             cancelCode: 'customer-asked',
@@ -275,6 +324,7 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
       db(ctx).order.update({
         where: { id },
         data: {
+          version: { increment: 1 },
           status: 'CANCELLED',
           cancelReason: 'staff',
           cancelCode: 'customer-asked',
@@ -291,7 +341,12 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
     await runAs(admin(), (ctx) =>
       db(ctx).order.update({
         where: { id: cash },
-        data: { status: 'DELIVERED', deliveredAt: new Date(), paymentStatus: 'PAID' },
+        data: {
+          version: { increment: 1 },
+          status: 'DELIVERED',
+          deliveredAt: new Date(),
+          paymentStatus: 'PAID',
+        },
       }),
     );
     expect(await read(cash)).toMatchObject({ status: 'DELIVERED', paymentStatus: 'PAID' });
@@ -305,7 +360,12 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
       runAs(admin(), (ctx) =>
         db(ctx).order.update({
           where: { id: card },
-          data: { status: 'DELIVERED', deliveredAt: new Date(), paymentStatus: 'PAID' },
+          data: {
+            version: { increment: 1 },
+            status: 'DELIVERED',
+            deliveredAt: new Date(),
+            paymentStatus: 'PAID',
+          },
         }),
       ),
     ).rejects.toThrow(/permission denied/);
@@ -314,7 +374,7 @@ describe('what each staff role may change on an order (orders_guard_staff_write)
       runAs(kitchen(), (ctx) =>
         db(ctx).order.update({
           where: { id: card },
-          data: { status: 'DELIVERED', deliveredAt: new Date() },
+          data: { version: { increment: 1 }, status: 'DELIVERED', deliveredAt: new Date() },
         }),
       ),
     ).rejects.toThrow(/permission denied/);
@@ -494,6 +554,7 @@ async function timelineOrder(userId: string) {
           actor: 'staff',
           by: { name: 'Morgan Diaz', role: 'support' },
           note: 'Called back to confirm',
+          codeReleased: personalCode,
         },
       },
     ],
@@ -549,7 +610,10 @@ describe('what staff read through the directory views (F4 security S9 a, A14.2)'
       demoAdmin(),
       (ctx) =>
         db(ctx).$queryRaw<
-          { type: string; data: { by?: { name: string | null }; note?: string } }[]
+          {
+            type: string;
+            data: { by?: { name: string | null }; note?: string; codeReleased?: string };
+          }[]
         >`
         SELECT type, data FROM order_event_directory WHERE order_id = ${id}::uuid ORDER BY type`,
     );
@@ -558,6 +622,8 @@ describe('what staff read through the directory views (F4 security S9 a, A14.2)'
     expect(byType.accepted?.by?.name).toBeNull();
     expect(byType.preparing?.by?.name).toBe('Alex Kim');
     expect(byType.cancelled?.note).toBeUndefined();
+    // Nor which of her codes it gave back (S17).
+    expect(byType.cancelled).not.toHaveProperty('codeReleased');
   });
 
   it('shows sample customers in full to the demo admin, and everyone in full to real staff', async () => {
