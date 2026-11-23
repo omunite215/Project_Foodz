@@ -145,13 +145,13 @@ export function AdminSidebar() {
                       <Link
                         href={item.href}
                         aria-current={current ? 'page' : undefined}
+                        // One name, "Partners, 2 applications to review": a hidden part in its own
+                        // element would be read with a pause before the comma.
+                        aria-label={count > 0 ? `${item.label}${badgeSrText(count)}` : undefined}
                         onClick={closeDrawer}
                       >
                         <Icon aria-hidden />
-                        <span className="group-data-[collapsible=icon]:sr-only">
-                          {item.label}
-                          {count > 0 ? <span className="sr-only">{badgeSrText(count)}</span> : null}
-                        </span>
+                        <span className="group-data-[collapsible=icon]:sr-only">{item.label}</span>
                         <CountBadge count={count} />
                       </Link>
                     </SidebarMenuButton>

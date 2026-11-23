@@ -174,6 +174,8 @@ export function PartnerImages({ review, timeZone }: { review: PartnerReview; tim
   const photo = useImage(review.partnerId, 'photo', review.images.photo);
   const idFront = useImage(review.partnerId, 'idFront', review.images.idFront);
   const [viewer, setViewer] = useState<Kind | null>(null);
+  // Escape and Close return focus to the image that opened the viewer (design 9).
+  const openers = useRef<Record<Kind, HTMLButtonElement | null>>({ photo: null, idFront: null });
   const type = review.document?.type ?? 'DRIVER_LICENSE';
   const last4 = review.document?.last4 ?? null;
   const changed = new Set(review.changedParts);
@@ -202,6 +204,9 @@ export function PartnerImages({ review, timeZone }: { review: PartnerReview; tim
             <button
               type="button"
               aria-label={`Open ${photoAlt(review.name).replace(/^P/, 'p')}`}
+              ref={(element) => {
+                openers.current.photo = element;
+              }}
               onClick={() => setViewer('photo')}
               className="block size-40 overflow-hidden rounded-full bg-neutral-7 ring-1 ring-neutral-6 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
             >
@@ -236,6 +241,9 @@ export function PartnerImages({ review, timeZone }: { review: PartnerReview; tim
             <button
               type="button"
               aria-label={`Open ${idAlt(review.name, type).replace(/^F/, 'f')}`}
+              ref={(element) => {
+                openers.current.idFront = element;
+              }}
               onClick={() => setViewer('idFront')}
               className="relative block aspect-[1.586] w-full overflow-hidden rounded-xl border border-neutral-6 bg-neutral-7 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
             >
@@ -281,7 +289,11 @@ export function PartnerImages({ review, timeZone }: { review: PartnerReview; tim
           if (fresh && viewing) viewing.setLocal({ state: 'ready', link: fresh });
           return fresh;
         }}
-        onClose={() => setViewer(null)}
+        onClose={() => {
+          const opener = viewer ? openers.current[viewer] : null;
+          setViewer(null);
+          requestAnimationFrame(() => opener?.focus());
+        }}
       />
     </>
   );

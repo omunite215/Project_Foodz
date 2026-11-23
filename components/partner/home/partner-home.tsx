@@ -30,6 +30,7 @@ import {
   continueExplainer,
   dismissExplainer,
   goOffline,
+  locationBlockedByPolicy,
   type Notice,
   onAvailabilityEvent,
   onStatusEvent,
@@ -83,6 +84,26 @@ const IdleMap = dynamic(() => import('./idle-map'), {
 
 type Home = Extract<PartnerState, { screen: 'home' }>;
 
+const POLICY_RELOAD_KEY = 'foodz.partner-policy-reload';
+
+/** Loads the page once as a partner document when its policy blocks location (never twice). */
+function reloadForLocation(): boolean {
+  let tried = false;
+  try {
+    tried = window.sessionStorage.getItem(POLICY_RELOAD_KEY) === window.location.pathname;
+    if (!locationBlockedByPolicy()) {
+      window.sessionStorage.removeItem(POLICY_RELOAD_KEY);
+      return false;
+    }
+    if (tried) return false;
+    window.sessionStorage.setItem(POLICY_RELOAD_KEY, window.location.pathname);
+  } catch {
+    if (!locationBlockedByPolicy()) return false;
+  }
+  window.location.reload();
+  return true;
+}
+
 /** Shared by Home and Profile: the engine, the partner's channel and the status bar colour. */
 export function usePartnerSession(state: Home, asOf: string) {
   const router = useRouter();
@@ -92,6 +113,7 @@ export function usePartnerSession(state: Home, asOf: string) {
   const lastOfflineAt = state.lastOffline?.at ?? null;
 
   useEffect(() => {
+    if (reloadForLocation()) return;
     void adoptServerState({
       partnerId: state.partner.id,
       isDemo: state.partner.isDemo,

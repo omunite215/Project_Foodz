@@ -867,5 +867,18 @@ export function setSharingStateForPreview(patch: Partial<SharingState>) {
   set(patch);
 }
 
+/**
+ * Location is offered only to `/partner` and checkout documents (Permissions-Policy). Arriving
+ * here by a client-side navigation (after signing in, or from a storefront link) keeps the
+ * previous document and its policy, which blocks location. Chromium reports that; the app then
+ * loads itself once as a partner document. Browsers that don't report it don't apply it.
+ */
+export function locationBlockedByPolicy(): boolean {
+  const policy: unknown = Reflect.get(document, 'featurePolicy');
+  if (typeof policy !== 'object' || policy === null) return false;
+  const allows: unknown = Reflect.get(policy, 'allowsFeature');
+  return typeof allows === 'function' && allows.call(policy, 'geolocation') === false;
+}
+
 /** Whether anything still reads the position (stories and tests). */
 export const isWatching = () => watchId !== null;
