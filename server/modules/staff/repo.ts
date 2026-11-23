@@ -31,22 +31,32 @@ export function findTwoFactorLock(ctx: DbContext, userId: string) {
   });
 }
 
-/** Counts one wrong code; locks the account once `max` wrong codes in a row are reached. */
-export async function countTwoFactorFailure(
-  ctx: DbContext,
-  id: string,
-  max: number,
-  lockUntil: Date,
-): Promise<{ failures: number; lockedUntil: Date | null }> {
-  const rows = await db(ctx).$queryRaw<{ failures: number }[]>`
+/**
+ * Takes one try at a code before it is checked, atomically: the count of tries in a row goes up
+ * by one (from one again once an old lock has passed). Null while the account is locked. Parallel
+ * guesses each get their own number, so no more than the limit are ever checked.
+ */
+export async function takeTwoFactorTry(ctx: DbContext, id: string, now: Date) {
+  const rows = await db(ctx).$queryRaw<{ tries: number }[]>`
     UPDATE two_factors
-    SET failed_verification_count = coalesce(failed_verification_count, 0) + 1
-    WHERE id = ${id}::uuid
-    RETURNING failed_verification_count AS failures`;
-  const failures = rows[0]?.failures ?? 0;
-  if (failures < max) return { failures, lockedUntil: null };
-  await db(ctx).twoFactor.updateMany({ where: { id }, data: { lockedUntil: lockUntil } });
-  return { failures, lockedUntil: lockUntil };
+    SET failed_verification_count = CASE
+          WHEN locked_until IS NOT NULL AND locked_until <= ${now} THEN 1
+          ELSE coalesce(failed_verification_count, 0) + 1
+        END,
+        locked_until = CASE WHEN locked_until <= ${now} THEN NULL ELSE locked_until END
+    WHERE id = ${id}::uuid AND (locked_until IS NULL OR locked_until <= ${now})
+    RETURNING failed_verification_count AS tries`;
+  return rows[0]?.tries ?? null;
+}
+
+/** Locks two-factor until `until`, unless it is already locked; returns the lock in force. */
+export async function lockTwoFactor(ctx: DbContext, id: string, until: Date, now: Date) {
+  await db(ctx).twoFactor.updateMany({
+    where: { id, OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }] },
+    data: { lockedUntil: until },
+  });
+  const lock = await db(ctx).twoFactor.findUnique({ where: { id }, select: { lockedUntil: true } });
+  return lock?.lockedUntil ?? until;
 }
 
 export async function resetTwoFactorFailures(ctx: DbContext, id: string) {

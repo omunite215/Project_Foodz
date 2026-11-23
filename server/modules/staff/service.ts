@@ -11,11 +11,12 @@ import { getStoreStatus } from '@/server/modules/menu/service';
 import { clockAt } from '@/server/modules/orders/text';
 import { takeAttempt } from '@/server/security/rate-limit';
 import {
-  countTwoFactorFailure,
   findSessionStepUp,
   findTwoFactorLock,
+  lockTwoFactor,
   recordSessionStepUp,
   resetTwoFactorFailures,
+  takeTwoFactorTry,
 } from './repo';
 import {
   STEP_UP_ERRORS,
@@ -188,32 +189,49 @@ export async function passStepUp(actor: UserActor, code: unknown, now = new Date
       }),
     );
 
-  const lock = await runAs(actor, (ctx) => findTwoFactorLock(ctx, actor.userId));
-  if (lock?.lockedUntil && lock.lockedUntil.getTime() > now.getTime()) {
+  const invalid = () => {
+    const message = method === 'totp' ? STEP_UP_ERRORS.totp : STEP_UP_ERRORS.backup;
+    return new AppError('STEP_UP_INVALID', message, 422, { fieldErrors: { stepUp: [message] } });
+  };
+  const locked = async (until: Date) => {
     await record('locked');
-    throw await lockedError(lock.lockedUntil, now);
+    return lockedError(until, now);
+  };
+  const lock = await runAs(actor, (ctx) => findTwoFactorLock(ctx, actor.userId));
+  if (!lock) {
+    await record('wrong');
+    throw invalid();
   }
-  if (lock?.lockedUntil) await runAs(actor, (ctx) => resetTwoFactorFailures(ctx, lock.id));
+  const lockUntil = new Date(now.getTime() + LOCK_MS);
 
-  const good = lock ? await checkStepUpCode(method, value) : false;
+  // The try is counted before the code is checked, so parallel guesses can't pass the limit:
+  // past it, nothing more is checked until the lock ends.
+  const tries = await runAs(actor, (ctx) => takeTwoFactorTry(ctx, lock.id, now));
+  if (tries === null) {
+    const current = await runAs(actor, (ctx) => findTwoFactorLock(ctx, actor.userId));
+    throw await locked(current?.lockedUntil ?? lockUntil);
+  }
+  if (tries > LOCK_AFTER) {
+    throw await locked(await runAs(actor, (ctx) => lockTwoFactor(ctx, lock.id, lockUntil, now)));
+  }
+
+  const good = await checkStepUpCode(method, value);
   if (!good) {
-    const counted = lock
-      ? await runAs(actor, (ctx) =>
-          countTwoFactorFailure(ctx, lock.id, LOCK_AFTER, new Date(now.getTime() + LOCK_MS)),
-        )
-      : { failures: 0, lockedUntil: null };
-    if (counted.lockedUntil) {
-      await record('locked');
+    if (tries >= LOCK_AFTER) {
       logger.warn({ userId: actor.userId }, 'step-up locked after wrong codes');
-      throw await lockedError(counted.lockedUntil, now);
+      throw await locked(await runAs(actor, (ctx) => lockTwoFactor(ctx, lock.id, lockUntil, now)));
+    }
+    // Another guess may have locked it meanwhile: say so rather than "try again".
+    const current = await runAs(actor, (ctx) => findTwoFactorLock(ctx, actor.userId));
+    if (current?.lockedUntil && current.lockedUntil.getTime() > now.getTime()) {
+      throw await locked(current.lockedUntil);
     }
     await record('wrong');
-    const message = method === 'totp' ? STEP_UP_ERRORS.totp : STEP_UP_ERRORS.backup;
-    throw new AppError('STEP_UP_INVALID', message, 422, { fieldErrors: { stepUp: [message] } });
+    throw invalid();
   }
 
   await runAs(actor, async (ctx) => {
-    await resetTwoFactorFailures(ctx, lock!.id);
+    await resetTwoFactorFailures(ctx, lock.id);
     await recordSessionStepUp(ctx, session.session.id, actor.userId, now);
     await audit(ctx, {
       action: 'staff.step-up',

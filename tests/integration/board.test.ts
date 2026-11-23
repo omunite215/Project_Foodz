@@ -874,6 +874,54 @@ describe('staff cancellations and their money (A7, T7, T8)', () => {
     expect((await row(other)).status).toBe('ACCEPTED');
   });
 
+  it('checks no more than 5 codes when wrong guesses arrive all at once (S19)', async () => {
+    const sam = await staffMember(migrator, 'support', { name: 'Sam Support' });
+    await signedInAgo(migrator, sam.userId, 11);
+    const orderId = await paidCardOrder(maya);
+    await move(alex, orderId, 'ACCEPTED');
+    const version = (await row(orderId)).version;
+    const guesses = await as(sam, () =>
+      Promise.all(
+        Array.from({ length: 8 }, () =>
+          board.staffCancelOrderAction({
+            orderId,
+            expectedVersion: version,
+            reason: 'too-busy',
+            stepUp: { method: 'totp', code: '000000' },
+          }),
+        ),
+      ),
+    );
+    const codes = guesses.map((result) => result?.serverError?.code);
+    expect(codes.every((code) => code === 'STEP_UP_INVALID' || code === 'STEP_UP_LOCKED')).toBe(
+      true,
+    );
+    // Five tries at most are checked; the fifth wrong one locks, and the rest never reach the check.
+    expect(codes.filter((code) => code === 'STEP_UP_INVALID').length).toBeLessThanOrEqual(4);
+    expect(codes.filter((code) => code === 'STEP_UP_LOCKED').length).toBeGreaterThanOrEqual(4);
+    const outcomes = (
+      await migrator.auditLog.findMany({
+        where: { action: 'staff.step-up', actorId: sam.userId },
+        select: { data: true },
+      })
+    ).map((entry) => (entry.data as { outcome: string }).outcome);
+    expect(outcomes).toHaveLength(8);
+    expect(outcomes.filter((outcome) => outcome === 'wrong').length).toBeLessThanOrEqual(4);
+    expect(
+      (await migrator.twoFactor.findFirstOrThrow({ where: { userId: sam.userId } })).lockedUntil,
+    ).not.toBeNull();
+    const good = await as(sam, async () =>
+      board.staffCancelOrderAction({
+        orderId,
+        expectedVersion: version,
+        reason: 'too-busy',
+        stepUp: { method: 'totp', code: await sam.code() },
+      }),
+    );
+    expect(good?.serverError?.code).toBe('STEP_UP_LOCKED');
+    expect((await row(orderId)).status).toBe('ACCEPTED');
+  });
+
   it('never asks for a code or refunds for a sample card, cash or New order', async () => {
     const sample = await cashOrder(priya);
     await migrator.order.update({
