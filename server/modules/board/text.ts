@@ -1,10 +1,16 @@
+import { formatClock } from '@/lib/format';
 import type { OrderStatus } from '@/server/db/enums';
+import type { StoreMoment } from '@/server/modules/menu/schema';
+import { clockAt, openingPhrase } from '@/server/modules/orders/text';
 import type {
   BoardStaffRole,
   CancelCode,
+  ChangeHow,
   ForwardMove,
   HandoverReason,
   MoveBackReason,
+  OrderChangedDetails,
+  TimelineActor,
 } from './schema';
 
 /*
@@ -70,3 +76,106 @@ export const alreadyAcceptedMessage = (number: string) =>
 /** A8.2 */
 export const undoRefusedMessage = (name: string | null) =>
   `Only ${name ?? 'the person who moved it'} can undo this, within 10 seconds. Ask an admin to move it back.`;
+
+// ------------------------------------------------------------------ server sentences
+
+/** "Open · closes 11 pm", "Closed · opens 11 am tomorrow" (A2.7). */
+export function storeLabel(store: {
+  isOpen: boolean;
+  closesAt: StoreMoment | null;
+  opensAt: StoreMoment | null;
+}): string {
+  if (store.isOpen) {
+    return store.closesAt ? `Open · closes ${formatClock(store.closesAt.time)}` : 'Open';
+  }
+  return store.opensAt ? `Closed · opens ${openingPhrase(store.opensAt)}` : 'Closed';
+}
+
+/** "Alex Kim", "Morgan Diaz (Support)", "the customer". */
+export function actorWords(by: TimelineActor | null, withRole = false): string {
+  switch (by?.kind) {
+    case 'staff': {
+      const name = by.name ?? 'a staff member';
+      return withRole ? `${name} (${ROLE_LABELS[by.role]})` : name;
+    }
+    case 'customer':
+      return 'the customer';
+    case 'stripe':
+      return 'Stripe';
+    default:
+      return 'Foodz';
+  }
+}
+
+/** Words for a status after "Already …" (A5.1). */
+const ALREADY: Partial<Record<OrderStatus, string>> = {
+  ACCEPTED: 'accepted',
+  PREPARING: 'cooking',
+  READY: 'ready',
+  PICKED_UP: 'out for delivery',
+  DELIVERED: 'delivered',
+};
+
+const HOW_WORDS: Record<ChangeHow, string> = {
+  moved: 'moved by',
+  'moved-back': 'moved back by',
+  undone: 'undone by',
+  'cancelled-by-customer': 'cancelled by',
+  'cancelled-by-staff': 'cancelled by',
+  refused: 'cancelled by',
+  other: 'changed by',
+};
+
+/**
+ * ORDER_CHANGED (A5.1, A5.2, A5.4): "Already cooking · moved by Alex Kim at 7:41 pm",
+ * "Order 1044 was cancelled by the customer at 7:31 pm.", "Order 1042 changed a moment ago.
+ * It's now Accepted (moved back by Foodz Admin). Check it and try again."
+ */
+export function orderChangedMessage(
+  details: OrderChangedDetails,
+  timeZone: string,
+  wanted?: OrderStatus,
+): string {
+  const { number, current, lastChange } = details;
+  const when = lastChange ? ` at ${clockAt(lastChange.at, timeZone)}` : '';
+  if (current.status === 'CANCELLED') {
+    const by = lastChange ? ` by ${actorWords(lastChange.by, lastChange.by.kind === 'staff')}` : '';
+    return `Order ${number} was cancelled${by}${when}.`;
+  }
+  const already = ALREADY[current.status];
+  if (wanted && wanted === current.status && already && lastChange?.how === 'moved') {
+    return `Already ${already} · moved by ${actorWords(lastChange.by)}${when}`;
+  }
+  const status = STAFF_STATUS_WORDS[current.status];
+  const how = lastChange ? ` (${HOW_WORDS[lastChange.how]} ${actorWords(lastChange.by)})` : '';
+  return `Order ${number} changed a moment ago. It's now ${status}${how}. Check it and try again.`;
+}
+
+/** INVALID_STATE: the action doesn't fit the order's status for this role (A6.5, A7.1, A9). */
+export function invalidStateMessage(
+  action: 'move' | 'refuse' | 'cancel' | 'moveBack' | 'pickUp' | 'deliver',
+  number: string,
+  status: OrderStatus,
+): string {
+  if (status === 'PENDING_PAYMENT') {
+    return `Order ${number} is waiting for payment. It expires by itself if it isn't paid.`;
+  }
+  if (status === 'CANCELLED' || status === 'DELIVERED' || status === 'FAILED') {
+    return `Order ${number} is ${STAFF_STATUS_WORDS[status].toLowerCase()}, so it can't be changed.`;
+  }
+  switch (action) {
+    case 'refuse':
+      return alreadyAcceptedMessage(number);
+    case 'cancel':
+      return `Order ${number} is out for delivery, so it can't be cancelled here.`;
+    case 'pickUp':
+      return `Order ${number} isn't ready yet, so it can't be marked picked up.`;
+    case 'deliver':
+      return `Order ${number} isn't out for delivery, so it can't be marked delivered.`;
+    case 'moveBack':
+      return `Order ${number} can't be moved back from ${STAFF_STATUS_WORDS[status]}.`;
+    case 'move':
+    default:
+      return `Order ${number} is ${STAFF_STATUS_WORDS[status]}, so it can't move that way.`;
+  }
+}
