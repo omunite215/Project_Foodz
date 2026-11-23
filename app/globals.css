@@ -2,7 +2,19 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-@custom-variant dark (&:is(.dark *));
+/* Dark mode exists only inside the partner app (F6 design 0.4): `.dark` comes from the server when
+   the partner chose Dark; `[data-theme=system]` follows the phone's setting. The storefront and
+   the staff tools never carry either, so `dark:` never applies there. */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where([data-theme='system'], [data-theme='system'] *) {
+      @slot;
+    }
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Palette (from the Foodz design file)                                */
@@ -38,6 +50,10 @@
   /* Amber dark enough for meaningful marks and text on white (4.69:1); tag-6 is 2.35:1. For
      the board's amber border and amber icons (F5 design 0). Never a fill. */
   --color-warning-strong: #9a6b00;
+  /* Green dark enough for 7:1 with white text: the partner app's main button and online header
+     in daylight (F6 P13.3). White on it 7.52; on the hover 9.90. */
+  --color-brand-deep: #02630a;
+  --color-brand-deep-hover: #014f05;
   --color-tag-7: #26aca0;
   --color-tag-7-bg: #edfcfb;
   --color-tag-8: #3304b9;
@@ -165,6 +181,22 @@ html:has([data-menu-toolbar]) {
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-strong: var(--strong);
+  --color-success-soft: var(--success-soft);
+  --color-success-mark: var(--success-mark);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-mark: var(--warning-mark);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-mark: var(--danger-mark);
+  --color-status-online: var(--status-online);
+  --color-status-online-foreground: var(--status-online-foreground);
+  --color-status-offline: var(--status-offline);
+  --color-status-offline-foreground: var(--status-offline-foreground);
+  --color-stop: var(--stop);
+  --color-stop-foreground: var(--stop-foreground);
+  --color-map-you: var(--map-you);
+  --color-map-you-ring: var(--map-you-ring);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -233,29 +265,82 @@ html:has([data-menu-toolbar]) {
   --sidebar-accent-foreground: #23262f;
   --sidebar-border: #e6e8ec;
   --sidebar-ring: #03850a;
+
+  /* Partner semantic tokens (F6 design 0.2), light values. Unused outside the partner app. */
+  --strong: #141416;
+  --destructive-foreground: #ffffff;
+  --success-soft: #d3f9d5;
+  --success-mark: #03850a;
+  --warning-soft: #fcf6d8;
+  --warning-mark: #9a6b00;
+  --danger-soft: #fce5e9;
+  --danger-mark: #d12b4f;
+  --status-online: #02630a;
+  --status-online-foreground: #ffffff;
+  --status-offline: #23262f;
+  --status-offline-foreground: #ffffff;
+  --stop: #23262f;
+  --stop-foreground: #ffffff;
+  --map-you: #106aab;
+  --map-you-ring: #ffffff;
+  --doodle-ink: #141416;
+  --doodle-paper: #ffffff;
+  --doodle-accent: #04b90b;
 }
 
-/* Dark mode for the partner app (night riding) and the admin dashboard. */
+/* Inside the partner app the main green is deeper, for 7:1 in daylight (D5). Before `.dark`, so
+   dark mode's own primary wins. */
+.partner {
+  --primary: #02630a;
+  --primary-hover: #014f05;
+  --ring: #02630a;
+  color-scheme: light;
+}
+
+/* Dark mode, for the partner app only (night riding, F6 design 0.2). Body text is one step below
+   white to cut glare; muted boxes are lighter than cards so they stay visible on them. The same
+   values apply to "System" when the phone is in dark mode. */
 .dark {
   --background: #141416;
-  --foreground: #fcfcfd;
+  --foreground: #e6e8ec;
   --card: #23262f;
-  --card-foreground: #fcfcfd;
+  --card-foreground: #e6e8ec;
   --popover: #23262f;
-  --popover-foreground: #fcfcfd;
+  --popover-foreground: #e6e8ec;
   --primary: #04b90b;
   --primary-foreground: #141416;
   --primary-hover: #05d50d;
   --secondary: #353945;
   --secondary-foreground: #fcfcfd;
-  --muted: #23262f;
+  --muted: #353945;
   --muted-foreground: #b1b5c3;
   --accent: #353945;
   --accent-foreground: #fcfcfd;
-  --destructive: #f25178;
+  --destructive: #ff6b8b;
+  --destructive-hover: #ff8fa6;
+  --destructive-foreground: #141416;
   --border: #353945;
   --input: #777e90;
   --ring: #04b90b;
+
+  --strong: #fcfcfd;
+  --success-soft: #14361a;
+  --success-mark: #04b90b;
+  --warning-soft: #3a2f0b;
+  --warning-mark: #da9f0a;
+  --danger-soft: #401a24;
+  --danger-mark: #ff6b8b;
+  --status-online: #03850a;
+  --status-online-foreground: #ffffff;
+  --status-offline: #23262f;
+  --status-offline-foreground: #e6e8ec;
+  --stop: #353945;
+  --stop-foreground: #fcfcfd;
+  --map-you: #4c9be0;
+  --map-you-ring: #e6e8ec;
+  --doodle-ink: #e6e8ec;
+  --doodle-paper: #23262f;
+  --doodle-accent: #04b90b;
 
   --sidebar: #141416;
   --sidebar-foreground: #fcfcfd;
@@ -265,6 +350,62 @@ html:has([data-menu-toolbar]) {
   --sidebar-accent-foreground: #fcfcfd;
   --sidebar-border: #353945;
   --sidebar-ring: #04b90b;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme='system'] {
+    --background: #141416;
+    --foreground: #e6e8ec;
+    --card: #23262f;
+    --card-foreground: #e6e8ec;
+    --popover: #23262f;
+    --popover-foreground: #e6e8ec;
+    --primary: #04b90b;
+    --primary-foreground: #141416;
+    --primary-hover: #05d50d;
+    --secondary: #353945;
+    --secondary-foreground: #fcfcfd;
+    --muted: #353945;
+    --muted-foreground: #b1b5c3;
+    --accent: #353945;
+    --accent-foreground: #fcfcfd;
+    --destructive: #ff6b8b;
+    --destructive-hover: #ff8fa6;
+    --destructive-foreground: #141416;
+    --border: #353945;
+    --input: #777e90;
+    --ring: #04b90b;
+
+    --strong: #fcfcfd;
+    --success-soft: #14361a;
+    --success-mark: #04b90b;
+    --warning-soft: #3a2f0b;
+    --warning-mark: #da9f0a;
+    --danger-soft: #401a24;
+    --danger-mark: #ff6b8b;
+    --status-online: #03850a;
+    --status-online-foreground: #ffffff;
+    --status-offline: #23262f;
+    --status-offline-foreground: #e6e8ec;
+    --stop: #353945;
+    --stop-foreground: #fcfcfd;
+    --map-you: #4c9be0;
+    --map-you-ring: #e6e8ec;
+    --doodle-ink: #e6e8ec;
+    --doodle-paper: #23262f;
+    --doodle-accent: #04b90b;
+
+    --sidebar: #141416;
+    --sidebar-foreground: #fcfcfd;
+    --sidebar-primary: #04b90b;
+    --sidebar-primary-foreground: #141416;
+    --sidebar-accent: #23262f;
+    --sidebar-accent-foreground: #fcfcfd;
+    --sidebar-border: #353945;
+    --sidebar-ring: #04b90b;
+    color-scheme: dark;
+  }
 }
 
 @layer base {

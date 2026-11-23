@@ -7,7 +7,16 @@ import { cn } from '@/lib/utils';
  * the animation can't load. Always decorative: the heading carries the meaning.
  */
 
-export function SuccessCheck({ className }: { className?: string }) {
+export function SuccessCheck({
+  className,
+  tone,
+}: {
+  className?: string;
+  /** The partner app's light-and-dark pair (F6 design, FE item 15). */
+  tone?: 'partner';
+}) {
+  const soft = tone === 'partner' ? 'fill-success-soft' : 'fill-brand-soft';
+  const mark = tone === 'partner' ? 'stroke-success-mark' : 'stroke-brand-strong';
   return (
     <svg
       viewBox="0 0 96 96"
@@ -16,15 +25,15 @@ export function SuccessCheck({ className }: { className?: string }) {
       className={cn('size-24', className)}
       data-success-check
     >
-      <circle cx="48" cy="48" r="40" className="fill-brand-soft" />
-      <circle cx="48" cy="48" r="40" fill="none" strokeWidth="6" className="stroke-brand-strong" />
+      <circle cx="48" cy="48" r="40" className={soft} />
+      <circle cx="48" cy="48" r="40" fill="none" strokeWidth="6" className={mark} />
       <path
         d="M30 49 L43 62 L67 37"
         fill="none"
         strokeWidth="7"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="stroke-brand-strong"
+        className={mark}
       />
     </svg>
   );

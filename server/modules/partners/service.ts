@@ -341,6 +341,7 @@ export async function getMyPartnerState(
   return {
     screen: 'home',
     partner: {
+      id: row.id,
       name: account.name,
       firstName,
       vehicleWords: vehicleLine(row.vehicleType, row.vehiclePlate),

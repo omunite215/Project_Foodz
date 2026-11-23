@@ -329,6 +329,8 @@ export type PartnerState =
   | {
       screen: 'home';
       partner: {
+        /** The partner's own id, for its realtime channel `private-partner-{id}` (B10). */
+        id: string;
         name: string;
         firstName: string;
         vehicleWords: string;

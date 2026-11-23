@@ -43,7 +43,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<'div'>) 
     <div
       data-slot="alert-description"
       className={cn(
-        'min-w-0 flex-1 [overflow-wrap:anywhere] [&_a]:font-medium [&_a]:text-neutral-1 [&_a]:underline [&_a]:underline-offset-4',
+        'min-w-0 flex-1 [overflow-wrap:anywhere] [&_a]:font-medium [&_a]:text-inherit [&_a]:underline [&_a]:underline-offset-4',
         className,
       )}
       {...props}

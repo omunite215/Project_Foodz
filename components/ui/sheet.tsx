@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Dialog as SheetPrimitive } from 'radix-ui';
 import { cn } from '@/lib/utils';
+import { usePortalContainer } from '@/components/ui/portal-container';
 
 /*
  * A dialog that slides in from an edge: the cart and the menu filters (F3 design 2.1, 5.6).
@@ -29,8 +30,9 @@ function SheetContent({
   children,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & { overlayClassName?: string }) {
+  const container = usePortalContainer();
   return (
-    <SheetPrimitive.Portal>
+    <SheetPrimitive.Portal container={container}>
       <SheetPrimitive.Overlay
         data-slot="sheet-overlay"
         className={cn(

@@ -108,8 +108,11 @@ export function SuccessMark({
   state,
   play,
   className,
+  tone,
 }: {
   state: OrderState;
+  /** The partner app: its colours on the still check. */
+  tone?: 'partner';
   /** A fresh arrival from checkout: the animation may play once. */
   play: boolean;
   className?: string;
@@ -124,7 +127,7 @@ export function SuccessMark({
         animate ? (
           <Played onFail={() => setFailed(true)} />
         ) : (
-          <SuccessCheck />
+          <SuccessCheck tone={tone} />
         )
       ) : (
         <IconCircle state={state} />
