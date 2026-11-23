@@ -202,11 +202,19 @@ export async function listenToLiveRegion(page: Page) {
   });
 }
 
-/** Passes once the live region has said `text` since `listenToLiveRegion`. */
+/**
+ * Passes once the live region has said `text` since `listenToLiveRegion`. The announcer gathers
+ * messages that arrive close together into one, so `text` may be part of a longer announcement.
+ */
 export async function expectHeard(page: Page, text: string) {
   await expect
-    .poll(() => page.evaluate(() => (window as { foodzHeard?: string[] }).foodzHeard ?? []))
-    .toContain(text);
+    .poll(async () => {
+      const heard = await page.evaluate(
+        () => (window as { foodzHeard?: string[] }).foodzHeard ?? [],
+      );
+      return heard.some((said) => said.includes(text));
+    })
+    .toBe(true);
 }
 
 /** Collects console errors (CSP refusals included) while the test runs. */

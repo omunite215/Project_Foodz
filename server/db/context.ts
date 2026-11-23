@@ -19,6 +19,8 @@ interface RunOptions {
   /** Postgres isolation level; defaults to the database default (read committed). */
   isolationLevel?: 'Serializable' | 'RepeatableRead' | 'ReadCommitted';
   timeoutMs?: number;
+  /** How long to wait for a free connection before giving up (Prisma's default is 2 s). */
+  maxWaitMs?: number;
 }
 
 export async function runAs<T>(
@@ -35,7 +37,12 @@ export async function runAs<T>(
       bind(ctx, tx);
       return work(ctx);
     },
-    { isolationLevel: options.isolationLevel, timeout: options.timeoutMs ?? 10_000 },
+    {
+      isolationLevel: options.isolationLevel,
+      timeout: options.timeoutMs ?? 10_000,
+      // A burst of requests can hold every pooled connection for a moment; wait rather than fail.
+      maxWait: options.maxWaitMs ?? 10_000,
+    },
   );
 }
 

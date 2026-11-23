@@ -12,6 +12,9 @@ export const env = createEnv({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
     DATABASE_URL: z.url(),
+    // Connections each server process may hold. Size it so tasks × this stays under the database's
+    // max_connections (RDS sets that from the instance size).
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
     // redis:// locally, rediss:// (TLS) for ElastiCache.
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 
