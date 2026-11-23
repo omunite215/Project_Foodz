@@ -29,8 +29,10 @@ COPY prisma ./prisma
 COPY constants ./constants
 COPY scripts/storage-setup.mjs ./scripts/
 USER node
-# Apply migrations, seed (idempotent: existing rows are left alone), prepare storage buckets.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node node_modules/tsx/dist/cli.mjs prisma/seed.ts && node scripts/storage-setup.mjs"]
+# Prepare the roles when an admin URL is given (RDS), apply migrations, seed (idempotent:
+# existing rows are left alone), prepare storage buckets (skipped without S3_ENDPOINT, as on AWS
+# where the infrastructure creates the buckets).
+CMD ["sh", "-c", "node node_modules/tsx/dist/cli.mjs prisma/bootstrap.ts && node node_modules/prisma/build/index.js migrate deploy && node node_modules/tsx/dist/cli.mjs prisma/seed.ts && node scripts/storage-setup.mjs"]
 
 # ---------------------------------------------------------------- runtime
 FROM base AS runner
