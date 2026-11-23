@@ -57,6 +57,9 @@ const MENU_ICONS: Record<CardMenuItem, LucideIcon> = {
 const DESTRUCTIVE: ReadonlySet<CardMenuItem> = new Set(['refuse', 'cancel']);
 const OVERRIDES: ReadonlySet<CardMenuItem> = new Set(['moveBack', 'pickUp', 'deliver']);
 
+const slowLabel = (slow: boolean, number: string, backTo: OrderStatus) =>
+  slow ? 'Undoing…' : `Undo, ${undoSpoken(number, backTo)}`;
+
 export type MoveProgress = 'moving' | 'undoing' | null;
 export type Blocked = 'demo' | 'offline' | null;
 
@@ -115,6 +118,7 @@ function UndoRow({
           type="button"
           variant="outline"
           size="kitchen"
+          aria-label={slowLabel(slow, number, backTo)}
           aria-disabled={undoing || blocked ? true : undefined}
           aria-describedby={blocked ? captionId : undefined}
           className={cn(blocked && !undoing && BLOCKED_BUTTON_CLASS)}
@@ -133,10 +137,7 @@ function UndoRow({
               Undoing…
             </>
           ) : (
-            <>
-              Undo
-              <span className="sr-only">, {undoSpoken(number, backTo)}</span>
-            </>
+            'Undo'
           )}
         </Button>
       </div>

@@ -163,8 +163,21 @@ export interface CardsFetch {
   added: BoardCard[];
 }
 
+/**
+ * Versions the person's own changes reached, per order, before the confirmed card lands: the
+ * realtime echo of that change must not overwrite it (it would drop the Undo row).
+ */
+const confirmedVersions = new WeakMap<DbClient, Map<string, number>>();
+
 function writer(client: DbClient, queryClient: QueryClient) {
   const collection = () => client.collection(boardCardsCollection);
+  let ownVersions = confirmedVersions.get(client);
+  if (!ownVersions) {
+    ownVersions = new Map();
+    confirmedVersions.set(client, ownVersions);
+  }
+  const own = ownVersions;
+  const echoOfOwn = (event: OrderChangedEvent) => event.version <= (own.get(event.orderId) ?? -1);
   const metaNow = () => queryClient.getQueryData<BoardMeta>(BOARD_META_KEY);
 
   return {
@@ -180,6 +193,7 @@ function writer(client: DbClient, queryClient: QueryClient) {
 
     /** What an event means for the card held (A12.5). */
     verdict(event: OrderChangedEvent) {
+      if (echoOfOwn(event)) return 'ignore';
       const view = metaNow()?.view ?? 'kitchen';
       return eventVerdict(collection().get(event.orderId), event, view);
     },
@@ -187,7 +201,7 @@ function writer(client: DbClient, queryClient: QueryClient) {
     /** A status change taken from the event itself. */
     apply(event: OrderChangedEvent): BoardCard | null {
       const held = collection().get(event.orderId);
-      if (!held) return null;
+      if (!held || echoOfOwn(event)) return null;
       const next = applyEvent(held, event);
       void collection().utils.writeUpdate(next);
       return next;
@@ -239,6 +253,7 @@ function writer(client: DbClient, queryClient: QueryClient) {
 
     /** A confirmed change from the person's own action, written straight to the board. */
     put(card: BoardCard) {
+      own.set(card.id, card.version);
       void collection().utils.writeUpsert(card);
     },
 
@@ -264,8 +279,10 @@ function writer(client: DbClient, queryClient: QueryClient) {
           const confirmed = await persist();
           // Not awaited: the write applies as this transaction settles, so the card never
           // flashes back between the optimistic and the confirmed state.
-          if (confirmed) void target.utils.writeUpsert(confirmed);
-          else void target.utils.writeDelete(id);
+          if (confirmed) {
+            own.set(id, confirmed.version);
+            void target.utils.writeUpsert(confirmed);
+          } else void target.utils.writeDelete(id);
         },
       });
       transaction.mutate(() => {

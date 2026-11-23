@@ -13,7 +13,8 @@ export function useBoardFlip(container: RefObject<HTMLElement | null>) {
 
   const capture = useCallback(() => {
     const root = container.current;
-    if (!root) return;
+    // Phones show one column at a time: a card moving to another tab doesn't travel.
+    if (!root || window.matchMedia('(max-width: 47.98rem)').matches) return;
     captured.current = Flip.getState(root.querySelectorAll('[data-flip-id]'));
   }, [container]);
 

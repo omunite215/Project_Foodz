@@ -60,7 +60,7 @@ export function AdminTopBar({
   return (
     <header
       className={cn(
-        'sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-neutral-6 bg-white px-4 md:gap-3 lg:px-6',
+        'sticky top-0 z-30 flex h-14 shrink-0 items-center gap-1.5 border-b border-neutral-6 bg-white px-4 md:gap-3 lg:px-6',
         className,
       )}
     >
@@ -72,7 +72,7 @@ export function AdminTopBar({
           width={98}
           height={28}
           unoptimized
-          className="h-7 w-auto shrink-0"
+          className="h-4 w-auto shrink-0 md:h-7"
         />
       ) : null}
       {shell.frame === 'gate' || shell.frame === 'editor' ? (
@@ -84,7 +84,7 @@ export function AdminTopBar({
         </h1>
       ) : null}
       {status ? <div className="flex min-w-0 items-center gap-2">{status}</div> : null}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 md:gap-2">
         {end}
         {shell.frame === 'sidebar' ? null : (
           <StaffAccountMenu user={shell.user} kitchen={shell.frame === 'kitchen'} />

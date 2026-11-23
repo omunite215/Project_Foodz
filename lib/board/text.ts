@@ -113,9 +113,13 @@ export function tabText(column: BoardColumn, count: ColumnCount): string {
 }
 
 export const collapseLabel = (column: BoardColumn) => `Collapse ${COLUMN_WORDS[column]} column`;
+/** " column, 2 orders, 1 late": what follows the column's name on its collapsed strip. */
+export const collapsedSuffix = (count: ColumnCount) =>
+  ` column, ${ordersPhrase(count)}${latePhrase(count)}`;
+
 /** "Expand New column, 2 orders, 1 late". */
 export const expandLabel = (column: BoardColumn, count: ColumnCount) =>
-  `Expand ${COLUMN_WORDS[column]} column, ${ordersPhrase(count)}${latePhrase(count)}`;
+  `Expand ${COLUMN_WORDS[column]}${collapsedSuffix(count)}`;
 
 export const newBelowText = (count: number) =>
   `${count} new ${count === 1 ? 'order' : 'orders'} below`;

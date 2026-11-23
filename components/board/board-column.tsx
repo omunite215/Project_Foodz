@@ -20,7 +20,7 @@ import {
   type ColumnCount,
   columnSpoken,
   countChipText,
-  expandLabel,
+  collapsedSuffix,
   newBelowText,
   WAITING_FOR_PICKUP,
 } from '@/lib/board/text';
@@ -166,10 +166,10 @@ export function BoardColumn({
         <button
           type="button"
           aria-expanded="false"
-          aria-label={expandLabel(column, count)}
           onClick={onToggle}
           className="flex h-full min-h-60 w-14 flex-col items-center gap-3 rounded-2xl bg-neutral-7 py-3 text-neutral-1 hover:bg-neutral-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
         >
+          <span className="sr-only">Expand </span>
           <Icon className="size-5 text-neutral-3" aria-hidden />
           <span aria-hidden className={COUNT_CHIP}>
             {countChipText(count)}
@@ -182,12 +182,10 @@ export function BoardColumn({
               <TriangleAlert className="size-3.5 text-destructive" />
             </span>
           ) : null}
-          <span
-            aria-hidden
-            className="rotate-180 text-body-5 font-semibold whitespace-nowrap [writing-mode:vertical-rl]"
-          >
+          <span className="rotate-180 text-body-5 font-semibold whitespace-nowrap [writing-mode:vertical-rl]">
             {COLUMN_WORDS[column]}
           </span>
+          <span className="sr-only">{collapsedSuffix(count)}</span>
         </button>
       </section>
     );

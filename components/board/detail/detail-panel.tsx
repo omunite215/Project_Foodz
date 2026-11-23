@@ -25,6 +25,7 @@ import { DetailNotFound, StaffOrderDetailView, useStaffOrderDetail } from './sta
  */
 
 const SKELETON_AFTER_MS = 150;
+const OPENING_GESTURE_MS = 600;
 
 function Skeletons({ number }: { number: string }) {
   const [show, setShow] = useState(false);
@@ -84,6 +85,12 @@ export function DetailPanel({ orderId }: { orderId: string }) {
     <Sheet open={open} onOpenChange={(next) => !next && close()}>
       <SheetContent
         aria-describedby={undefined}
+        // The panel opens from a click on the board, during that same gesture: the click and the
+        // focus it left behind must not count as a click outside that closes it again.
+        onPointerDownOutside={(event) => {
+          if (Date.now() - openedAt.getTime() < OPENING_GESTURE_MS) event.preventDefault();
+        }}
+        onFocusOutside={(event) => event.preventDefault()}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           requestAnimationFrame(() => titleRef.current?.focus());

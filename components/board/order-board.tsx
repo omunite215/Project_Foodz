@@ -652,6 +652,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
           id="board"
           style={{ '--board-cols': boardCols }}
           onFocus={(event) => {
+            // Keyboard focus only: scrolling under a mouse press would move the card away
+            // from the pointer before the click lands.
+            if (!event.target.matches(':focus-visible')) return;
             const target = event.target.closest('article, section');
             target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
           }}

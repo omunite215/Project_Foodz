@@ -10,7 +10,6 @@ import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { announce } from '@/lib/announce';
 import type { BoardFilters } from '@/lib/board/model';
-import { soldOutButtonLabel } from '@/lib/board/text';
 import { cn } from '@/lib/utils';
 
 /*
@@ -79,8 +78,12 @@ export function FindOrder({
   }
 
   return (
-    <search className="relative max-md:w-full">
-      <form noValidate onSubmit={(event) => void submit(event)} className="flex items-center gap-2">
+    <search className="relative flex flex-wrap max-md:w-full">
+      <form
+        noValidate
+        onSubmit={(event) => void submit(event)}
+        className="flex items-center gap-2 max-md:w-full max-md:flex-wrap"
+      >
         <label
           htmlFor={`${id}-input`}
           className="text-body-5 font-medium whitespace-nowrap text-neutral-2"
@@ -114,7 +117,7 @@ export function FindOrder({
         {bubble ? (
           <p
             id={bubbleId}
-            className="absolute top-full left-0 z-20 mt-1 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-body-5 text-neutral-1 shadow-raised"
+            className="absolute top-full left-0 z-20 mt-1 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-body-5 text-neutral-1 shadow-raised max-md:relative max-md:top-auto max-md:w-full max-md:shadow-none"
           >
             <CircleExclamationPoint className="size-4 shrink-0 text-destructive" aria-hidden />
             {bubble}
@@ -179,16 +182,10 @@ export function BoardFiltersBar({
 /** "Sold out" with its count (KITCHEN, ADMIN, demo): opens the dish availability sheet. */
 export function SoldOutButton({ count, onOpen }: { count: number; onOpen: () => void }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="kitchen"
-      onClick={onOpen}
-      aria-label={soldOutButtonLabel(count)}
-      className="ml-auto"
-    >
+    <Button type="button" variant="outline" size="kitchen" onClick={onOpen} className="ml-auto">
       <Ban className="size-5" aria-hidden />
-      Sold out
+      {/* Named from its text, which holds the visible words: "Sold out dishes, 2". */}
+      Sold out<span className="sr-only"> dishes{count > 0 ? ',' : ''}</span>
       {count > 0 ? (
         <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-tag-4-bg px-1.5 text-caption font-semibold text-neutral-1 tabular-nums">
           {count}
