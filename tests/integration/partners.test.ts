@@ -315,6 +315,13 @@ describe('who may review (A18, A30)', () => {
   });
 });
 
+const searchList = (who: StaffMember) =>
+  as(who, () =>
+    review.partnerListAction({ tab: 'all', q: '7KT3' } as Parameters<
+      typeof review.partnerListAction
+    >[0]),
+  ) as Promise<ActionResult<{ rows: { partnerId: string }[] }>>;
+
 describe('one application, for each role (A20, A21, A29)', () => {
   let partnerId: string;
   beforeAll(async () => {
@@ -372,6 +379,13 @@ describe('one application, for each role (A20, A21, A29)', () => {
       review.approvePartnerAction({ partnerId, expectedVersion: 1, flagsChecked: true }),
     )) as ActionResult;
     expect(approve.serverError).toMatchObject({ code: 'DEMO_READ_ONLY' });
+  });
+
+  it("never matches a masked applicant's plate in the demo admin's search (security gate S1)", async () => {
+    expect((await searchList(morgan)).data!.rows.map((row) => row.partnerId)).toContain(partnerId);
+    expect((await searchList(demo)).data!.rows.map((row) => row.partnerId)).not.toContain(
+      partnerId,
+    );
   });
 
   it('answers 404 for an unknown or malformed id', async () => {
@@ -510,6 +524,20 @@ describe('rejecting and reopening (A24, A28, P7.6)', () => {
   });
 });
 
+describe('deciding on your own application (security gate S4)', () => {
+  it('is refused, even for a reviewer', async () => {
+    const reviewer = await staffMember(migrator, 'support', { name: 'Self Reviewer' });
+    const { id } = await migrator.deliveryPartner.create({
+      data: { userId: reviewer.userId, status: 'APPLIED', vehicleType: 'BICYCLE', version: 1 },
+      select: { id: true },
+    });
+    const result = (await as(reviewer, () =>
+      review.rejectPartnerAction({ partnerId: id, expectedVersion: 1 }),
+    )) as ActionResult;
+    expect(result.serverError).toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
 describe('withdrawing (P6.4, A26.4)', () => {
   it('deletes the row and both files, and tells staff it was withdrawn', async () => {
     const kim = await applicant('Kim Withdraw');
@@ -627,6 +655,17 @@ describe('going online and sharing a location (P9, P10, P16)', () => {
       routeRequest('PUT', { online: true, point: { lat: 99 } }),
     );
     expect(bad.status).toBe(422);
+    // Security gate S2: a declared length over 16 KB is refused before the body is read.
+    const huge = new Request(`${SITE}/api/v1/partner/availability`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', origin: SITE, 'content-length': '20000' },
+      body: JSON.stringify({ online: false }),
+    });
+    expect((await availabilityRoute.PUT(huge)).status).toBe(413);
+    const long = await availabilityRoute.PUT(
+      routeRequest('PUT', { online: false, padding: 'x'.repeat(20_000) }),
+    );
+    expect(long.status).toBe(413);
     const me = await meRoute.GET(new Request(`${SITE}/api/v1/partner/me`));
     expect(await me.json()).toMatchObject({ screen: 'home' });
     switchBrowser(alex.browser);

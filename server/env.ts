@@ -1,6 +1,7 @@
 import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 import { clientIpOptInRefused, clientIpWarning } from './client-ip';
+import { hashKeyDistinct } from './security/key-checks';
 
 const bool = z
   .enum(['true', 'false', '1', '0'])
@@ -89,6 +90,9 @@ export const env = createEnv({
 });
 
 // Checked when the server starts (instrumentation.ts imports this file).
+if (!hashKeyDistinct(process.env)) {
+  throw new Error('ID_NUMBER_HASH_KEY must differ from FIELD_ENCRYPTION_KEY.');
+}
 if (clientIpOptInRefused(process.env)) {
   throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused on Vercel production.');
 }

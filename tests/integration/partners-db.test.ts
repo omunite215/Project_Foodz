@@ -395,6 +395,109 @@ describe('role changes (B6, T12)', () => {
         }),
       ),
     ).rejects.toThrow(DENIED);
+    // Security gate S3: a signed-out request context is refused too.
+    await expect(
+      runAs({ kind: 'anonymous' }, (ctx) =>
+        db(ctx).user.update({
+          where: { id: people.priya },
+          data: { role: 'admin' },
+          select: { id: true },
+        }),
+      ),
+    ).rejects.toThrow(DENIED);
+  });
+});
+
+const gateUpload = async (ownerId: string, purpose: 'PARTNER_PHOTO' | 'PARTNER_DOCUMENT') => {
+  const id = uuid();
+  await migrator.upload.create({
+    data: {
+      id,
+      key: `gate/${id}.webp`,
+      bucket: 'PRIVATE',
+      purpose,
+      status: 'READY',
+      ownerId,
+      contentType: 'image/webp',
+      sizeBytes: 10,
+    },
+  });
+  return id;
+};
+
+describe('write-bug gaps closed at the database (security gate S1, S7)', () => {
+  it("refuses an applicant linking someone else's upload, or one of the wrong purpose", async () => {
+    const anas = await gateUpload(people.ana, 'PARTNER_PHOTO');
+    await expect(
+      runAs(priya(), (ctx) =>
+        db(ctx).deliveryPartner.create({
+          data: { userId: people.priya, vehicleType: 'BICYCLE', photoUploadId: anas, version: 1 },
+          select: { id: true },
+        }),
+      ),
+    ).rejects.toThrow(DENIED);
+    const document = await gateUpload(people.ana, 'PARTNER_DOCUMENT');
+    await expect(
+      runAs(ana(), (ctx) =>
+        db(ctx).deliveryPartner.update({
+          where: { id: partner.ana },
+          data: { photoUploadId: document, version: 3 },
+          select: { id: true },
+        }),
+      ),
+    ).rejects.toThrow(DENIED);
+    const own = await gateUpload(people.ana, 'PARTNER_PHOTO');
+    await runAs(ana(), (ctx) =>
+      db(ctx).deliveryPartner.update({
+        where: { id: partner.ana },
+        data: { photoUploadId: own, version: 3 },
+        select: { id: true },
+      }),
+    );
+  });
+
+  it('refuses an applicant history row carrying a staff name or note', async () => {
+    await expect(
+      runAs(ana(), (ctx) =>
+        db(ctx).partnerApplicationEvent.createMany({
+          data: event({
+            type: 'updated',
+            actorKind: 'applicant',
+            actorId: people.ana,
+            actorName: 'Morgan Diaz',
+            actorRole: 'support',
+            staffNote: 'Looks fine',
+          }),
+        }),
+      ),
+    ).rejects.toThrow(DENIED);
+  });
+
+  it('keeps the comparison keys of masked rows from demo staff, yet still reports the flag', async () => {
+    const [row] = await runAs(
+      demoAdmin(),
+      (ctx) =>
+        db(ctx).$queryRaw<{ plate_key: string | null; id_number_hash: string | null }[]>`
+        SELECT plate_key, id_number_hash FROM partner_directory WHERE id = ${partner.ana}::uuid`,
+    );
+    expect(row).toEqual({ plate_key: null, id_number_hash: null });
+    await migrator.deliveryPartner.update({
+      where: { id: partner.sample },
+      data: { vehiclePlate: '7kt-220' },
+    });
+    const matches = await runAs(
+      demoAdmin(),
+      (ctx) =>
+        db(ctx).$queryRaw<{ id: string; same_plate: boolean }[]>`
+        SELECT id::text, same_plate FROM app_partner_flag_matches(${partner.ana}::uuid)`,
+    );
+    expect(matches).toEqual([{ id: partner.sample, same_plate: true }]);
+    const kitchenMatches = await runAs(
+      kitchen(),
+      (ctx) =>
+        db(ctx).$queryRaw<unknown[]>`SELECT * FROM app_partner_flag_matches(${partner.ana}::uuid)`,
+    );
+    expect(kitchenMatches).toEqual([]);
   });
 });
 

@@ -35,12 +35,36 @@ function errorResponse(error: AppError) {
 const STAFF_REFUSAL = () =>
   new AppError('NOT_A_CUSTOMER', "Staff accounts can't use the partner app.", 403);
 
+const tooLarge = () => new AppError('INVALID_INPUT', 'That request is too large.', 413);
+
+/** Reads chunks until the end, or stops (null) once they pass the cap. */
+async function collect(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  chunks: Uint8Array[],
+  size: number,
+): Promise<number | null> {
+  const { done, value } = await reader.read();
+  if (done) return size;
+  const total = size + value.byteLength;
+  if (total > MAX_BODY_BYTES) {
+    await reader.cancel();
+    return null;
+  }
+  chunks.push(value);
+  return collect(reader, chunks, total);
+}
+
+/**
+ * The JSON body, read with a cap (security gate S2): a declared length over 16 KB is refused
+ * before anything is read, and a body without one stops being read once it passes the cap.
+ */
 async function readBody(request: Request): Promise<unknown> {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined;
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
-    throw new AppError('INVALID_INPUT', 'That request is too large.', 413);
-  }
+  if (Number(request.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) throw tooLarge();
+  if (!request.body) return {};
+  const chunks: Uint8Array[] = [];
+  if ((await collect(request.body.getReader(), chunks, 0)) === null) throw tooLarge();
+  const text = Buffer.concat(chunks).toString('utf8');
   if (!text) return {};
   try {
     return JSON.parse(text) as unknown;

@@ -680,10 +680,8 @@ const DIRECTORY_COLUMNS = Prisma.sql`
   d.updated_at AS "updatedAt", d.masked,
   sb.actor_name AS "sentBackByName", dec.actor_name AS "decidedByName",
   dec.actor_role AS "decidedByRole", dec.type AS "lastDecision",
-  EXISTS (SELECT 1 FROM partner_directory o
-          WHERE o.id <> d.id AND d.plate_key IS NOT NULL AND o.plate_key = d.plate_key) AS "plateShared",
-  EXISTS (SELECT 1 FROM partner_directory o
-          WHERE o.id <> d.id AND d.id_number_hash IS NOT NULL AND o.id_number_hash = d.id_number_hash) AS "idShared",
+  EXISTS (SELECT 1 FROM app_partner_flag_matches(d.id) f WHERE f.same_plate) AS "plateShared",
+  EXISTS (SELECT 1 FROM app_partner_flag_matches(d.id) f WHERE f.same_id) AS "idShared",
   (d.status = 'APPLIED'
     AND (SELECT count(*) FROM partner_event_directory e WHERE e.partner_id = d.id AND e.type = 'applied') > 1
     AND EXISTS (SELECT 1 FROM partner_event_directory e WHERE e.partner_id = d.id AND e.type = 'rejected')
@@ -725,8 +723,7 @@ function tabCondition(tab: PartnerTab): Prisma.Sql {
 /** Shares a plate or an ID number with another row, or expires within 30 days (A22.6). */
 function flaggedCondition(today: Date): Prisma.Sql {
   return Prisma.sql`(
-    EXISTS (SELECT 1 FROM partner_directory o WHERE o.id <> d.id AND d.plate_key IS NOT NULL AND o.plate_key = d.plate_key)
-    OR EXISTS (SELECT 1 FROM partner_directory o WHERE o.id <> d.id AND d.id_number_hash IS NOT NULL AND o.id_number_hash = d.id_number_hash)
+    EXISTS (SELECT 1 FROM app_partner_flag_matches(d.id))
     OR (d.status = 'APPLIED' AND d.id_document_expires_on IS NOT NULL AND d.id_document_expires_on <= ${today}::date + 30)
   )`;
 }
@@ -754,7 +751,7 @@ function filters(query: PartnerListQuery, today: Date): Prisma.Sql {
     const plate = query.q.toUpperCase().replace(/[\s-]/g, '');
     parts.push(
       Prisma.sql`(d.name ILIKE ${like} OR d.email ILIKE ${like}
-        OR (${plate} <> '' AND d.plate_key LIKE ${`%${plate.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}))`,
+        OR (NOT d.masked AND ${plate} <> '' AND d.plate_key LIKE ${`%${plate.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}))`,
     );
   }
   return Prisma.join(parts, ' AND ');
@@ -823,20 +820,17 @@ export interface FlagMatch {
   sameIdNumber: boolean;
 }
 
-/** Other applications with the same plate or ID number (A22.1, A22.2), both directions. */
-export function findFlagMatches(
-  ctx: DbContext,
-  self: { id: string; plateKey: string | null; idNumberHash: string | null },
-): Promise<FlagMatch[]> {
-  if (!self.plateKey && !self.idNumberHash) return Promise.resolve([]);
+/**
+ * Other applications with the same plate or ID number (A22.1, A22.2), both directions. The
+ * database compares the keys (`app_partner_flag_matches`); only ids and the kind of match come
+ * back, so a masked row's plate can't be probed (security gate S1).
+ */
+export function findFlagMatches(ctx: DbContext, self: { id: string }): Promise<FlagMatch[]> {
   return db(ctx).$queryRaw<FlagMatch[]>`
     SELECT d.id::text AS "id", d.name, d.status::text AS "status", d.banned,
            coalesce(d.suspended_at, d.decided_at, d.approved_at) AS "decidedAt", d.masked,
-           (${self.plateKey}::text IS NOT NULL AND d.plate_key = ${self.plateKey}) AS "samePlate",
-           (${self.idNumberHash}::text IS NOT NULL AND d.id_number_hash = ${self.idNumberHash}) AS "sameIdNumber"
-    FROM partner_directory d
-    WHERE d.id <> ${self.id}::uuid
-      AND ((${self.plateKey}::text IS NOT NULL AND d.plate_key = ${self.plateKey})
-        OR (${self.idNumberHash}::text IS NOT NULL AND d.id_number_hash = ${self.idNumberHash}))
+           f.same_plate AS "samePlate", f.same_id AS "sameIdNumber"
+    FROM app_partner_flag_matches(${self.id}::uuid) f
+    JOIN partner_directory d ON d.id = f.id
     ORDER BY d.submitted_at`;
 }

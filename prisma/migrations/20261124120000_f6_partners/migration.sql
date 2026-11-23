@@ -166,17 +166,32 @@ CREATE POLICY partner_application_events_read ON "partner_application_events" FO
   USING (app_is_reviewer());
 
 -- Staff write their own decisions; the applicant writes "applied", "updated" and "fixed" on
--- their own application; the platform writes everything else.
+-- their own application, as themselves and with no staff name, role, note or text; the
+-- platform writes everything else.
 CREATE POLICY partner_application_events_insert ON "partner_application_events" FOR INSERT
   WITH CHECK (
     app_role() = 'system'
     OR (app_role() IN ('support', 'admin') AND NOT app_is_demo()
         AND actor_kind = 'staff' AND actor_id = app_user_id())
     OR (partner_id = app_partner_id() AND NOT app_is_demo()
-        AND actor_kind = 'applicant' AND type IN ('applied', 'updated', 'fixed'))
+        AND actor_kind = 'applicant' AND type IN ('applied', 'updated', 'fixed')
+        AND actor_id = app_user_id() AND actor_name IS NULL AND actor_role IS NULL
+        AND staff_note IS NULL AND applicant_text IS NULL)
   );
 
 -- ---------------------------------------------------------------- what may change a partner row
+
+-- An upload an applicant may attach: their own, of the right purpose, checked. Runs as the
+-- caller, so row-level security on uploads hides anyone else's.
+CREATE OR REPLACE FUNCTION app_partner_upload_ok(upload uuid, owner uuid, wanted "UploadPurpose")
+  RETURNS boolean
+  LANGUAGE sql STABLE
+  AS $$
+    SELECT upload IS NULL OR EXISTS (
+      SELECT 1 FROM uploads u
+      WHERE u.id = upload AND u.owner_id = owner AND u.purpose = wanted AND u.status = 'READY'
+    )
+  $$;
 
 -- Row-level security says whose row; this says what may change in it (§4 of the contract):
 -- the applicant edits the application while it is waiting and applies again from the reapply
@@ -223,7 +238,9 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.user_id = app_user_id() AND actor IN ('customer', 'partner') AND NEW.status = 'APPLIED'
       AND NOT NEW.is_online AND NEW.rating_count = 0 AND NEW.approved_at IS NULL
-      AND NEW.decided_at IS NULL AND NEW.suspended_at IS NULL THEN
+      AND NEW.decided_at IS NULL AND NEW.suspended_at IS NULL
+      AND app_partner_upload_ok(NEW.photo_upload_id, NEW.user_id, 'PARTNER_PHOTO')
+      AND app_partner_upload_ok(NEW.id_document_upload_id, NEW.user_id, 'PARTNER_DOCUMENT') THEN
       RETURN NEW;
     END IF;
     RAISE EXCEPTION 'permission denied: % may not create this partner row', actor
@@ -258,6 +275,13 @@ BEGIN
   END IF;
 
   IF OLD.user_id = app_user_id() AND actor IN ('customer', 'partner') THEN
+    IF ('photo_upload_id' = ANY (changed)
+          AND NOT app_partner_upload_ok(NEW.photo_upload_id, NEW.user_id, 'PARTNER_PHOTO'))
+      OR ('id_document_upload_id' = ANY (changed)
+          AND NOT app_partner_upload_ok(NEW.id_document_upload_id, NEW.user_id, 'PARTNER_DOCUMENT')) THEN
+      RAISE EXCEPTION 'permission denied: an application links only its own checked uploads'
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
     IF OLD.status = 'APPLIED' AND NEW.status = 'APPLIED' AND changed <@ application_cols THEN
       RETURN NEW;
     END IF;
@@ -303,14 +327,15 @@ CREATE TRIGGER delivery_partners_guard_write
   FOR EACH ROW EXECUTE FUNCTION delivery_partners_guard_write();
 
 -- A user's role changes only through the platform, the auth library (which runs outside any
--- request context) or the definer functions below; a staff or customer context can't set it.
+-- request context, so app.role is unset) or the definer functions below (which run as the
+-- owner). Every request context, signed out included, is refused.
 CREATE OR REPLACE FUNCTION users_guard_role() RETURNS trigger
   LANGUAGE plpgsql
   SET search_path = public
   AS $$
 BEGIN
   IF NEW.role IS DISTINCT FROM OLD.role
-    AND app_role() IN ('customer', 'partner', 'kitchen', 'support', 'content_editor', 'admin')
+    AND coalesce(current_setting('app.role', true), '') NOT IN ('', 'system')
     AND NOT pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE oid = TG_RELID), 'MEMBER') THEN
     RAISE EXCEPTION 'permission denied: a role changes only through its own step'
       USING ERRCODE = 'insufficient_privilege';
@@ -403,8 +428,8 @@ SELECT
   (SELECT count(*)::int FROM orders o WHERE o.user_id = p.user_id AND o.status <> 'PENDING_PAYMENT') AS order_count,
   p.vehicle_type,
   CASE WHEN m.masked THEN mask_text(p.vehicle_plate) ELSE p.vehicle_plate END AS vehicle_plate,
-  p.plate_key,
-  p.id_number_hash,
+  CASE WHEN m.masked THEN NULL ELSE p.plate_key END AS plate_key,
+  CASE WHEN m.masked THEN NULL ELSE p.id_number_hash END AS id_number_hash,
   p.id_document_type,
   CASE WHEN m.masked THEN NULL ELSE p.id_number_last4 END AS id_number_last4,
   CASE WHEN m.masked THEN NULL ELSE p.id_document_expires_on END AS id_document_expires_on,
@@ -470,15 +495,34 @@ JOIN delivery_partners p ON p.id = e.partner_id
 CROSS JOIN LATERAL (SELECT app_masks_owner(p.user_id) AS masked) m
 WHERE app_role() IN ('support', 'admin', 'system');
 
+-- Other applications sharing a plate or an ID number with `target` (A22), for reviewers and the
+-- demo admin. It compares the stored keys itself and returns only ids and which key matched,
+-- so the keys never leave the database and a masked row's plate can't be searched for.
+CREATE OR REPLACE FUNCTION app_partner_flag_matches(target uuid)
+  RETURNS TABLE (id uuid, same_plate boolean, same_id boolean)
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+  AS $$
+    SELECT o.id,
+           (t.plate_key IS NOT NULL AND o.plate_key = t.plate_key),
+           (t.id_number_hash IS NOT NULL AND o.id_number_hash = t.id_number_hash)
+    FROM delivery_partners t
+    JOIN delivery_partners o ON o.id <> t.id
+      AND ((t.plate_key IS NOT NULL AND o.plate_key = t.plate_key)
+        OR (t.id_number_hash IS NOT NULL AND o.id_number_hash = t.id_number_hash))
+    WHERE t.id = target AND app_role() IN ('support', 'admin', 'system')
+  $$;
+
 -- ---------------------------------------------------------------- grants
 
 REVOKE ALL ON FUNCTION app_store_today(), app_set_partner_role(uuid), app_erase_own_partner_data(),
-  app_is_reviewer() FROM PUBLIC;
+  app_is_reviewer(), app_partner_flag_matches(uuid), app_partner_upload_ok(uuid, uuid, "UploadPurpose")
+  FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foodz_app') THEN
     GRANT EXECUTE ON FUNCTION app_store_today(), app_set_partner_role(uuid),
-      app_erase_own_partner_data(), app_is_reviewer() TO foodz_app;
+      app_erase_own_partner_data(), app_is_reviewer(), app_partner_flag_matches(uuid),
+      app_partner_upload_ok(uuid, uuid, "UploadPurpose") TO foodz_app;
     -- The history is append-only for the app (A31.1).
     REVOKE UPDATE, DELETE, TRUNCATE ON "partner_application_events" FROM foodz_app;
     GRANT SELECT, INSERT ON "partner_application_events" TO foodz_app;

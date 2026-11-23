@@ -3,7 +3,7 @@ import { v7 as uuidv7 } from 'uuid';
 import type { z } from 'zod';
 import { displayPhone } from '@/lib/phone';
 import { can, type Permission } from '@/server/auth/roles';
-import type { UserActor } from '@/server/auth/session';
+import { requirePermission, type UserActor } from '@/server/auth/session';
 import { runAs } from '@/server/db/context';
 import type { PartnerStatus } from '@/server/db/enums';
 import { AppError, forbidden } from '@/server/errors';
@@ -110,7 +110,18 @@ const CHANGE_HOW: Partial<Record<HistoryType, ApplicationChange['how']>> = {
 const isoDateOf = (date: Date) => date.toISOString().slice(0, 10);
 const iso = (date: Date | null) => date?.toISOString() ?? null;
 
-function requireReviewer(actor: UserActor, permission: Permission = READ): ReviewerRole {
+/**
+ * The same gate as the action wrapper, again in the service, so server renders that call it
+ * directly get it too: the permission, two-factor for staff, the 12-hour staff session, and the
+ * demo admin reading only (security gate S4).
+ */
+async function requireReviewer(
+  actor: UserActor,
+  permission: Permission = READ,
+  write = false,
+): Promise<ReviewerRole> {
+  const checked = await requirePermission(permission, { write });
+  if (checked.userId !== actor.userId) throw forbidden();
   if (!can(actor.role, permission)) throw forbidden();
   if (actor.role !== 'support' && actor.role !== 'admin') throw forbidden();
   return actor.role;
@@ -271,7 +282,7 @@ export async function listPartnerApplications(
   query: PartnerListQuery,
   now = new Date(),
 ): Promise<PartnerListResult> {
-  requireReviewer(actor);
+  await requireReviewer(actor);
   const { timeZone, today } = await storeTime(now);
   const day = new Date(`${today}T00:00:00Z`);
   const { rows, total, counts, page, pageCount } = await runAs(actor, async (ctx) => {
@@ -300,7 +311,7 @@ export async function listPartnerApplications(
 
 /** A18.1: the sidebar badge. */
 export async function countToReview(actor: UserActor): Promise<PartnerBadge> {
-  requireReviewer(actor);
+  await requireReviewer(actor);
   return { toReview: await runAs(actor, countReview) };
 }
 
@@ -423,7 +434,7 @@ export async function getPartnerReview(
   partnerId: string,
   now = new Date(),
 ): Promise<PartnerReview | null> {
-  const role = requireReviewer(actor);
+  const role = await requireReviewer(actor);
   if (!partnerIdInput.safeParse({ partnerId }).success) return null;
   const { timeZone, today } = await storeTime(now);
   const data = await runAs(actor, async (ctx) => {
@@ -586,7 +597,7 @@ function lastChangeOf(history: HistoryRow[], since: number): ApplicationChange |
 
 /** A26.5: the dialog's opening check; also the suspend dialog's online line. */
 export async function getPartnerVersion(actor: UserActor, input: unknown): Promise<PartnerVersion> {
-  requireReviewer(actor);
+  await requireReviewer(actor);
   const { partnerId } = partnerIdInput.parse(input);
   const found = await runAs(actor, async (ctx) => {
     const row = await findDirectoryRow(ctx, partnerId);
@@ -611,7 +622,7 @@ export async function getDocumentLink(
   input: z.input<typeof documentLinkInput>,
   now = new Date(),
 ): Promise<DocumentLink | ImageState> {
-  requireReviewer(actor);
+  await requireReviewer(actor);
   const { partnerId, kind } = documentLinkInput.parse(input);
   const row = await runAs(actor, (ctx) => findDirectoryRow(ctx, partnerId));
   if (!row || row.masked) throw notFoundError();
@@ -884,7 +895,7 @@ async function decide(
   input: DecisionInput,
   now = new Date(),
 ): Promise<DecisionResult> {
-  const role = requireReviewer(actor, permission);
+  const role = await requireReviewer(actor, permission, true);
   const { today } = await storeTime(now);
   const actorName = (await runAs(actor, (ctx) => findStaffName(ctx, actor.userId))) ?? 'Staff';
 
@@ -899,6 +910,8 @@ async function decide(
     };
   });
   if (!peek) throw await goneOrNotFound(actor, input.partnerId);
+  if (peek.row.userId === actor.userId)
+    throw forbidden("You can't decide on your own application.");
   const replay = replayed(decision, actor, peek.row, peek.history, now);
   if (replay) return replay;
   if (peek.row.version !== input.expectedVersion) {
@@ -921,10 +934,12 @@ async function decide(
       );
     }
   }
-  const stepUp = NEEDS_STEP_UP.has(decision);
-  if (stepUp && !(await stepUpFresh(actor, now))) {
+  // Recorded in the audit only when a code was actually checked (security gate S5).
+  let codeChecked = false;
+  if (NEEDS_STEP_UP.has(decision) && !(await stepUpFresh(actor, now))) {
     if (input.stepUp === undefined || input.stepUp === null) throw stepUpRequired('partner');
     await passStepUp(actor, input.stepUp, now, 'partner');
+    codeChecked = true;
   }
 
   const outcome = await runAs(actor, async (ctx) => {
@@ -974,7 +989,7 @@ async function decide(
         ...(input.staffNote !== undefined && { staffNote: input.staffNote }),
         ...(decision === 'approve' && { flags }),
         ...(wasOnline !== null && { wasOnline }),
-        ...(stepUp && { stepUp: true }),
+        ...(codeChecked && { stepUp: true }),
       },
     });
     const next = ['approve', 'sendBack', 'reject'].includes(decision)

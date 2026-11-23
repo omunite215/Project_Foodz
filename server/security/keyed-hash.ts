@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
+import { hashKeyDistinct } from './key-checks';
 
 /**
  * A keyed hash of a partner's ID number (F6 B4): two applications with the same number get the
@@ -10,6 +11,9 @@ import { createHmac } from 'node:crypto';
 function loadKey(raw = process.env.ID_NUMBER_HASH_KEY): Buffer {
   const key = raw ? Buffer.from(raw, 'base64') : Buffer.alloc(0);
   if (key.length !== 32) throw new Error('ID_NUMBER_HASH_KEY must be 32 bytes, base64-encoded');
+  if (!hashKeyDistinct(process.env)) {
+    throw new Error('ID_NUMBER_HASH_KEY must differ from FIELD_ENCRYPTION_KEY');
+  }
   return key;
 }
 
