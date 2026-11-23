@@ -74,7 +74,12 @@ test.describe('Favorites', () => {
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Kimchi', 'Bulgogi']);
 
     await heart(page, 'Kimchi').click();
-    await expect(page.getByText('Kimchi removed from your favorites.')).toBeVisible();
+    // The visible notice; the screen-reader announcer may hold the same words for a moment.
+    await expect(
+      page.locator('[data-slot="alert-description"]', {
+        hasText: 'Kimchi removed from your favorites.',
+      }),
+    ).toBeVisible();
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Bulgogi']);
     await expect(page.locator('main').getByRole('link', { name: /^Bulgogi,/ })).toBeFocused();
     await page.getByRole('button', { name: 'Undo removing Kimchi' }).click();
