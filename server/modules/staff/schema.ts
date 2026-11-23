@@ -49,8 +49,11 @@ export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   admin: 'Admin',
 };
 
-/** Screens that exist in this build; the sidebar lists only these (U9). */
-export type StaffScreen = 'orderBoard';
+/**
+ * Screens that exist in this build; the sidebar lists only these (U9). F6 adds `partners` for
+ * SUPPORT, ADMIN and the demo admin (A18.1); its badge comes from `partnerBadgeAction`.
+ */
+export type StaffScreen = 'orderBoard' | 'partners';
 
 export interface StaffUser {
   name: string;

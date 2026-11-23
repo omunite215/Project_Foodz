@@ -44,7 +44,8 @@ export const statements = {
   blog: ['create', 'update', 'publish', 'delete'],
   content: ['update', 'publish'],
   settings: ['update'],
-  partner: ['apply', 'deliver', 'review-application', 'suspend'],
+  // F6: `reinstate` gives a suspended partner access back and reopens a rejection (U27, B24).
+  partner: ['apply', 'deliver', 'review-application', 'suspend', 'reinstate'],
   delivery: ['dispatch', 'track-any'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
@@ -127,7 +128,7 @@ const admin = ac.newRole({
   blog: ['create', 'update', 'publish', 'delete'],
   content: ['update', 'publish'],
   settings: ['update'],
-  partner: ['review-application', 'suspend'],
+  partner: ['review-application', 'suspend', 'reinstate'],
   delivery: ['dispatch', 'track-any'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
