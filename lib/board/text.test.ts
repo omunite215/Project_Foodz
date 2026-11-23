@@ -96,6 +96,13 @@ describe('the time block (design 2.5, fixtures at 7:30 pm)', () => {
       figure: null,
     });
     expect(block('S1106', new Date(at('19:26')))).toMatchObject({ before: 'Ready just now' });
+    // Never "Late 0 min" (design review row 16).
+    expect(block('S1104', new Date(Date.parse(at('19:33')) + 20_000))).toMatchObject({
+      tone: 'late',
+      before: 'Late · just now',
+      figure: null,
+      spoken: 'Ready by 7:33 pm, late, just now',
+    });
   });
 
   it('reads an order out for delivery', () => {
@@ -128,6 +135,10 @@ describe('column words (design 2.3)', () => {
   it('says how many are shown with filters on', () => {
     const filtered = { shown: 2, total: 5, late: 0, filtered: true };
     expect(countChipText(filtered)).toBe('2 of 5');
+    // An empty column says "0", never "0 of 0" (design review row 17).
+    const none = { shown: 0, total: 0, late: 0, filtered: true };
+    expect(countChipText(none)).toBe('0');
+    expect(columnSpoken('outForDelivery', none)).toBe('Out for delivery, 0 orders');
     expect(columnSpoken('preparing', filtered)).toBe('Preparing, 2 of 5 orders shown');
   });
 });

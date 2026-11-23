@@ -141,7 +141,7 @@ export const BOARD_FIELD_ERRORS = {
   noteLength: 'Keep the note under 500 characters.',
   orderNumber: 'Enter an order number, like 1042.',
   /** Mark delivered on a cash order without the tick (A9.2, design 3.6). */
-  cashCollected: 'Tick this once you have the cash.',
+  cashCollected: 'Check this box once you have the cash.',
   /** "Not picked up after all" moves an order back from Out for delivery only. */
   notPickedUp: 'Use this reason only for an order that is out for delivery.',
 } as const;

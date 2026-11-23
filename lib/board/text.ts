@@ -91,12 +91,12 @@ export interface ColumnCount {
   filtered: boolean;
 }
 
-/** "2", or "2 of 5" with filters on. */
+/** "2", or "2 of 5" with filters on; "0" when the column is empty anyway, never "0 of 0". */
 export const countChipText = (count: ColumnCount) =>
-  count.filtered ? `${count.shown} of ${count.total}` : String(count.total);
+  count.filtered && count.total > 0 ? `${count.shown} of ${count.total}` : String(count.total);
 
 const ordersPhrase = (count: ColumnCount) =>
-  count.filtered
+  count.filtered && count.total > 0
     ? `${count.shown} of ${plural(count.total, 'order')} shown`
     : plural(count.total, 'order');
 
@@ -170,8 +170,12 @@ export function timeBlockText(
       }
       line = `Ready by ${boardClock(timing.readyBy, timeZone)}`;
       if (timing.lateMinutes !== null) {
-        before = 'Late';
-        figure = minutes(timing.lateMinutes);
+        // Never "Late 0 min": the first minute past ready-by reads like "Ready just now".
+        if (timing.lateMinutes < 1) before = 'Late · just now';
+        else {
+          before = 'Late';
+          figure = minutes(timing.lateMinutes);
+        }
       } else if (timing.tone === 'soon') {
         if ((timing.minutesLeft ?? 0) < 1) before = 'Due now';
         else {
@@ -443,7 +447,13 @@ export function soldOutStripText(titles: readonly string[]): string {
 export const soldOutButtonLabel = (count: number) =>
   count > 0 ? `Sold out dishes, ${count}` : 'Sold out dishes';
 
-export const soldOutSinceText = (since: string | null, by: string | null, timeZone: string) => {
+/** "Sold out since 7:12 pm · Alex"; null when neither is known (the chip already says it). */
+export const soldOutSinceText = (
+  since: string | null,
+  by: string | null,
+  timeZone: string,
+): string | null => {
+  if (!since && !by) return null;
   const parts = [since ? `Sold out since ${boardClock(since, timeZone)}` : 'Sold out', by];
   return parts.filter(Boolean).join(' · ');
 };

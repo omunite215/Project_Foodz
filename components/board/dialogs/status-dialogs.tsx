@@ -256,7 +256,7 @@ export function HandoverDialog({
             ...(deliver ? { cashCollected: value.cashCollected } : {}),
           }) ?? {};
         if (cashCents !== null && !value.cashCollected) {
-          fields.cashCollected = 'Tick this once you have the cash.';
+          fields.cashCollected = 'Check this box once you have the cash.';
         }
         return Object.keys(fields).length ? { fields } : undefined;
       },
