@@ -135,7 +135,7 @@ export type HandoverReason = (typeof HANDOVER_REASONS)[number];
 
 export const BOARD_FIELD_ERRORS = {
   reason: 'Choose a reason.',
-  dishes: "Tick the dishes you can't make.",
+  dishes: "Check the dishes you can't make.",
   refusalNote: 'Tell us what happened, so support can answer the customer.',
   otherNote: 'Add a note about what happened.',
   noteLength: 'Keep the note under 500 characters.',

@@ -29,7 +29,7 @@ test.describe('"Can\'t make it" (A6)', () => {
 
     await dialog.getByRole('radio', { name: 'A dish is unavailable' }).check();
     await dialog.getByRole('button', { name: 'Refuse order' }).click();
-    await expect(dialog.getByText("Tick the dishes you can't make.")).toBeVisible();
+    await expect(dialog.getByText("Check the dishes you can't make.")).toBeVisible();
     await dialog.getByRole('checkbox', { name: /Pad Thai/ }).check();
     // D21: "Also mark … sold out" is offered and ticked by default.
     await expect(

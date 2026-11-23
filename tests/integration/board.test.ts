@@ -702,7 +702,7 @@ describe('refusing a New order (A6)', () => {
       }),
     );
     expect(foreign?.serverError?.fieldErrors).toEqual({
-      lineIds: ["Tick the dishes you can't make."],
+      lineIds: ["Check the dishes you can't make."],
     });
     await move(alex, orderId, 'ACCEPTED');
     const late = await as(alex, () =>
