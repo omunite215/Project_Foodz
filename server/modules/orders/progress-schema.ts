@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { TimelineKind } from './schema';
 
 /*
  * The customer's live order (F5): the stepper, the arrival window and its late notices, what
@@ -117,9 +116,18 @@ export interface CancellationNotice {
 
 // ------------------------------------------------------------------ the timeline (S6.7)
 
-/** F4's kinds plus the kitchen steps and the hand-over. Undone steps are left out. */
+/**
+ * F4's kinds plus the kitchen steps and the hand-over (the same set as `TimelineKind` in
+ * schema.ts, which `OrderView.timeline` uses). Undone steps are left out.
+ */
 export type CustomerTimelineKind =
-  | TimelineKind
+  | 'placed'
+  | 'revived'
+  | 'cancelled'
+  | 'expired'
+  | 'refunded'
+  | 'disputeOpened'
+  | 'disputeClosed'
   | 'accepted'
   | 'preparing'
   | 'ready'

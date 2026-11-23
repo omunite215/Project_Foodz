@@ -162,3 +162,62 @@ export function declineMessage(decline: Decline | null, savedCard?: string): str
   }
   return 'Your card was declined. Try another card, or pay with cash.';
 }
+
+// ------------------------------------------------------------------ cancellations by the store (F5 S5.5)
+
+/** "Pad Thai", "Gimbap and Pad Thai", "Gimbap, Pad Thai and Bulgogi". */
+export function joinWords(words: readonly string[]): string {
+  if (words.length <= 1) return words[0] ?? '';
+  return `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
+}
+
+export type CancelOpener = 'sorry' | 'plain';
+
+/** "Sorry, we had to cancel order 1042." or, for her own request, "Order 1042 is cancelled." */
+export const cancellationOpener = (opener: CancelOpener, number: string) =>
+  opener === 'sorry' ? `Sorry, we had to cancel order ${number}.` : `Order ${number} is cancelled.`;
+
+/** The line the customer reads for each reason (A7.8); never the reason staff picked. */
+export function customerCancelSentence(
+  line:
+    | 'ranOut'
+    | 'tooBusy'
+    | 'closedEarly'
+    | 'atYourRequest'
+    | 'cantDeliver'
+    | 'couldNotAccept'
+    | 'other',
+  dishes: readonly string[],
+  phone: string,
+): string {
+  switch (line) {
+    case 'ranOut':
+      return dishes.length > 0
+        ? `The kitchen ran out of ${joinWords(dishes)}, so we couldn't make your order.`
+        : "The kitchen ran out of a dish you ordered, so we couldn't make your order.";
+    case 'tooBusy':
+      return 'Our kitchen is too busy to make your order in good time.';
+    case 'closedEarly':
+      return 'The kitchen had to close early.';
+    case 'atYourRequest':
+      return 'Cancelled at your request.';
+    case 'cantDeliver':
+      return "We couldn't deliver to your address.";
+    case 'couldNotAccept':
+      return `We couldn't accept this order. Call us on ${phone} if you think this is a mistake.`;
+    case 'other':
+    default:
+      return `We had to cancel your order. Call us on ${phone} if you have questions.`;
+  }
+}
+
+export const REFUND_TAKES_DAYS = 'It can take 5 to 10 business days to appear.';
+export const SAMPLE_NO_REFUND =
+  "This sample order had no real card payment, so there's nothing to refund.";
+
+/** "We're refunding $53.97 to Visa •••• 4242, tip included. It can take …" */
+export function refundingSentence(amount: string, card: string | null, tipIncluded: boolean) {
+  return `We're refunding ${amount} to ${card ?? 'your card'}${tipIncluded ? ', tip included' : ''}. ${REFUND_TAKES_DAYS}`;
+}
+
+export const codeReleasedSentence = (code: string) => `Your code ${code} is free to use again.`;

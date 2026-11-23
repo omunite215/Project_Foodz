@@ -139,6 +139,11 @@ const DOTS: Record<TimelineKind, { icon: LucideIcon; className: string }> = {
   refunded: { icon: Undo2, className: 'bg-neutral-3' },
   disputeOpened: { icon: Info, className: 'bg-tag-6' },
   disputeClosed: { icon: Info, className: 'bg-tag-6' },
+  accepted: { icon: Check, className: 'bg-brand-strong' },
+  preparing: { icon: Check, className: 'bg-brand-strong' },
+  ready: { icon: Check, className: 'bg-brand-strong' },
+  pickedUp: { icon: Check, className: 'bg-brand-strong' },
+  delivered: { icon: Check, className: 'bg-brand-strong' },
 };
 
 export function OrderStatusCard({

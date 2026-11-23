@@ -54,6 +54,18 @@ interface StepResult {
 }
 
 const UNCHANGED: StepResult = { outcome: 'unchanged', effects: [] };
+
+/** Every applied change is announced on the order's realtime channels (F5 contract 5). */
+const published = (
+  orderId: string,
+  at: Date,
+  fromStatus?: OrderPaymentRow['status'],
+): OrderEffect => ({
+  kind: 'publish',
+  orderId,
+  at: at.toISOString(),
+  ...(fromStatus && { fromStatus }),
+});
 const orderIdSchema = z.uuid();
 /** The cancellation's timeline entry says whether its email already promised the refund (D45). */
 const announcedSchema = z.object({ refundAnnounced: z.boolean().optional() });
@@ -312,7 +324,10 @@ export async function applyIntent(
       return { outcome: 'unknown-order', effects: [] };
     }
     if (!order.stripePaymentIntentId) await setPaymentIntent(ctx, order.id, intent.id);
-    return decideAndApply(ctx, order, intent, options.source, { storeOpen, now });
+    const step = await decideAndApply(ctx, order, intent, options.source, { storeOpen, now });
+    return step.outcome === 'applied'
+      ? { ...step, effects: [...step.effects, published(order.id, now, order.status)] }
+      : step;
   });
   await runEffects(result.effects);
   return { outcome: result.outcome, orderId };
@@ -320,14 +335,16 @@ export async function applyIntent(
 
 // ------------------------------------------------------------------ refunds and disputes
 
-function refundEmail(reason: string | null, announced: boolean): OrderEmailKind | null {
+export function refundEmail(reason: string | null, announced: boolean): OrderEmailKind | null {
   switch (reason) {
     case 'late-payment':
       return 'late-refund';
     case 'mismatch':
       return 'mismatch-refund';
-    // D45: her own cancellation already said the money is coming back.
+    // D45: the cancellation email (hers, or the store's, F5) already said the money is coming
+    // back.
     case 'customer-cancel':
+    case 'staff-cancel':
       return announced ? null : 'refunded';
     default:
       return 'refunded';
@@ -375,26 +392,27 @@ export async function applyRefund(input: {
       type: 'refunded',
       data: { amountCents: delta, totalRefundedCents: input.refundedCents },
     });
-    const cancellations = await findEvents(ctx, order.id, 'cancelled');
+    const cancellations = [
+      ...(await findEvents(ctx, order.id, 'cancelled')),
+      ...(await findEvents(ctx, order.id, 'refused')),
+    ];
     const announced = cancellations.some(
       (event) => announcedSchema.safeParse(event.data).data?.refundAnnounced === true,
     );
     const email = refundEmail(order.autoRefundReason, announced);
-    return {
-      outcome: 'applied',
-      effects: email
-        ? [
-            {
-              kind: 'email',
-              orderId: order.id,
-              email,
-              change: `refund-${input.refundedCents}`,
-              refundCents: delta,
-              at: now.toISOString(),
-            },
-          ]
-        : [],
-    };
+    const effects: OrderEffect[] = email
+      ? [
+          {
+            kind: 'email',
+            orderId: order.id,
+            email,
+            change: `refund-${input.refundedCents}`,
+            refundCents: delta,
+            at: now.toISOString(),
+          },
+        ]
+      : [];
+    return { outcome: 'applied', effects: [...effects, published(order.id, now)] };
   });
   await runEffects(result.effects);
   return result.outcome;
@@ -439,8 +457,9 @@ export async function applyDispute(input: {
       });
     }
     logger.warn({ orderId: order.id, phase: input.phase, status: input.status }, 'card dispute');
-    return { outcome: 'applied', effects: [] };
+    return { outcome: 'applied', effects: [published(order.id, now)] };
   });
+  await runEffects(result.effects);
   return result.outcome;
 }
 
@@ -518,7 +537,7 @@ export async function expireUnpaidOrder(
   }
   if (decision !== 'expire') return decision === 'wait' ? 'wait' : 'none';
 
-  return runAsSystem('expiry', async (ctx) => {
+  const outcome = await runAsSystem('expiry', async (ctx) => {
     const locked = await lockOrder(ctx, orderId);
     if (!locked || locked.status !== 'PENDING_PAYMENT') return 'none';
     await updateOrder(ctx, orderId, locked.version, {
@@ -536,6 +555,10 @@ export async function expireUnpaidOrder(
     });
     return 'expired' as const;
   });
+  if (outcome === 'expired') {
+    await runEffects([published(orderId, now, 'PENDING_PAYMENT')]);
+  }
+  return outcome;
 }
 
 /** Catches unpaid orders whose expiry job was lost (every 5 minutes, B8). */

@@ -110,7 +110,7 @@ import {
   storeClosedMessage,
   unpaidOrderMessage,
 } from './text';
-import { storeFacts, toOrderSummary, toOrderView } from './views';
+import { cancelReasonOf, storeFacts, toOrderSummary, toOrderView } from './views';
 
 /*
  * Checkout and the customer's orders (F4). Placing an order prices it again from the database
@@ -272,9 +272,9 @@ type OwnCard = NonNullable<Awaited<ReturnType<typeof findOwnCard>>>;
 
 /** Marks an order whose payment could not be started as failed and gives its code back. */
 async function abandonOrder(orderId: string) {
-  await runAsSystem('payment not started', async (ctx) => {
+  const failed = await runAsSystem('payment not started', async (ctx) => {
     const order = await lockOrder(ctx, orderId);
-    if (!order || order.status !== 'PENDING_PAYMENT' || order.stripePaymentIntentId) return;
+    if (!order || order.status !== 'PENDING_PAYMENT' || order.stripePaymentIntentId) return false;
     await updateOrder(ctx, orderId, order.version, { status: 'FAILED' });
     const redemption = await findRedemption(ctx, orderId);
     if (redemption && redemption.status !== 'RELEASED') {
@@ -288,7 +288,13 @@ async function abandonOrder(orderId: string) {
       toStatus: 'FAILED',
       data: { actor: 'system', code: 'payment_not_started', declineCode: null },
     });
+    return true;
   });
+  if (failed) {
+    await runEffects([
+      { kind: 'publish', orderId, at: new Date().toISOString(), fromStatus: 'PENDING_PAYMENT' },
+    ]);
+  }
 }
 
 /**
@@ -687,7 +693,10 @@ async function placeOrderOnce(
   const { order } = created;
 
   if (!isCard) {
-    await runEffects([{ kind: 'email', orderId: order.id, email: 'receipt', change: 'placed' }]);
+    await runEffects([
+      { kind: 'email', orderId: order.id, email: 'receipt', change: 'placed' },
+      { kind: 'publish', orderId: order.id, at: now.toISOString() },
+    ]);
     return {
       kind: 'placed',
       orderId: order.id,
@@ -788,12 +797,7 @@ export async function getAttemptStatus(
         kind: 'cancelled',
         orderId: order.id,
         number: order.number,
-        reason:
-          order.cancelReason === 'customer' ||
-          order.cancelReason === 'payment-expired' ||
-          order.cancelReason === 'account-deleted'
-            ? order.cancelReason
-            : null,
+        reason: cancelReasonOf(order.cancelReason),
       };
     default:
       return { kind: 'placed', orderId: order.id, number: order.number };
@@ -814,7 +818,11 @@ function decodeCursor(cursor: string | undefined) {
 }
 
 /** S12.1, S12.2: in progress first (first page only), then the rest 20 at a time. */
-export async function listMyOrders(actor: UserActor, input: unknown = {}): Promise<OrdersPage> {
+export async function listMyOrders(
+  actor: UserActor,
+  input: unknown = {},
+  now = new Date(),
+): Promise<OrdersPage> {
   const { cursor } = listOrdersInput.parse(input);
   const after = decodeCursor(cursor);
   return runAs(actor, async (ctx) => {
@@ -823,8 +831,8 @@ export async function listMyOrders(actor: UserActor, input: unknown = {}): Promi
     const page = past.slice(0, ORDERS_PAGE_SIZE);
     const last = page.at(-1);
     return {
-      inProgress: inProgress.map(toOrderSummary),
-      past: page.map(toOrderSummary),
+      inProgress: inProgress.map((row) => toOrderSummary(row, now)),
+      past: page.map((row) => toOrderSummary(row, now)),
       nextCursor:
         past.length > ORDERS_PAGE_SIZE && last ? encodeCursor(last.createdAt, last.id) : null,
     };
@@ -928,6 +936,7 @@ export async function cancelOrder(
       },
     ];
     if (paidByCard) effects.push({ kind: 'refund', orderId });
+    effects.push({ kind: 'publish', orderId, at: now.toISOString(), fromStatus: order.status });
     return { order, paidByCard, refundCents, effects };
   });
   await runEffects(result.effects);
