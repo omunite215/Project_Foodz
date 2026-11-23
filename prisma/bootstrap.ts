@@ -69,17 +69,18 @@ export function bootstrapStatements(database: string, passwords: RolePasswords):
   ];
 }
 
+const need = (name: string) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} must be set`);
+  return value;
+};
+
 async function main() {
   const url = process.env.DATABASE_ADMIN_URL;
   if (!url) {
     console.warn('DATABASE_ADMIN_URL is not set; skipping role bootstrap.');
     return;
   }
-  const need = (name: string) => {
-    const value = process.env[name];
-    if (!value) throw new Error(`${name} must be set`);
-    return value;
-  };
   const database = decodeURIComponent(new URL(url).pathname.slice(1));
   const statements = bootstrapStatements(database, {
     migrator: need('DB_MIGRATOR_PASSWORD'),
