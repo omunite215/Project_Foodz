@@ -250,7 +250,16 @@ function GuestAddressCheck({
     announce(outcome.data.message);
     if (outcome.data.deliverable) {
       setState({ kind: 'idle' });
-      onInside({ line1: item.line1, lat: item.lat, lng: item.lng }, outcome.data.message);
+      onInside(
+        {
+          line1: item.line1,
+          lat: item.lat,
+          lng: item.lng,
+          city: item.city,
+          hasHouseNumber: item.hasHouseNumber,
+        },
+        outcome.data.message,
+      );
     } else {
       setState({ kind: 'outside', text: outcome.data.message });
     }

@@ -96,6 +96,7 @@ export function DeliverTo({
             <Button
               type="button"
               size="touch"
+              data-add-address
               onClick={(event) => onAdd(event.currentTarget)}
               className="mt-3 w-full"
             >
@@ -204,6 +205,7 @@ export function DeliverTo({
                 type="button"
                 variant="outline"
                 size="touch"
+                data-add-address
                 aria-disabled={atLimit || undefined}
                 aria-describedby={atLimit ? limitId : undefined}
                 onClick={(event) => {

@@ -52,7 +52,7 @@ export function promoMessage(code: string, reason: PromoReason, options: PromoTe
         ? `You've already used ${code}. It's one per customer.`
         : `You've already used ${code} ${reason.perCustomer} times. It's ${reason.perCustomer} per customer.`;
     case 'onHold':
-      return `${code} is on hold for your unpaid order ${reason.orderNumber}. It frees up if that order isn't paid within 15 minutes.`;
+      return `${code} is on hold for your unpaid order ${reason.orderNumber}. It frees up if you cancel that order, or if it isn't paid within 15 minutes.`;
     case 'notForTheseDishes':
       return `${code} is for ${joined(reason.cuisines, 'and')} dishes. Add a ${joined(reason.cuisines, 'or')} dish to use it.`;
     case 'minimumNotReached':

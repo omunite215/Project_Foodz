@@ -22,8 +22,10 @@ import {
   cancelUnpaidOrdersForDeletion,
   countMyOrders,
   exportMyOrders,
+  lockOrdersForDeletion,
   ordersBlockingDeletion,
 } from '@/server/modules/orders/service';
+import { paymentInProgressMessage } from '@/server/modules/orders/text';
 import {
   countSavedCards,
   deleteStripeCustomer,
@@ -71,6 +73,10 @@ const ORDER_ON_ITS_WAY =
   "You have an order on its way. You can delete your account once it's delivered.";
 const orderWaiting = (number: string) =>
   `Order ${number} is waiting for the kitchen. Cancel it from its page, then you can delete your account.`;
+const paymentConfirming = (order: { id: string; number: string }) =>
+  new AppError('CONFLICT', paymentInProgressMessage(order.number), 409, {
+    details: { orderId: order.id, number: order.number },
+  });
 const CARDS_NOT_REMOVED =
   "We couldn't remove your saved cards right now, so your account is still here. Try again in a minute.";
 
@@ -309,7 +315,8 @@ export async function deleteAccount(
   }
 
   // B21: unpaid card orders are cancelled first, with their payments at Stripe. One Stripe was
-  // already paid for becomes placed, and then waits to be cancelled like any placed order (U6).
+  // already paid for becomes placed, and then waits to be cancelled like any placed order (U6);
+  // one the bank is still confirming stays waiting, and so does the deletion.
   await cancelUnpaidOrdersForDeletion(actor, now);
   const blocking = await runAs(actor, (ctx) => ordersBlockingDeletion(ctx, actor.userId));
   if (blocking.onItsWay > 0) throw conflict(ORDER_ON_ITS_WAY);
@@ -318,6 +325,7 @@ export async function deleteAccount(
       details: { orderId: blocking.placed.id, number: blocking.placed.number },
     });
   }
+  if (blocking.paying) throw paymentConfirming(blocking.paying);
   // Saved cards go with the Stripe customer, before anything here is erased.
   try {
     await deleteStripeCustomer(actor.userId);
@@ -327,11 +335,14 @@ export async function deleteAccount(
   }
 
   const person = await runAs(actor, async (ctx) => {
+    // Held until the commit: a press or payment arriving now waits, then finds the account gone.
+    await lockOrdersForDeletion(ctx, actor.userId);
     const again = await ordersBlockingDeletion(ctx, actor.userId);
     if (again.onItsWay > 0 || (await countDeliveriesInProgress(ctx, actor.userId)) > 0) {
       throw conflict(ORDER_ON_ITS_WAY);
     }
     if (again.placed) throw conflict(orderWaiting(again.placed.number));
+    if (again.paying) throw paymentConfirming(again.paying);
     const profile = await findProfile(ctx, actor.userId);
     if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
     await anonymizeMyOrders(ctx);

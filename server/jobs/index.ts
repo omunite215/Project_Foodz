@@ -5,6 +5,8 @@ import { notificationEmail } from './functions/notification-email';
 import { orderEmail } from './functions/order-email';
 import { orderExpiry } from './functions/order-expiry';
 import { orderRefund } from './functions/order-refund';
+import { orderRefundSweep } from './functions/order-refund-sweep';
+import { orderStepNotice } from './functions/order-step-notice';
 import { orderSweep } from './functions/order-sweep';
 import { processUploadJob } from './functions/process-upload';
 
@@ -16,5 +18,7 @@ export const functions: InngestFunction.Any[] = [
   orderEmail,
   orderExpiry,
   orderRefund,
+  orderRefundSweep,
   orderSweep,
+  orderStepNotice,
 ];

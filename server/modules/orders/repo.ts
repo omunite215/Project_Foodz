@@ -185,6 +185,20 @@ export async function forceCouponUse(ctx: DbContext, couponId: string) {
   });
 }
 
+/**
+ * Locks a code's row until the commit and reads its limits, so a late payment's revive and a
+ * checkout taking the same code can't both count on the last use.
+ */
+export async function lockCouponLimits(ctx: DbContext, couponId: string) {
+  const rows = await db(ctx).$queryRaw<
+    { used_count: number; usage_limit: number | null; per_user_limit: number | null }[]
+  >`SELECT used_count, usage_limit, per_user_limit FROM coupons WHERE id = ${couponId}::uuid FOR UPDATE`;
+  const row = rows[0];
+  return row
+    ? { usedCount: row.used_count, usageLimit: row.usage_limit, perUserLimit: row.per_user_limit }
+    : null;
+}
+
 /** Gives a use back. */
 export async function returnCouponUse(ctx: DbContext, couponId: string) {
   await db(ctx).coupon.updateMany({
@@ -395,6 +409,14 @@ export function findOrderForPayment(ctx: DbContext, orderId: string) {
   return db(ctx).order.findUnique({ where: { id: orderId }, select: paymentFields });
 }
 
+/** The name and delivery address kept on the order (S2.10), for the PaymentIntent's shipping. */
+export function findOrderShipping(ctx: DbContext, orderId: string) {
+  return db(ctx).order.findUnique({
+    where: { id: orderId },
+    select: { contactName: true, addressLine1: true, addressLine2: true, addressCity: true },
+  });
+}
+
 export function findOrderIdByIntent(ctx: DbContext, paymentIntentId: string) {
   return db(ctx).order.findUnique({
     where: { stripePaymentIntentId: paymentIntentId },
@@ -474,7 +496,29 @@ export function findDueUnpaid(ctx: DbContext, before: Date, take: number) {
   });
 }
 
+/** Card payments Foodz decided to give back and hasn't refunded yet, for the refund sweep. */
+export function findUnsettledRefunds(ctx: DbContext, before: Date, take: number) {
+  return db(ctx).order.findMany({
+    where: {
+      autoRefundReason: { not: null },
+      paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] },
+      stripePaymentIntentId: { not: null },
+      updatedAt: { lte: before },
+    },
+    // Newest first, so a refund that keeps failing can't hold back the ones behind it.
+    orderBy: { updatedAt: 'desc' },
+    take,
+    select: { id: true },
+  });
+}
+
 // ------------------------------------------------------------------ reading orders
+
+/** Events written in one transaction share a time; their ids (UUIDv7) keep the order. */
+const EVENT_ORDER: Prisma.OrderEventOrderByWithRelationInput[] = [
+  { createdAt: 'asc' },
+  { id: 'asc' },
+];
 
 const viewFields = {
   id: true,
@@ -512,19 +556,37 @@ const viewFields = {
   arrivalFromMinutes: true,
   arrivalToMinutes: true,
   autoRefundReason: true,
+  stripePaymentIntentId: true,
   expiresAt: true,
   placedAt: true,
+  acceptedAt: true,
+  preparingAt: true,
+  readyAt: true,
+  pickedUpAt: true,
+  deliveredAt: true,
   cancelledAt: true,
   cancelReason: true,
+  cancelCode: true,
+  cancelLineIds: true,
+  prepMinutes: true,
+  version: true,
   createdAt: true,
   coupon: { select: { code: true } },
   items: {
     orderBy: { id: 'asc' },
-    select: { title: true, unitPriceCents: true, quantity: true, flavors: true, note: true },
+    select: {
+      id: true,
+      menuItemId: true,
+      title: true,
+      unitPriceCents: true,
+      quantity: true,
+      flavors: true,
+      note: true,
+    },
   },
   events: {
-    orderBy: { createdAt: 'asc' },
-    select: { type: true, data: true, createdAt: true },
+    orderBy: EVENT_ORDER,
+    select: { id: true, type: true, fromStatus: true, data: true, createdAt: true },
   },
 } as const;
 
@@ -535,6 +597,67 @@ export function findOrderView(ctx: DbContext, orderId: string, userId?: string) 
   return db(ctx).order.findFirst({
     where: { id: orderId, ...(userId && { userId }) },
     select: viewFields,
+  });
+}
+
+/** What a realtime message about an order carries, read after the change is committed. */
+export function findOrderChange(ctx: DbContext, orderId: string) {
+  return db(ctx).order.findUnique({
+    where: { id: orderId },
+    select: { id: true, userId: true, status: true, version: true },
+  });
+}
+
+/**
+ * Claims a customer notice for an order, once (F5 S6.3): true for the one caller that adds the
+ * step to `notified_steps`, false for everyone after.
+ */
+export async function claimNotice(ctx: DbContext, orderId: string, step: string) {
+  const claimed = await db(ctx).$executeRaw`
+    UPDATE orders SET notified_steps = array_append(notified_steps, ${step})
+    WHERE id = ${orderId}::uuid AND NOT (${step} = ANY(notified_steps))`;
+  return claimed === 1;
+}
+
+/** The event a delayed notice is about, with whether it was undone since. */
+export async function findStepEvent(ctx: DbContext, orderId: string, eventId: string) {
+  const event = await db(ctx).orderEvent.findFirst({
+    where: { id: eventId, orderId },
+    select: { id: true, type: true, createdAt: true },
+  });
+  if (!event) return null;
+  const undone = await db(ctx).orderEvent.count({
+    where: { orderId, type: 'undone', data: { path: ['eventId'], equals: eventId } },
+  });
+  return { ...event, undone: undone > 0 };
+}
+
+/**
+ * "Order again" (S7.5): the caller's own delivered or cancelled order's lines, the dishes as
+ * they are on today's menu, and when it was cancelled (for the same-day rule, U24).
+ */
+export function findReorderSource(ctx: DbContext, orderId: string, userId: string) {
+  return db(ctx).order.findFirst({
+    where: { id: orderId, userId, status: { in: ['DELIVERED', 'CANCELLED'] } },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      cancelCode: true,
+      cancelLineIds: true,
+      cancelledAt: true,
+      items: {
+        orderBy: { id: 'asc' },
+        select: {
+          id: true,
+          title: true,
+          quantity: true,
+          flavors: true,
+          note: true,
+          menuItem: { select: { id: true, title: true, isAvailable: true, flavors: true } },
+        },
+      },
+    },
   });
 }
 
@@ -555,7 +678,18 @@ const summaryFields = {
   cancelReason: true,
   totalCents: true,
   createdAt: true,
+  placedAt: true,
+  readyAt: true,
+  prepMinutes: true,
+  arrivalFromMinutes: true,
+  arrivalToMinutes: true,
   items: { orderBy: { id: 'asc' }, select: { title: true, quantity: true } },
+  // Only what "Collected" (U23) needs: the hand-overs and the steps that reverse them.
+  events: {
+    where: { type: { in: ['picked-up', 'undone', 'moved-back'] as string[] } },
+    orderBy: EVENT_ORDER,
+    select: { id: true, type: true, fromStatus: true, data: true, createdAt: true },
+  },
 } as const;
 
 export type OrderSummaryRow = Prisma.OrderGetPayload<{ select: typeof summaryFields }>;

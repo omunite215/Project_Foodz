@@ -1,8 +1,17 @@
 import 'server-only';
 import { formatPrice } from '@/lib/format';
 import { actionEmail, type Email, receiptEmail } from '@/server/notifications/email';
+import type { CancellationNotice } from './progress-schema';
 import type { OrderView } from './schema';
-import { clockAt } from './text';
+import {
+  cancellationOpener,
+  clockAt,
+  codeReleasedSentence,
+  customerCancelSentence,
+  REFUND_TAKES_DAYS,
+  refundingSentence,
+  SAMPLE_NO_REFUND,
+} from './text';
 
 /*
  * The F4 emails (S11.5, S12.5, S9.5, S10.1, S10.4; design 6): the receipt, the cancellation,
@@ -153,6 +162,77 @@ function notice(
   };
 }
 
+/**
+ * A cancellation by the store (F5 S5.5): the reason's customer line, the money line and the
+ * code given back, in the words of the order page. Never a staff name, role, note or the
+ * reason staff picked.
+ */
+export function storeCancellationLines(
+  order: OrderView,
+  cancellation: CancellationNotice,
+): { reason: string; money: string; code: string | null } {
+  const phone = order.store.phone;
+  const reason = customerCancelSentence(
+    cancellation.reasonLine ?? 'other',
+    cancellation.dishes,
+    phone,
+  );
+  const amount = formatPrice(cancellation.amountCents ?? order.breakdown.totalCents);
+  let money: string;
+  switch (cancellation.moneyLine) {
+    case 'refunding':
+      money = refundingSentence(amount, cancellation.cardLabel, cancellation.tipIncluded);
+      break;
+    case 'refunded': {
+      const day = cancellation.refundedAt
+        ? ` on ${dayOf(cancellation.refundedAt, order.store.timeZone)}`
+        : '';
+      money = `Refunded ${amount} to ${cancellation.cardLabel ?? 'your card'}${day}. ${REFUND_TAKES_DAYS}`;
+      break;
+    }
+    case 'sample':
+      money = SAMPLE_NO_REFUND;
+      break;
+    case 'nothing':
+    default:
+      money = 'Nothing was charged.';
+  }
+  return {
+    reason,
+    money,
+    code: cancellation.codeReleased ? codeReleasedSentence(cancellation.codeReleased) : null,
+  };
+}
+
+function storeCancellationEmail(
+  order: OrderView,
+  cancellation: CancellationNotice,
+  options: OrderEmailOptions,
+): Email {
+  const subject = `Order ${order.number} is cancelled`;
+  const { reason, money, code } = storeCancellationLines(order, cancellation);
+  const message = [
+    cancellationOpener(cancellation.opener ?? 'sorry', order.number),
+    reason,
+    money,
+    ...(code ? [code] : []),
+  ].join(' ');
+  return {
+    to: options.to,
+    subject,
+    ...actionEmail({
+      heading: subject,
+      message,
+      action: 'Browse the menu',
+      url: new URL('/menu', options.siteUrl).toString(),
+      footer: [
+        `View your order: ${new URL(`/orders/${order.id}`, options.siteUrl).toString()}`,
+        `Need help? Call ${order.store.phone}.`,
+      ],
+    }),
+  };
+}
+
 /** The finished email for an order and what happened to it. */
 export function renderOrderEmail(
   kind: OrderEmailKind,
@@ -167,14 +247,20 @@ export function renderOrderEmail(
     case 'receipt-late':
       return receipt(order, options, true);
     case 'cancelled': {
+      const cancellation = order.progress.cancellation;
+      if (cancellation?.by === 'store') {
+        return storeCancellationEmail(order, cancellation, options);
+      }
       // D45: her own cancellation of a paid card order sends this email only, with the refund.
       const paidByCard = order.payment.method === 'card' && order.payment.status !== 'UNPAID';
+      // The amount promised at cancellation: less than the total when part was refunded before.
+      const refunding = options.refund ? formatPrice(options.refund.amountCents) : total;
       return notice(
         order,
         options,
         `Order ${order.number} is cancelled`,
         paidByCard
-          ? `You cancelled order ${order.number}. We're refunding ${total} to ${cardOf(order)}. ${REFUND_DELAY}`
+          ? `You cancelled order ${order.number}. We're refunding ${refunding} to ${cardOf(order)}. ${REFUND_DELAY}`
           : `You cancelled order ${order.number}. Nothing was charged.`,
       );
     }
@@ -219,8 +305,14 @@ export function orderNotice(kind: OrderEmailKind, order: OrderView, refundCents?
         title: `Order ${order.number} is placed`,
         body: "We'll let you know when the kitchen starts cooking.",
       };
-    case 'cancelled':
+    case 'cancelled': {
+      const cancellation = order.progress.cancellation;
+      if (cancellation?.by === 'store') {
+        const { reason, money } = storeCancellationLines(order, cancellation);
+        return { title: `Order ${order.number} is cancelled`, body: `${reason} ${money}` };
+      }
       return { title: `Order ${order.number} is cancelled`, body: 'You cancelled this order.' };
+    }
     default:
       return {
         title: `We've refunded ${amount} for order ${order.number}`,

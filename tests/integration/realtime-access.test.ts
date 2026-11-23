@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { channels } from '@/lib/realtime/channels';
 import type { Role } from '@/server/auth/roles';
 import { db } from '@/server/db/client';
-import { runAs, runAsSystem } from '@/server/db/context';
+import { runAsSystem } from '@/server/db/context';
 import { canSubscribe, type Subscriber } from '@/server/modules/realtime/service';
 
 const customer = uuid();
@@ -44,7 +44,8 @@ beforeAll(async () => {
     ).id;
   });
 
-  order = await runAs({ kind: 'user', userId: customer, role: 'customer', isDemo: false }, (ctx) =>
+  // Only the platform writes orders (F4 orders_insert), as checkout does on the customer's behalf.
+  order = await runAsSystem('test setup: order', (ctx) =>
     db(ctx)
       .order.create({
         data: {
@@ -139,5 +140,19 @@ describe('other realtime channels', () => {
     for (const name of ['public-news', `presence-order-${order}`, `private-order-${order}-x`]) {
       expect(await canSubscribe(as(customer, 'customer'), name)).toBe(false);
     }
+  });
+});
+
+describe('the board channel (F5 A1.4, A1.5, T3, T17)', () => {
+  it('admits kitchen, support and admin with two-factor, and refuses editors and staff without it', async () => {
+    for (const role of ['kitchen', 'support', 'admin'] as const) {
+      expect(await canSubscribe(as(uuid(), role, { twoFactorEnabled: true }), channels.ops)).toBe(
+        true,
+      );
+      expect(await canSubscribe(as(uuid(), role), channels.ops)).toBe(false);
+    }
+    expect(
+      await canSubscribe(as(uuid(), 'content_editor', { twoFactorEnabled: true }), channels.ops),
+    ).toBe(false);
   });
 });

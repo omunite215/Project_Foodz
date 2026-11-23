@@ -1,5 +1,14 @@
 import type { Page } from '@playwright/test';
-import { expect, expectNoSidewaysScroll, liveRegion, open, test } from '../account/support';
+import {
+  expect,
+  expectNoSidewaysScroll,
+  liveRegion,
+  newPassword,
+  open,
+  test,
+  uniqueEmail,
+  watchConsole,
+} from '../account/support';
 import {
   addToCart,
   answerBankCheck,
@@ -14,7 +23,7 @@ import {
   saveWorkAddress,
   stripeReachable,
 } from '../checkout-support';
-import { isPhone } from './support';
+import { isPhone, openCart } from './support';
 
 /*
  * Checkout (F4 design 2), the order page it leads to (design 3) and the card payments through
@@ -70,6 +79,7 @@ test.describe('Checkout', () => {
   test('cash: a first order adds an address and a phone, then shows the order (S2, S4, S5, S11, S12.5)', async ({
     page,
   }, testInfo) => {
+    const problems = watchConsole(page);
     await confirmedCustomer(page);
     await addToCart(page, 'gimbap');
     await addToCart(page, 'pad-thai');
@@ -174,6 +184,17 @@ test.describe('Checkout', () => {
     await expect(
       page.locator('header').getByRole('button', { name: 'Cart, empty', includeHidden: true }),
     ).toBeVisible();
+    // The emptied cart says why, with the way back to the order (B16).
+    const cart = await openCart(page);
+    await expect(
+      cart.getByText(/^Order \d+ is placed\. Your cart has been emptied\./),
+    ).toBeVisible();
+    await expect(cart.getByRole('link', { name: 'View your order' })).toHaveAttribute(
+      'href',
+      new URL(page.url()).pathname,
+    );
+    await page.keyboard.press('Escape');
+    await expect(cart).toBeHidden();
     await expectAccessiblePage(page);
     if (isPhone(testInfo)) await expectNoSidewaysScroll(page);
 
@@ -190,6 +211,8 @@ test.describe('Checkout', () => {
       'Cancelled by you',
     );
     await expect(page.getByRole('button', { name: 'Cancel order' })).toHaveCount(0);
+    // No script errors on the way: no hydration mismatch, nothing the CSP refused.
+    expect(problems).toEqual([]);
 
     // Orders list (S12.1).
     await open(page, '/account/orders');
@@ -385,7 +408,17 @@ test.describe('Checkout', () => {
     await expectAccessiblePage(page);
 
     // Back at checkout: finish it or cancel it, never a second unpaid order (U11).
+    const orderPath = new URL(page.url()).pathname;
     await addToCart(page, 'kimchi');
+    // The cart says so first, with the way to finish paying (S7.6).
+    const cart = await openCart(page);
+    await expect(cart.getByText(/^You have an unpaid order \d+\./)).toBeVisible();
+    await expect(cart.getByRole('link', { name: 'Finish paying' })).toHaveAttribute(
+      'href',
+      orderPath,
+    );
+    await page.keyboard.press('Escape');
+    await expect(cart).toBeHidden();
     await openCheckout(page);
     const notice = inMain(page).getByText(
       /^Order \d+ is waiting for payment \(\$\d+\.\d\d\)\. It expires at /,
@@ -402,6 +435,61 @@ test.describe('Checkout', () => {
       timeout: 20_000,
     });
     await expect(page.locator('#pay-reason')).not.toHaveText(/Finish paying/);
+  });
+
+  test('an address checked as a guest is offered, filled in, once she has an account (S2.5, D10)', async ({
+    page,
+  }) => {
+    // As a guest: a dish, and an address checked in the cart without saving it.
+    await addToCart(page, 'gimbap');
+    const cart = await openCart(page);
+    const delivery = cart.getByRole('region', { name: 'Delivery' });
+    await delivery.getByRole('button', { name: 'Check your address' }).click();
+    const field = delivery.getByRole('combobox', { name: 'Your address' });
+    await field.pressSequentially('1 Faneuil Hall Square Boston', { delay: 25 });
+    const options = cart.getByRole('listbox', { name: 'Address suggestions' }).getByRole('option');
+    await expect(options.filter({ hasText: /Boston/ }).first()).toBeVisible({ timeout: 20_000 });
+    const index = (await options.allInnerTexts()).findIndex((text) => /Boston/.test(text));
+    for (let step = 0; step <= index; step++) await field.press('ArrowDown');
+    await field.press('Enter');
+    await expect(delivery.getByRole('button', { name: 'Change delivery address' })).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.keyboard.press('Escape');
+
+    // Checkout sends her to sign in; she creates an account instead and comes back (S1.1). The
+    // dialog that opens there hides the header, so the form is filled here rather than through
+    // signUp(), which waits for the header's account menu.
+    await open(page, '/sign-up?callbackUrl=%2Fcheckout&reason=checkout');
+    await page.getByLabel('Name').fill('Maya Lopez');
+    await page.getByLabel('Email').fill(uniqueEmail('maya'));
+    await page.getByLabel('Password', { exact: true }).fill(newPassword());
+    await page.getByRole('button', { name: 'Create account' }).click();
+    await expect(page).toHaveURL(/\/checkout$/, { timeout: 30_000 });
+
+    // The add dialog opens by itself, with the place she checked; nothing is saved yet.
+    const dialog = page.getByRole('dialog', { name: 'Add an address' });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByRole('heading', { name: 'Add an address' })).toBeFocused();
+    // One announcement: what to do, then the delivery check, so neither cuts the other off.
+    await expect(liveRegion(page)).toHaveText(
+      /^Add the apartment and instructions, then save\. We deliver here/,
+      { timeout: 20_000 },
+    );
+    await expect(dialog.getByRole('combobox', { name: 'Address' })).toHaveValue(/Faneuil Hall/);
+    await expect(dialog.locator('#delivery-result')).toHaveText(/^We deliver here/, {
+      timeout: 20_000,
+    });
+    const houseNumber = dialog.getByLabel('House number');
+    if (await houseNumber.isVisible()) await houseNumber.fill('1');
+    await dialog.getByRole('button', { name: 'Save address' }).click();
+    await expect(dialog).toBeHidden({ timeout: 20_000 });
+    await expect(page.getByRole('radio', { name: /^Home, default, .*Faneuil Hall/ })).toBeChecked();
+
+    // Once only: a reload doesn't offer it again now that she has an address.
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Confirm and pay' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Add an address' })).toHaveCount(0);
   });
 
   test('guests are sent to sign in and come back to checkout (S1.1)', async ({ page }) => {

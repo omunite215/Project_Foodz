@@ -32,6 +32,7 @@ import {
   staffCancelOrder,
   undoMove,
 } from './service';
+import { DEMO_CANNOT_CHANGE } from './text';
 
 /*
  * The staff order board's actions (F5). Each names its permission, so the wrapper refuses
@@ -98,6 +99,7 @@ export const boardDishesAction = userAction
 export const moveOrderAction = userAction
   .metadata({
     name: 'board.move',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'order.move',
     permission: { order: ['update-status'] },
   })
@@ -108,6 +110,7 @@ export const moveOrderAction = userAction
 export const undoMoveAction = userAction
   .metadata({
     name: 'board.undo',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'order.undo',
     permission: { order: ['update-status'] },
   })
@@ -118,6 +121,7 @@ export const undoMoveAction = userAction
 export const moveBackAction = userAction
   .metadata({
     name: 'board.moveBack',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'order.move-back',
     permission: { order: ['move-back'] },
   })
@@ -126,7 +130,12 @@ export const moveBackAction = userAction
 
 /** "Can't make it" on a New order (A6): KITCHEN only (design D14). 20 an hour. */
 export const refuseOrderAction = userAction
-  .metadata({ name: 'board.refuse', rateLimit: 'order.refuse', permission: { order: ['refuse'] } })
+  .metadata({
+    name: 'board.refuse',
+    rateLimit: 'order.refuse',
+    demoMessage: DEMO_CANNOT_CHANGE,
+    permission: { order: ['refuse'] },
+  })
   .inputSchema(refuseOrderInput)
   .action(async ({ parsedInput, ctx }) => refuseOrder(ctx.actor, parsedInput));
 
@@ -138,6 +147,7 @@ export const refuseOrderAction = userAction
 export const staffCancelOrderAction = userAction
   .metadata({
     name: 'board.cancel',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'order.staff-cancel',
     permission: { order: ['cancel', 'read-any'] },
   })
@@ -148,6 +158,7 @@ export const staffCancelOrderAction = userAction
 export const markPickedUpAction = userAction
   .metadata({
     name: 'board.pickedUp',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'order.handover',
     permission: { order: ['hand-over'] },
   })
@@ -158,6 +169,7 @@ export const markPickedUpAction = userAction
 export const markDeliveredAction = userAction
   .metadata({
     name: 'board.delivered',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'order.handover',
     permission: { order: ['hand-over'] },
   })
@@ -168,6 +180,7 @@ export const markDeliveredAction = userAction
 export const setDishAvailabilityAction = userAction
   .metadata({
     name: 'board.dishAvailability',
+    demoMessage: DEMO_CANNOT_CHANGE,
     rateLimit: 'menu.availability',
     permission: { menu: ['update-availability'] },
   })

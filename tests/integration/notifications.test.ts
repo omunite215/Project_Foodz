@@ -73,6 +73,7 @@ describe('notify', () => {
       title: 'Your order is ready',
       body: 'Riley is picking it up now.',
       link: '/orders/1',
+      kind: 'general',
     });
     expect(mocks.send).not.toHaveBeenCalled();
   });
@@ -164,5 +165,29 @@ describe('the email job', () => {
     expect(await sendNotificationEmail(id)).toBe('skipped');
     expect(await sendNotificationEmail(uuid())).toBe('skipped');
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('order notices (F5 S6.1)', () => {
+  it('say which order and step they are about, for the visible tab', async () => {
+    const orderId = '0196a1b2-0000-7000-8000-0000000000f5';
+    const { id } = await notify({
+      userId: alice,
+      type: 'order.accepted',
+      title: 'Order 1042 accepted',
+      body: 'The kitchen has your order and will start cooking soon.',
+      link: `/orders/${orderId}`,
+      order: { orderId, orderNumber: '1042', status: 'accepted' },
+    });
+    expect(mocks.publish).toHaveBeenCalledWith(`private-user-${alice}`, 'notification.created', {
+      id,
+      title: 'Order 1042 accepted',
+      body: 'The kitchen has your order and will start cooking soon.',
+      link: `/orders/${orderId}`,
+      kind: 'order',
+      orderId,
+      orderNumber: '1042',
+      status: 'accepted',
+    });
   });
 });

@@ -156,6 +156,14 @@ export const cartMetaSchema = z.object({
   code: z.string().min(1).max(MAX_CODE_LENGTH).regex(/^\S+$/u).nullable(),
   /** The saved address chosen with "Change"; null means the default one. */
   addressId: z.uuid().nullable(),
+  /**
+   * The order that just emptied the cart (F4 B16): the cart says so until she dismisses it or
+   * adds a dish. It belongs to the session, like the rest of the meta.
+   */
+  placed: z
+    .object({ orderId: z.uuid(), number: z.string().min(1).max(20) })
+    .nullable()
+    .optional(),
 });
 export type CartMeta = z.infer<typeof cartMetaSchema>;
 
@@ -188,7 +196,7 @@ export const cartMetaCollection = collectionOptions('cartMeta', (client) =>
   }),
 );
 
-const NO_META: Omit<CartMeta, 'id'> = { code: null, addressId: null };
+const NO_META: Omit<CartMeta, 'id'> = { code: null, addressId: null, placed: null };
 
 // ------------------------------------------------------------------ actions
 
@@ -228,6 +236,7 @@ export function cartActions(client: DbClient) {
       meta.update(META_ID, (draft) => {
         if ('code' in change) draft.code = change.code ?? null;
         if ('addressId' in change) draft.addressId = change.addressId ?? null;
+        if ('placed' in change) draft.placed = change.placed ?? null;
       });
     } else {
       meta.insert({ id: META_ID, ...NO_META, ...change });
@@ -236,6 +245,7 @@ export function cartActions(client: DbClient) {
 
   return {
     add({ menuItemId, flavors = [], quantity = 1, note }: NewCartLine): AddOutcome {
+      if (meta.get(META_ID)?.placed) writeMeta({ placed: null });
       const kept = cleanNote(note);
       const id = cartLineId(menuItemId, flavors, kept);
       const items = itemsIn(cart.values());
@@ -358,6 +368,11 @@ export function cartActions(client: DbClient) {
       if ((meta.get(META_ID)?.addressId ?? null) !== addressId) writeMeta({ addressId });
     },
 
+    /** The order that emptied the cart (B16), or null once she has seen it. */
+    setPlaced(placed: { orderId: string; number: string } | null) {
+      if ((meta.get(META_ID)?.placed ?? null) !== placed) writeMeta({ placed });
+    },
+
     /** Forgets the code and the chosen address: they belonged to the session that ended. */
     forgetMeta() {
       if (meta.has(META_ID)) meta.delete(META_ID);
@@ -385,7 +400,7 @@ export function useCart() {
 export function useCartMeta(): Omit<CartMeta, 'id'> {
   const { data } = useLiveQuery({ query: (q) => q.from({ meta: cartMetaCollection }) });
   const row = data?.[0];
-  return row ? { code: row.code, addressId: row.addressId } : NO_META;
+  return row ? { code: row.code, addressId: row.addressId, placed: row.placed ?? null } : NO_META;
 }
 
 export function useCartActions(): CartActions {

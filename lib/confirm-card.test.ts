@@ -23,6 +23,25 @@ describe('outcomeFromError (design 2.17, 2.18)', () => {
     });
   });
 
+  it('reads an attempt Stripe has ended as a decline, whatever the error type', () => {
+    expect(
+      outcomeFromError({
+        type: 'invalid_request_error',
+        code: undefined,
+        decline_code: undefined,
+        payment_intent: { status: 'requires_payment_method' },
+      }),
+    ).toEqual({ kind: 'declined', code: null, declineCode: null });
+    expect(
+      outcomeFromError({
+        type: 'invalid_request_error',
+        code: 'payment_intent_unexpected_state',
+        decline_code: undefined,
+        payment_intent: { status: 'processing' },
+      }),
+    ).toEqual({ kind: 'unreachable' });
+  });
+
   it('never calls anything but the bank answer a decline (D20)', () => {
     expect(
       outcomeFromError({

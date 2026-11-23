@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { createOTP } from '@better-auth/utils/otp';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
@@ -14,6 +15,7 @@ import {
   siteSettings,
   tags,
 } from './content';
+import { resetBoardFixtures } from './board';
 import { menuItems } from './menu';
 import { escapeHtml } from './rich-text';
 
@@ -43,6 +45,18 @@ export interface SeedConfig {
 export interface SeedResult {
   /** Present only when the admin was created by this run: shown once, never stored in clear. */
   adminTwoFactor?: { totpUri: string; backupCodes: string[] };
+  /**
+   * The sample staff accounts' two-factor setup (F5, local and CI only), every run: the
+   * authenticator secret is derived from BETTER_AUTH_SECRET and the email, so it stays the same
+   * from run to run; the backup codes are new each run.
+   */
+  staffTwoFactor?: {
+    email: string;
+    name: string;
+    role: string;
+    totpUri: string;
+    backupCodes: string[];
+  }[];
   created: Record<string, number>;
 }
 
@@ -90,6 +104,26 @@ export const SAMPLE_ACCOUNTS = [
     phone: '+16175550123',
   },
 ] as const;
+
+/**
+ * Sample staff for the order board (F5): local and CI only, like the sample customers, with the
+ * per-run sample password. Casey has no two-factor, for the screen that asks for it (A1.4).
+ */
+export const SAMPLE_STAFF = [
+  { email: 'kitchen@foodz.example', name: 'Alex Kim', role: 'kitchen', twoFactor: true },
+  { email: 'support@foodz.example', name: 'Morgan Diaz', role: 'support', twoFactor: true },
+  { email: 'editor@foodz.example', name: 'Taylor Brooks', role: 'content_editor', twoFactor: true },
+  {
+    email: 'kitchen.nofactor@foodz.example',
+    name: 'Casey Park',
+    role: 'kitchen',
+    twoFactor: false,
+  },
+] as const;
+
+/** A sample staff member's authenticator secret: the same on every run for the same secret. */
+export const staffTotpSecret = (authSecret: string, email: string) =>
+  createHmac('sha256', authSecret).update(`foodz-staff-totp:${email}`).digest('hex').slice(0, 32);
 
 const TERMS_VERSION = 1;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -250,6 +284,7 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
       }
 
       // -------------------------------------------------------------- sample customers
+      let staffTwoFactor: SeedResult['staffTwoFactor'];
       if (sampleHash) {
         const sample: Record<string, string> = {};
         for (const account of SAMPLE_ACCOUNTS) {
@@ -310,6 +345,67 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         await tx.coupon.updateMany({ where: { code: 'LASTONE' }, data: { usedCount: 0 } });
         count('orders', await seedPastWelcomeOrder(tx, secondCustomer, now));
         await completePastOrderSnapshot(tx);
+
+        // F5: sample staff with two-factor, and the board's fixtures in every state.
+        const staff: Record<string, string> = {};
+        staffTwoFactor = [];
+        for (const member of SAMPLE_STAFF) {
+          const user = await upsertUser(tx, {
+            email: member.email,
+            name: member.name,
+            role: member.role,
+            isDemo: false,
+            passwordHash: sampleHash,
+            resetPassword: true,
+            state: {
+              emailVerified: true,
+              banned: false,
+              banReason: null,
+              isSample: true,
+              phone: null,
+            },
+          });
+          staff[member.email] = user.id;
+          count('users', user.created);
+          await tx.twoFactor.deleteMany({ where: { userId: user.id } });
+          if (!member.twoFactor) {
+            await tx.user.update({ where: { id: user.id }, data: { twoFactorEnabled: false } });
+            continue;
+          }
+          const secret = staffTotpSecret(config.authSecret, member.email);
+          const backupCodes = Array.from({ length: 10 }, () => {
+            const code = generateRandomString(10, 'a-z', '0-9', 'A-Z');
+            return `${code.slice(0, 5)}-${code.slice(5)}`;
+          });
+          await tx.twoFactor.create({
+            data: {
+              id: uuidv7(),
+              userId: user.id,
+              secret: await encrypt(secret),
+              backupCodes: await encrypt(JSON.stringify(backupCodes)),
+              verified: true,
+            },
+          });
+          await tx.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
+          staffTwoFactor.push({
+            email: member.email,
+            name: member.name,
+            role: member.role,
+            totpUri: createOTP(secret, { digits: 6 }).url('Foodz', member.email),
+            backupCodes,
+          });
+        }
+        const fixtures = await resetBoardFixtures(
+          tx,
+          {
+            priya: secondCustomer,
+            dana: demo.customer!,
+            alex: staff['kitchen@foodz.example']!,
+            morgan: staff['support@foodz.example']!,
+          },
+          now,
+        );
+        created.boardFixtures = (created.boardFixtures ?? 0) + fixtures;
 
         const favoriteDishes = await tx.menuItem.findMany({
           where: { slug: { in: [...DEMO_FAVORITE_SLUGS] } },
@@ -400,7 +496,7 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         count('blogPosts', true);
       }
 
-      return { adminTwoFactor, created };
+      return { adminTwoFactor, ...(staffTwoFactor && { staffTwoFactor }), created };
     },
     { timeout: 60_000 },
   );

@@ -1,12 +1,13 @@
 'use client';
 
 import { Check } from 'lucide-react';
-import { type ReactNode, useId } from 'react';
+import { type ReactNode, useId, useRef } from 'react';
 import { TIP_PERCENTS, type Quote } from '@/server/modules/cart/schema';
 import { FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { type TipTile, tipTileName } from '@/lib/checkout-text';
 import { formatPrice } from '@/lib/format';
+import { useMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
 /*
@@ -59,6 +60,19 @@ export function TipPicker({
   const id = useId();
   const hintId = `${id}-tip-hint`;
   const errorId = `${TIP_AMOUNT_ID}-error`;
+  // "Other" chosen: the amount field fades in from 4 px up; focus stays on the tile (D11).
+  const otherRef = useRef<HTMLFieldSetElement>(null);
+  const otherShown = useRef(tile.kind === 'other');
+  useMotion(
+    (motion) => {
+      const appeared = tile.kind === 'other' && !otherShown.current;
+      otherShown.current = tile.kind === 'other';
+      const field = otherRef.current?.querySelector('[data-tip-amount]');
+      if (!appeared || motion.reduced || !field) return;
+      motion.from(field, { y: -4, opacity: 0, duration: 0.15, ease: 'power2.out' });
+    },
+    { scope: otherRef, dependencies: [tile.kind] },
+  );
 
   const amountOf = (choice: TipTile): number | null => {
     if (choice.kind === 'percent') {
@@ -69,7 +83,7 @@ export function TipPicker({
   };
 
   return (
-    <fieldset aria-describedby={hintId} className="min-w-0">
+    <fieldset ref={otherRef} aria-describedby={hintId} className="min-w-0">
       <legend className="mb-1 w-full p-0">
         <h2 className="text-body-2 font-semibold text-neutral-1">Tip your courier</h2>
       </legend>
@@ -146,7 +160,7 @@ export function TipPicker({
         })}
       </div>
       {tile.kind === 'other' ? (
-        <div className="mt-4 max-w-[200px]">
+        <div data-tip-amount className="mt-4 max-w-[200px]">
           <FieldLabel htmlFor={TIP_AMOUNT_ID}>Tip amount</FieldLabel>
           <div className="relative mt-2">
             <span

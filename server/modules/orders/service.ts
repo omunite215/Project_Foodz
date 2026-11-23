@@ -36,6 +36,7 @@ import { blockedFor, type LimitCheck, takeAttempts } from '@/server/security/rat
 import { type OrderEffect, rememberPaymentNetwork, runEffects } from './effects';
 import { applyIntent, checkWithStripe, expireUnpaidOrder } from './payment-sync';
 import { changeReason, priceChanges } from './price-changes';
+import { shippingFor } from './state';
 import {
   addEvent,
   anonymizeOwnOrders,
@@ -46,6 +47,7 @@ import {
   findByAttemptKey,
   findCustomer,
   findOrderForPayment,
+  findOrderShipping,
   findOrderView,
   findPricingFacts,
   findRecentDuplicate,
@@ -108,7 +110,7 @@ import {
   storeClosedMessage,
   unpaidOrderMessage,
 } from './text';
-import { storeFacts, toOrderSummary, toOrderView } from './views';
+import { cancelReasonOf, storeFacts, toOrderSummary, toOrderView } from './views';
 
 /*
  * Checkout and the customer's orders (F4). Placing an order prices it again from the database
@@ -270,9 +272,9 @@ type OwnCard = NonNullable<Awaited<ReturnType<typeof findOwnCard>>>;
 
 /** Marks an order whose payment could not be started as failed and gives its code back. */
 async function abandonOrder(orderId: string) {
-  await runAsSystem('payment not started', async (ctx) => {
+  const failed = await runAsSystem('payment not started', async (ctx) => {
     const order = await lockOrder(ctx, orderId);
-    if (!order || order.status !== 'PENDING_PAYMENT' || order.stripePaymentIntentId) return;
+    if (!order || order.status !== 'PENDING_PAYMENT' || order.stripePaymentIntentId) return false;
     await updateOrder(ctx, orderId, order.version, { status: 'FAILED' });
     const redemption = await findRedemption(ctx, orderId);
     if (redemption && redemption.status !== 'RELEASED') {
@@ -286,7 +288,13 @@ async function abandonOrder(orderId: string) {
       toStatus: 'FAILED',
       data: { actor: 'system', code: 'payment_not_started', declineCode: null },
     });
+    return true;
   });
+  if (failed) {
+    await runEffects([
+      { kind: 'publish', orderId, at: new Date().toISOString(), fromStatus: 'PENDING_PAYMENT' },
+    ]);
+  }
 }
 
 /**
@@ -314,11 +322,14 @@ async function startCardPayment(
         saveCard = true;
       }
     }
+    const snapshot = await runAs(actor, (ctx) => findOrderShipping(ctx, order.id));
+    const shipping = snapshot ? shippingFor(snapshot) : null;
     const intent = await gateway.createIntent({
       amountCents: order.totalCents,
       orderId: order.id,
       orderNumber: order.number,
       instance: await getInstanceTag(),
+      ...(shipping && { shipping }),
       customerId,
       paymentMethodId,
       saveCard,
@@ -542,6 +553,9 @@ async function placeOrderOnce(
 
   const created = await runAsSystem('checkout', async (ctx) => {
     await lockCustomerOrders(ctx, actor.userId);
+    // Deleted or suspended while this press waited: account deletion holds the same lock (B21).
+    const stillCustomer = await findCustomer(ctx, actor.userId);
+    if (!stillCustomer || stillCustomer.banned || stillCustomer.deletedAt) throw unauthenticated();
     const facts = await findPricingFacts(ctx, {
       userId: actor.userId,
       addressId: input.addressId,
@@ -679,7 +693,10 @@ async function placeOrderOnce(
   const { order } = created;
 
   if (!isCard) {
-    await runEffects([{ kind: 'email', orderId: order.id, email: 'receipt', change: 'placed' }]);
+    await runEffects([
+      { kind: 'email', orderId: order.id, email: 'receipt', change: 'placed' },
+      { kind: 'publish', orderId: order.id, at: now.toISOString() },
+    ]);
     return {
       kind: 'placed',
       orderId: order.id,
@@ -780,12 +797,7 @@ export async function getAttemptStatus(
         kind: 'cancelled',
         orderId: order.id,
         number: order.number,
-        reason:
-          order.cancelReason === 'customer' ||
-          order.cancelReason === 'payment-expired' ||
-          order.cancelReason === 'account-deleted'
-            ? order.cancelReason
-            : null,
+        reason: cancelReasonOf(order.cancelReason),
       };
     default:
       return { kind: 'placed', orderId: order.id, number: order.number };
@@ -806,7 +818,11 @@ function decodeCursor(cursor: string | undefined) {
 }
 
 /** S12.1, S12.2: in progress first (first page only), then the rest 20 at a time. */
-export async function listMyOrders(actor: UserActor, input: unknown = {}): Promise<OrdersPage> {
+export async function listMyOrders(
+  actor: UserActor,
+  input: unknown = {},
+  now = new Date(),
+): Promise<OrdersPage> {
   const { cursor } = listOrdersInput.parse(input);
   const after = decodeCursor(cursor);
   return runAs(actor, async (ctx) => {
@@ -815,8 +831,8 @@ export async function listMyOrders(actor: UserActor, input: unknown = {}): Promi
     const page = past.slice(0, ORDERS_PAGE_SIZE);
     const last = page.at(-1);
     return {
-      inProgress: inProgress.map(toOrderSummary),
-      past: page.map(toOrderSummary),
+      inProgress: inProgress.map((row) => toOrderSummary(row, now)),
+      past: page.map((row) => toOrderSummary(row, now)),
       nextCursor:
         past.length > ORDERS_PAGE_SIZE && last ? encodeCursor(last.createdAt, last.id) : null,
     };
@@ -863,7 +879,10 @@ export async function cancelOrder(
   const result = await runAsSystem('cancel', async (ctx) => {
     const order = await lockOrder(ctx, orderId);
     if (!order || order.userId !== actor.userId) throw notFound();
-    const paidByCard = order.paymentMethod === 'CARD' && order.paymentStatus === 'PAID';
+    // A part refunded earlier (staff, from Stripe) still leaves the rest to give back.
+    const paidByCard =
+      order.paymentMethod === 'CARD' &&
+      (order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIALLY_REFUNDED');
     const refundCents = order.totalCents - order.refundedCents;
     if (order.status === 'CANCELLED') {
       // A double press cancels once (S12.6).
@@ -908,9 +927,16 @@ export async function cancelOrder(
       },
     });
     const effects: OrderEffect[] = [
-      { kind: 'email', orderId, email: 'cancelled', change: 'cancelled' },
+      {
+        kind: 'email',
+        orderId,
+        email: 'cancelled',
+        change: 'cancelled',
+        ...(paidByCard && { refundCents, at: now.toISOString() }),
+      },
     ];
     if (paidByCard) effects.push({ kind: 'refund', orderId });
+    effects.push({ kind: 'publish', orderId, at: now.toISOString(), fromStatus: order.status });
     return { order, paidByCard, refundCents, effects };
   });
   await runEffects(result.effects);
@@ -1120,9 +1146,22 @@ export async function cancelUnpaidOrdersForDeletion(actor: UserActor, now = new 
   }, Promise.resolve());
 }
 
-/** Inside the deletion transaction: what still stops it. */
-export function ordersBlockingDeletion(ctx: DbContext, userId: string) {
-  return findBlockingOrders(ctx, userId);
+/**
+ * First thing in the deletion transaction: the customer's order lock, which checkout and every
+ * payment step take too, so no order or payment lands while the account is erased (B21).
+ */
+export function lockOrdersForDeletion(ctx: DbContext, userId: string) {
+  return lockCustomerOrders(ctx, userId);
+}
+
+/**
+ * What still stops a deletion: a placed order she can cancel, orders on their way, and a card
+ * payment the bank is still confirming (its order stays waiting until Stripe decides).
+ */
+export async function ordersBlockingDeletion(ctx: DbContext, userId: string) {
+  const blocking = await findBlockingOrders(ctx, userId);
+  const unpaid = await findUnpaid(ctx, userId);
+  return { ...blocking, paying: unpaid ? { id: unpaid.id, number: unpaid.number } : null };
 }
 
 /** Inside the deletion transaction: the caller's orders kept without their details. */

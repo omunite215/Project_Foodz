@@ -302,7 +302,8 @@ describe('campaigns', () => {
       await addCoupon('TEST-USED-UP', { usageLimit: 1, usedCount: 1 });
       // Codes that belong to one customer or cannot be used yet must never be advertised.
       await addCoupon('TEST-PERSONAL', { ownerUserId: uuid() });
-      await addCoupon('TEST-CREDIT', { isStoreCredit: true });
+      // Store credit always has an owner (coupons_store_credit_owner).
+      await addCoupon('TEST-CREDIT', { isStoreCredit: true, ownerUserId: uuid() });
       await addCoupon('TEST-COUPON-OFF', { isActive: false });
       await addCoupon('TEST-NOT-YET', { startsAt: new Date('2031-01-05T00:00:00Z') });
       await addCampaign('Window');

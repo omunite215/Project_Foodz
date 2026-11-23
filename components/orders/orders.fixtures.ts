@@ -69,6 +69,18 @@ export function orderViewFixture(overrides: Partial<OrderView> = {}): OrderView 
     timeline: [{ kind: 'placed', at: PLACED_AT, amountCents: null }],
     flags: { revivedAfterLatePayment: false, lateRefund: false, mismatchRefund: false },
     store: { phone: '(617) 555-0142', timeZone: 'America/New_York' },
+    progress: {
+      asOf: PLACED_AT,
+      version: 1,
+      steps: null,
+      arrival: null,
+      placedWaiting: 'none',
+      deliveredAt: null,
+      cashCollected: false,
+      cancellation: null,
+      live: true,
+      refreshAt: null,
+    },
     ...overrides,
   };
 }
@@ -112,6 +124,9 @@ export function orderSummaryFixture(overrides: Partial<OrderSummary> = {}): Orde
     statusWord: 'placed',
     method: 'cash',
     moneyFlag: null,
+    arrival: null,
+    reorderable: false,
+    collected: false,
     ...overrides,
   };
 }

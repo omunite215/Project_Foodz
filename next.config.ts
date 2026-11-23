@@ -24,6 +24,13 @@ const lockedDownHeaders = [
   { key: 'Permissions-Policy', value: 'geolocation=(), camera=(), microphone=()' },
 ];
 
+// Staff tools (F5 A1.9): never indexed, never kept by the browser, so Back after signing out
+// shows the sign-in page rather than the board.
+const adminHeaders = [
+  { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+  { key: 'Cache-Control', value: 'no-store' },
+];
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
   poweredByHeader: false,
@@ -42,6 +49,7 @@ const nextConfig: NextConfig = {
         '/sitemap.xml',
         '/.well-known/:path*',
       ].map((source) => ({ source, headers: lockedDownHeaders })),
+      { source: '/admin/:path*', headers: adminHeaders },
     ];
   },
   async redirects() {
