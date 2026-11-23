@@ -165,6 +165,30 @@ let wakeLock: WakeLockSentinel | null = null;
 let listening = false;
 let resolveFirstFix: ((fix: Fix) => void) | null = null;
 const ownChanges = new Set<string>();
+/*
+ * The realtime echo of this device's own change can arrive before the answer that names its
+ * `changeId`. While an availability request is out, events wait, and are judged once it answers.
+ */
+let requestsOut = 0;
+let held: PartnerAvailabilityChangedEvent[] = [];
+
+async function availabilityRequest(body: unknown, keepalive = false): Promise<Answer | null> {
+  requestsOut += 1;
+  try {
+    const answer = await call('PUT', '/api/v1/partner/availability', body, { keepalive });
+    const changeId = field(answer?.body, 'changeId');
+    if (typeof changeId === 'string') ownChanges.add(changeId);
+    return answer;
+  } finally {
+    requestsOut -= 1;
+    if (requestsOut === 0 && held.length) {
+      const waiting = held;
+      held = [];
+      // After the caller has applied the answer.
+      setTimeout(() => waiting.forEach((event) => onAvailabilityEvent(event)), 0);
+    }
+  }
+}
 
 const WAKE_KEY = 'foodz.partner-keep-screen-on';
 const ASKED_KEY = 'foodz.partner-location-asked';
@@ -479,6 +503,10 @@ function suspend(how: 'event' | 'signedOut') {
 
 export function onAvailabilityEvent(event: PartnerAvailabilityChangedEvent) {
   if (ownChanges.has(event.changeId)) return;
+  if (requestsOut > 0) {
+    held.push(event);
+    return;
+  }
   const state = get();
   if (!event.online) {
     if (state.phase === 'offline' && !state.isDemo) return;
@@ -632,7 +660,7 @@ async function sendOnline(fix: Fix | undefined) {
         point: locationsBody([point]).points[0],
       }
     : { online: true };
-  const answer = await call('PUT', '/api/v1/partner/availability', body);
+  const answer = await availabilityRequest(body);
   if (get().phase !== 'finding') return;
   if (!answer) {
     stopWatching();
@@ -641,8 +669,6 @@ async function sendOnline(fix: Fix | undefined) {
     return;
   }
   if (answer.status === 200) {
-    const changeId = field(answer.body, 'changeId');
-    if (typeof changeId === 'string') ownChanges.add(changeId);
     const availability = field(answer.body, 'availability');
     const since = field(availability, 'onlineSince');
     const at = field(answer.body, 'at');
@@ -707,16 +733,8 @@ export function tickWait(now = Date.now()) {
 // ------------------------------------------------------------------ going offline (design 6.5)
 
 async function deliverOffline(keepalive: boolean): Promise<boolean> {
-  const answer = await call(
-    'PUT',
-    '/api/v1/partner/availability',
-    { online: false },
-    { keepalive },
-  );
-  if (!answer) return false;
-  const changeId = field(answer.body, 'changeId');
-  if (typeof changeId === 'string') ownChanges.add(changeId);
-  return answer.status < 500;
+  const answer = await availabilityRequest({ online: false }, keepalive);
+  return answer !== null && answer.status < 500;
 }
 
 /** "Go offline": everything stops first, then the server is told (P12.1, P12.2). */

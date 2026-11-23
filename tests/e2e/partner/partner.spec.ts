@@ -157,6 +157,9 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ ...ROUTE.R0, accuracy: 15 });
   await signInTo(page, PARTNERS.diego);
+  // Signing in reaches /partner without a new document; the app loads itself once as a partner
+  // document, so location is allowed (Permissions-Policy). Wait for that document.
+  await open(page, '/partner');
   await expect(page).toHaveTitle('Home | Foodz Partner');
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
   await expect(page.getByRole('banner').getByText(/^Offline/)).toBeVisible();
@@ -211,9 +214,10 @@ test('the location explainer comes before the browser asks', async ({ page }, te
 test('the demo partner goes online with a pretend location', async ({ page }, testInfo) => {
   test.skip(projectOf(testInfo) !== 'partner-1440', 'The demo partner is shared by everyone.');
   await signInTo(page, PARTNERS.riley);
+  await open(page, '/partner');
   await expect(page.getByText(/^Demo partner: we use a pretend location/)).toBeVisible();
   await page.getByRole('button', { name: /^Go online/ }).click();
-  await expect(page.getByText('Pretend location near the kitchen')).toBeVisible({
+  await expect(page.getByText('Pretend location near the kitchen', { exact: true })).toBeVisible({
     timeout: 15_000,
   });
   await expect(page.getByText('Not your real location')).toBeVisible();

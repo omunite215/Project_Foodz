@@ -66,12 +66,13 @@ function useReviewCount(enabled: boolean) {
 function CountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
+    // The number is drawn by CSS, so it isn't part of the link's text: the link's name says it
+    // in words ("Partners, 2 applications to review").
     <span
       aria-hidden
-      className="ml-auto inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-neutral-1 px-1.5 text-caption font-semibold text-white tabular-nums group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:min-w-5 group-data-[collapsible=icon]:px-1"
-    >
-      {badgeText(count)}
-    </span>
+      data-count={badgeText(count)}
+      className="ml-auto inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-neutral-1 px-1.5 text-caption font-semibold text-white tabular-nums after:content-[attr(data-count)] group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:min-w-5 group-data-[collapsible=icon]:px-1"
+    />
   );
 }
 

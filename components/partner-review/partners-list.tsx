@@ -142,14 +142,14 @@ function ListLink({
 const TAB_LINK =
   'relative inline-flex h-12 shrink-0 items-center gap-2 px-3 text-body-5 font-medium text-neutral-3 hover:text-neutral-1 focus-visible:-outline-offset-2';
 
+/** The number is drawn by CSS, so the tab's name says it once, in words ("To review, 2 applications"). */
 function CountChip({ count }: { count: number }) {
   return (
     <span
       aria-hidden
-      className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-neutral-7 px-1.5 text-caption font-semibold text-neutral-1 tabular-nums"
-    >
-      {count}
-    </span>
+      data-count={count}
+      className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-neutral-7 px-1.5 text-caption font-semibold text-neutral-1 tabular-nums after:content-[attr(data-count)]"
+    />
   );
 }
 
