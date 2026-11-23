@@ -9,10 +9,17 @@ import { PrismaClient } from '@/server/db/generated/client';
 import {
   DEMO_ACCOUNTS,
   SAMPLE_ACCOUNTS,
+  SAMPLE_STAFF,
   sampleAccountsRefusal,
   type SeedResult,
   seedDatabase,
+  staffTotpSecret,
 } from '../../prisma/seeding';
+import {
+  BOARD_FIXTURE_NUMBERS,
+  boardFixtureId,
+  resetBoardFixtures,
+} from '../../prisma/seeding/board';
 import { quoteCart } from '@/server/modules/cart/service';
 import { quote } from '@/server/modules/cart/pricing';
 import { currentTermsVersion, getLegalPage } from '@/server/modules/content/service';
@@ -611,5 +618,126 @@ describe('legal pages', () => {
   it('returns nothing for other or malformed slugs', async () => {
     expect(await getLegalPage('faq')).toBeNull();
     expect(await getLegalPage('../terms')).toBeNull();
+  });
+});
+
+describe('F5 board fixtures and sample staff (local and CI only)', () => {
+  it('adds the sample staff, two-factor on all but Casey, with a secret stable across runs', async () => {
+    const staff = await migrator.user.findMany({
+      where: { email: { in: SAMPLE_STAFF.map((member) => member.email) } },
+      select: { email: true, role: true, isSample: true, isDemo: true, twoFactorEnabled: true },
+      orderBy: { email: 'asc' },
+    });
+    expect(staff).toEqual(
+      SAMPLE_STAFF.map((member) => ({
+        email: member.email,
+        role: member.role,
+        isSample: true,
+        isDemo: false,
+        twoFactorEnabled: member.twoFactor,
+      })).toSorted((a, b) => a.email.localeCompare(b.email)),
+    );
+    expect(first.staffTwoFactor?.map((member) => member.email)).toEqual([
+      'kitchen@foodz.example',
+      'support@foodz.example',
+      'editor@foodz.example',
+    ]);
+    expect(second.staffTwoFactor?.map((member) => member.totpUri)).toEqual(
+      first.staffTwoFactor?.map((member) => member.totpUri),
+    );
+    expect(second.staffTwoFactor?.[0]?.backupCodes).not.toEqual(
+      first.staffTwoFactor?.[0]?.backupCodes,
+    );
+    const kitchen = await migrator.twoFactor.findFirstOrThrow({
+      where: { user: { email: 'kitchen@foodz.example' } },
+      select: { secret: true },
+    });
+    const secret = await symmetricDecrypt({ key: config.authSecret, data: kitchen.secret });
+    expect(secret).toBe(staffTotpSecret(config.authSecret, 'kitchen@foodz.example'));
+  });
+
+  it('seeds S1101 to S1108 in every board state, with their timelines and no Stripe payment', async () => {
+    const fixtures = await migrator.order.findMany({
+      where: { number: { in: [...BOARD_FIXTURE_NUMBERS] } },
+      orderBy: { number: 'asc' },
+      select: {
+        number: true,
+        status: true,
+        paymentMethod: true,
+        stripePaymentIntentId: true,
+        note: true,
+        cancelReason: true,
+        cancelCode: true,
+        prepMinutes: true,
+        events: { select: { type: true, data: true }, orderBy: { createdAt: 'asc' } },
+        items: { select: { title: true, note: true } },
+      },
+    });
+    expect(fixtures.map((order) => [order.number, order.status, order.paymentMethod])).toEqual([
+      ['S1101', 'PLACED', 'CARD'],
+      ['S1102', 'PLACED', 'CASH'],
+      ['S1103', 'ACCEPTED', 'CASH'],
+      ['S1104', 'PREPARING', 'CASH'],
+      ['S1105', 'PREPARING', 'CARD'],
+      ['S1106', 'READY', 'CASH'],
+      ['S1107', 'READY', 'CARD'],
+      ['S1108', 'CANCELLED', 'CASH'],
+    ]);
+    expect(fixtures.every((order) => order.stripePaymentIntentId === null)).toBe(true);
+    const byNumber = Object.fromEntries(fixtures.map((order) => [order.number, order]));
+    expect(byNumber.S1101?.note).toBe('More spicy, more sauce');
+    expect(byNumber.S1101?.prepMinutes).toBe(24);
+    expect(byNumber.S1105?.note).toBe('<b>extra rice</b>');
+    expect(byNumber.S1103?.items).toEqual([{ title: 'Kimchi', note: 'No sesame please' }]);
+    expect(byNumber.S1104?.events.map((event) => event.type)).toEqual([
+      'created',
+      'placed',
+      'accepted',
+      'preparing',
+    ]);
+    expect(byNumber.S1108).toMatchObject({ cancelReason: 'staff', cancelCode: 'customer-asked' });
+    expect(byNumber.S1108?.events.at(-1)?.data).toMatchObject({
+      by: { name: 'Morgan Diaz', role: 'support' },
+      note: 'Called back to confirm',
+    });
+  });
+
+  it('puts the fixtures back with seed:board, leaving every other order alone', async () => {
+    const s1101 = boardFixtureId('S1101');
+    await migrator.order.update({ where: { id: s1101 }, data: { status: 'ACCEPTED' } });
+    await migrator.orderEvent.create({ data: { orderId: s1101, type: 'accepted' } });
+    const s1001 = await migrator.order.findFirstOrThrow({
+      where: { number: 'S1001' },
+      select: { id: true, updatedAt: true },
+    });
+    const people = {
+      priya: await userIdOf('second.customer@foodz.example'),
+      dana: await userIdOf('demo.customer@foodz.example'),
+      alex: await userIdOf('kitchen@foodz.example'),
+      morgan: await userIdOf('support@foodz.example'),
+    };
+    expect(
+      await migrator.$transaction((tx) => resetBoardFixtures(tx, people, new Date()), {
+        timeout: 30_000,
+      }),
+    ).toBe(0);
+    const reset = await migrator.order.findUniqueOrThrow({
+      where: { id: s1101 },
+      select: { status: true, events: { select: { type: true } } },
+    });
+    expect(reset.status).toBe('PLACED');
+    expect(reset.events.map((event) => event.type).toSorted()).toEqual([
+      'created',
+      'paid',
+      'placed',
+    ]);
+    expect(
+      (
+        await migrator.order.findUniqueOrThrow({
+          where: { id: s1001.id },
+          select: { updatedAt: true },
+        })
+      ).updatedAt,
+    ).toEqual(s1001.updatedAt);
   });
 });

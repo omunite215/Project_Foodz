@@ -142,3 +142,17 @@ describe('other realtime channels', () => {
     }
   });
 });
+
+describe('the board channel (F5 A1.4, A1.5, T3, T17)', () => {
+  it('admits kitchen, support and admin with two-factor, and refuses editors and staff without it', async () => {
+    for (const role of ['kitchen', 'support', 'admin'] as const) {
+      expect(await canSubscribe(as(uuid(), role, { twoFactorEnabled: true }), channels.ops)).toBe(
+        true,
+      );
+      expect(await canSubscribe(as(uuid(), role), channels.ops)).toBe(false);
+    }
+    expect(
+      await canSubscribe(as(uuid(), 'content_editor', { twoFactorEnabled: true }), channels.ops),
+    ).toBe(false);
+  });
+});

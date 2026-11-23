@@ -372,42 +372,43 @@ describe("the status's version (orders_track_status)", () => {
   });
 });
 
-describe('code release (app_release_order_code)', () => {
-  async function withCode(code: string, status: 'PLACED' | 'CANCELLED') {
-    const coupon = await migrator.coupon.findUniqueOrThrow({
-      where: { code },
-      select: { id: true },
-    });
-    const id = await order({
-      status,
+async function withCode(code: string, status: 'PLACED' | 'CANCELLED') {
+  const coupon = await migrator.coupon.findUniqueOrThrow({
+    where: { code },
+    select: { id: true },
+  });
+  const id = await order({
+    status,
+    couponId: coupon.id,
+    promoCode: code,
+    ...(status === 'CANCELLED' && {
+      cancelledAt: new Date(),
+      cancelReason: 'staff',
+      cancelCode: 'too-busy',
+    }),
+  });
+  await migrator.couponRedemption.create({
+    data: {
       couponId: coupon.id,
-      promoCode: code,
-      ...(status === 'CANCELLED' && {
-        cancelledAt: new Date(),
-        cancelReason: 'staff',
-        cancelCode: 'too-busy',
-      }),
-    });
-    await migrator.couponRedemption.create({
-      data: {
-        couponId: coupon.id,
-        userId: ids.real,
-        orderId: id,
-        status: 'REDEEMED',
-        discountCents: 200,
-      },
-    });
-    return id;
-  }
-  const release = (actor: Actor, id: string) =>
-    runAs(
-      actor,
-      (ctx) =>
-        db(ctx).$queryRaw<
-          { code: string | null }[]
-        >`SELECT app_release_order_code(${id}::uuid) AS code`,
-    ).then((rows) => rows[0]?.code ?? null);
+      userId: ids.real,
+      orderId: id,
+      status: 'REDEEMED',
+      discountCents: 200,
+    },
+  });
+  return id;
+}
 
+const release = (actor: Actor, id: string) =>
+  runAs(
+    actor,
+    (ctx) =>
+      db(ctx).$queryRaw<
+        { code: string | null }[]
+      >`SELECT app_release_order_code(${id}::uuid) AS code`,
+  ).then((rows) => rows[0]?.code ?? null);
+
+describe('code release (app_release_order_code)', () => {
   it('gives a cancelled order its code back once, for operations staff', async () => {
     await migrator.coupon.update({ where: { code: personalCode }, data: { usedCount: 1 } });
     const id = await withCode(personalCode, 'CANCELLED');
@@ -454,6 +455,52 @@ describe('account anonymisation (F4 security S9 c)', () => {
   });
 });
 
+async function timelineOrder(userId: string) {
+  const coupon = await migrator.coupon.findUniqueOrThrow({
+    where: { code: personalCode },
+    select: { id: true },
+  });
+  const id = await order(
+    {
+      userId,
+      paymentMethod: 'CARD',
+      paymentStatus: 'PAID',
+      cardBrand: 'visa',
+      cardLast4: '4242',
+      couponId: coupon.id,
+      promoCode: personalCode,
+    },
+    [{ slug: 'gimbap', note: 'No cucumber please' }],
+  );
+  await migrator.orderEvent.createMany({
+    data: [
+      {
+        orderId: id,
+        type: 'accepted',
+        actorId: ids.kitchen,
+        data: { by: { name: 'Real Cook', role: 'kitchen' }, versionAfter: 1 },
+      },
+      {
+        orderId: id,
+        type: 'preparing',
+        actorId: ids.sampleKitchen,
+        data: { by: { name: 'Alex Kim', role: 'kitchen' }, versionAfter: 2 },
+      },
+      {
+        orderId: id,
+        type: 'cancelled',
+        actorId: ids.support,
+        data: {
+          actor: 'staff',
+          by: { name: 'Morgan Diaz', role: 'support' },
+          note: 'Called back to confirm',
+        },
+      },
+    ],
+  });
+  return id;
+}
+
 describe('what staff read through the directory views (F4 security S9 a, A14.2)', () => {
   interface Row {
     contact_name: string;
@@ -476,52 +523,6 @@ describe('what staff read through the directory views (F4 security S9 a, A14.2)'
                card_brand, card_last4, total_cents, masked
         FROM order_directory WHERE id = ${id}::uuid`,
     ).then((rows) => rows[0] ?? null);
-
-  async function timelineOrder(userId: string) {
-    const coupon = await migrator.coupon.findUniqueOrThrow({
-      where: { code: personalCode },
-      select: { id: true },
-    });
-    const id = await order(
-      {
-        userId,
-        paymentMethod: 'CARD',
-        paymentStatus: 'PAID',
-        cardBrand: 'visa',
-        cardLast4: '4242',
-        couponId: coupon.id,
-        promoCode: personalCode,
-      },
-      [{ slug: 'gimbap', note: 'No cucumber please' }],
-    );
-    await migrator.orderEvent.createMany({
-      data: [
-        {
-          orderId: id,
-          type: 'accepted',
-          actorId: ids.kitchen,
-          data: { by: { name: 'Real Cook', role: 'kitchen' }, versionAfter: 1 },
-        },
-        {
-          orderId: id,
-          type: 'preparing',
-          actorId: ids.sampleKitchen,
-          data: { by: { name: 'Alex Kim', role: 'kitchen' }, versionAfter: 2 },
-        },
-        {
-          orderId: id,
-          type: 'cancelled',
-          actorId: ids.support,
-          data: {
-            actor: 'staff',
-            by: { name: 'Morgan Diaz', role: 'support' },
-            note: 'Called back to confirm',
-          },
-        },
-      ],
-    });
-    return id;
-  }
 
   it("masks a real customer's contact, address, notes, own code and card digits for the demo admin", async () => {
     const id = await timelineOrder(ids.real);
@@ -609,15 +610,15 @@ describe('the timeline is append-only (A8.5)', () => {
   });
 });
 
-describe('who may change a dish (menu_items_guard_write)', () => {
-  const setAvailable = (actor: Actor, available: boolean) =>
-    runAs(actor, (ctx) =>
-      db(ctx).menuItem.update({
-        where: { id: dishes.tteokbokki!.id },
-        data: { isAvailable: available, soldOutAt: available ? null : new Date() },
-      }),
-    );
+const setAvailable = (actor: Actor, available: boolean) =>
+  runAs(actor, (ctx) =>
+    db(ctx).menuItem.update({
+      where: { id: dishes.tteokbokki!.id },
+      data: { isAvailable: available, soldOutAt: available ? null : new Date() },
+    }),
+  );
 
+describe('who may change a dish (menu_items_guard_write)', () => {
   it('lets the kitchen mark a dish sold out or back on, and nothing else', async () => {
     await setAvailable(kitchen(), false);
     await setAvailable(kitchen(), true);
