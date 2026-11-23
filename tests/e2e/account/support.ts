@@ -184,6 +184,31 @@ export async function expectNoSidewaysScroll(page: Page) {
 export const liveRegion = (page: Page) =>
   page.locator('output[aria-live="polite"][aria-atomic="true"]');
 
+/**
+ * Starts writing down what the live region says, from now until the next full page load (client
+ * navigations keep it). The announcer clears itself 7 s after speaking, so on a slow machine a
+ * check made after a navigation can miss words that were said; `expectHeard` can't.
+ */
+export async function listenToLiveRegion(page: Page) {
+  await page.evaluate(() => {
+    const heard: string[] = [];
+    Object.assign(window, { foodzHeard: heard });
+    new MutationObserver(() => {
+      const text = document
+        .querySelector('output[aria-live="polite"][aria-atomic="true"]')
+        ?.textContent?.trim();
+      if (text && heard.at(-1) !== text) heard.push(text);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+}
+
+/** Passes once the live region has said `text` since `listenToLiveRegion`. */
+export async function expectHeard(page: Page, text: string) {
+  await expect
+    .poll(() => page.evaluate(() => (window as { foodzHeard?: string[] }).foodzHeard ?? []))
+    .toContain(text);
+}
+
 /** Collects console errors (CSP refusals included) while the test runs. */
 export function watchConsole(page: Page) {
   const problems: string[] = [];
