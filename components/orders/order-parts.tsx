@@ -3,6 +3,11 @@
 import {
   Banknote,
   Check,
+  ClipboardCheck,
+  CookingPot,
+  PackageCheck,
+  ShoppingBag,
+  Truck,
   Clock,
   Copy,
   CreditCard,
@@ -36,7 +41,15 @@ import {
   placedAtText,
   timelineLabel,
 } from '@/lib/order-text';
+import {
+  currentStep,
+  isCollected,
+  type ProgressStep,
+  stepHeading,
+  stepLine,
+} from '@/lib/order-progress';
 import { cn } from '@/lib/utils';
+import { WithPhone } from './order-progress';
 import { SuccessMark } from './success-mark';
 
 /*
@@ -45,6 +58,13 @@ import { SuccessMark } from './success-mark';
  */
 
 // ------------------------------------------------------------------ hero (3.2, 3.3)
+
+const STEP_MARKS: Partial<Record<ProgressStep, LucideIcon>> = {
+  accepted: ClipboardCheck,
+  preparing: CookingPot,
+  ready: PackageCheck,
+  pickedUp: Truck,
+};
 
 export function OrderHero({
   view,
@@ -62,6 +82,39 @@ export function OrderHero({
   slow: boolean;
   now: number;
 }) {
+  // F5: in progress and delivered, the step's mark, h1 and line (design 6.3).
+  const step = state === 'placed' || state === 'delivered' ? currentStep(view) : null;
+  if (step) {
+    const collected = isCollected(view);
+    const Mark = step === 'pickedUp' && collected ? ShoppingBag : STEP_MARKS[step];
+    return (
+      <div className="text-center">
+        {Mark ? (
+          <span
+            aria-hidden
+            className="mx-auto flex size-24 items-center justify-center rounded-full bg-brand-soft"
+          >
+            <Mark className="size-10 text-brand-strong" />
+          </span>
+        ) : (
+          <SuccessMark state={state} play={play} />
+        )}
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="mt-4 font-heading text-h4 leading-tight text-balance text-neutral-2 focus:outline-none md:text-h3"
+        >
+          {stepHeading(step, collected)}
+        </h1>
+        <p className="mt-3 text-body-4 text-neutral-3 md:text-body-3">
+          <WithPhone
+            text={stepLine(view, step, collected).replace(view.store.phone, '{phone}')}
+            phone={view.store.phone}
+          />
+        </p>
+      </div>
+    );
+  }
   const line = state === 'confirming' ? (slow ? CONFIRMING_SLOW : null) : orderLine(view, state);
   const countdown =
     state === 'waiting' && view.expiresAt ? countdownText(view.expiresAt, now) : null;
@@ -151,14 +204,17 @@ export function OrderStatusCard({
   state,
   now,
   statusRef,
+  timeline = true,
 }: {
   view: OrderView;
   state: OrderState;
   now: Date;
   statusRef?: Ref<HTMLParagraphElement>;
+  /** F5 shows the timeline in its own card (design 6.9). */
+  timeline?: boolean;
 }) {
   const showArrival = (state === 'placed' || state === 'confirming') && view.arrival !== null;
-  const showTimeline = state !== 'confirming' && view.timeline.length > 0;
+  const showTimeline = timeline && state !== 'confirming' && view.timeline.length > 0;
   if (!showArrival && !showTimeline) return null;
   const arriving =
     view.arrival?.from && view.arrival.to
@@ -208,11 +264,7 @@ export function OrderStatusCard({
             const Icon = dot.icon;
             const last = index === view.timeline.length - 1;
             return (
-              <li
-                key={`${event.kind}-${event.at}`}
-                aria-current={last ? 'step' : undefined}
-                className="relative flex gap-3 pb-5 last:pb-0"
-              >
+              <li key={`${event.kind}-${event.at}`} className="relative flex gap-3 pb-5 last:pb-0">
                 {last ? null : (
                   <span aria-hidden className="absolute top-7 bottom-0 left-3 w-px bg-neutral-6" />
                 )}

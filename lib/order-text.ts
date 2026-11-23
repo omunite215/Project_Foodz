@@ -106,7 +106,7 @@ export const STATUS_WORDS: Record<OrderStatusWord, string> = {
   waitingForPayment: 'Waiting for payment',
   placed: 'Placed',
   accepted: 'Accepted',
-  preparing: 'Preparing',
+  preparing: 'Cooking',
   ready: 'Ready',
   pickedUp: 'On its way',
   delivered: 'Delivered',
@@ -169,7 +169,7 @@ export function orderStateOf(
 export const ORDER_HEADINGS: Record<OrderState, string> = {
   confirming: 'Confirming your payment…',
   placed: 'Order placed',
-  delivered: 'Order delivered',
+  delivered: 'Delivered',
   waiting: 'Waiting for payment',
   failed: "Your payment didn't go through",
   expired: 'Order expired',
@@ -191,7 +191,7 @@ const paidByCard = (view: OrderView) =>
 export function orderLine(view: OrderView, state: OrderState): string | null {
   switch (state) {
     case 'placed':
-      return "We'll let you know when the kitchen starts cooking.";
+      return 'Waiting for the kitchen to accept it. You can cancel until they do.';
     case 'delivered':
       return 'Enjoy your meal.';
     case 'waiting':
@@ -203,6 +203,8 @@ export function orderLine(view: OrderView, state: OrderState): string | null {
     case 'expired':
       return "This order expired because it wasn't paid within 15 minutes. Nothing was charged. Your cart is still here.";
     case 'cancelled':
+      // A store cancellation's card says it all (F5 design 6.3).
+      if (view.cancelReason === 'store') return null;
       return paidByCard(view) ? null : 'Nothing was charged.';
     default:
       return null;
@@ -318,6 +320,10 @@ export function timelineLabel(
 /** The receipt's last line: "Paid · Visa •••• 4242", "Cash on delivery · $53.97 to pay". */
 export function paymentLine(view: OrderView, state: OrderState) {
   if (view.payment.method === 'cash') {
+    if (view.progress.cashCollected) {
+      const text = `Paid in cash · ${formatPrice(view.breakdown.totalCents)}`;
+      return { text, spoken: text };
+    }
     const nothing = state === 'cancelled' || state === 'expired';
     const text = nothing
       ? 'Cash on delivery · nothing to pay'

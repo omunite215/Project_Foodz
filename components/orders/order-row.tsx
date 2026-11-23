@@ -2,9 +2,14 @@ import {
   Check,
   ChevronRight,
   CircleDot,
+  ClipboardCheck,
   Clock,
+  CookingPot,
   type LucideIcon,
+  PackageCheck,
+  ShoppingBag,
   TimerOff,
+  TriangleAlert,
   Truck,
   X,
 } from 'lucide-react';
@@ -20,6 +25,7 @@ import {
   orderHref,
   STATUS_WORDS,
 } from '@/lib/order-text';
+import { arrivalText } from '@/lib/order-progress';
 import { cn } from '@/lib/utils';
 
 /*
@@ -30,18 +36,25 @@ import { cn } from '@/lib/utils';
 const CHIPS: Record<OrderStatusWord, { icon: LucideIcon; className: string; iconClass: string }> = {
   waitingForPayment: { icon: Clock, className: 'bg-tag-6-bg', iconClass: 'text-tag-6' },
   placed: { icon: CircleDot, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
-  accepted: { icon: CircleDot, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
-  preparing: { icon: CircleDot, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
-  ready: { icon: CircleDot, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
+  accepted: { icon: ClipboardCheck, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
+  preparing: { icon: CookingPot, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
+  ready: { icon: PackageCheck, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
   pickedUp: { icon: Truck, className: 'bg-tag-3-bg', iconClass: 'text-tag-3' },
   delivered: { icon: Check, className: 'bg-brand-soft', iconClass: 'text-brand-strong' },
   cancelled: { icon: X, className: 'bg-tag-2-bg', iconClass: 'text-destructive' },
   expired: { icon: TimerOff, className: 'bg-neutral-7', iconClass: 'text-neutral-3' },
 };
 
-export function StatusChip({ word }: { word: OrderStatusWord }) {
+/** F5 design 7.1: each in-progress status has its word and its own icon; "Collected" for U23. */
+export function StatusChip({
+  word,
+  collected = false,
+}: {
+  word: OrderStatusWord;
+  collected?: boolean;
+}) {
   const chip = CHIPS[word];
-  const Icon = chip.icon;
+  const Icon = word === 'pickedUp' && collected ? ShoppingBag : chip.icon;
   return (
     <span
       className={cn(
@@ -50,7 +63,7 @@ export function StatusChip({ word }: { word: OrderStatusWord }) {
       )}
     >
       <Icon className={cn('size-3.5', chip.iconClass)} aria-hidden />
-      {STATUS_WORDS[word]}
+      {word === 'pickedUp' && collected ? 'Collected' : STATUS_WORDS[word]}
     </span>
   );
 }
@@ -76,6 +89,8 @@ export function OrderRow({
 }) {
   const date = `${orderDateText(order.createdAt, now, timeZone)} · ${methodWord(order.method)}`;
   const dishes = dishesText(order.dishes, order.moreCount);
+  // F5 design 7.2: the order page's arrival on rows in progress.
+  const arrival = arrivalText(order.arrival, null, timeZone);
   // The DOM order is the spoken order (number, status, date, dishes, total); the grid places
   // the status chip at the top right, and lays everything on one line from 1280 px.
   return (
@@ -90,12 +105,23 @@ export function OrderRow({
         <span className="sr-only">,</span>
       </span>
       <span className="col-start-2 row-span-2 row-start-1 xl:col-start-4 xl:row-span-2 xl:self-center">
-        <StatusChip word={order.statusWord} />
+        <StatusChip word={order.statusWord} collected={order.collected} />
         <span className="sr-only">,</span>
       </span>
       <span className="col-start-1 row-start-2 mt-0.5 block text-body-5 text-neutral-3">
         {date}
         <span className="sr-only">,</span>
+        {arrival ? (
+          <span className="mt-1 flex items-center gap-1.5 text-body-5 text-neutral-1 tabular-nums">
+            {arrival.tone === 'late' ? (
+              <TriangleAlert className="size-3.5 text-warning-strong" aria-hidden />
+            ) : (
+              <Clock className="size-3.5 text-neutral-3" aria-hidden />
+            )}
+            <span aria-hidden>{arrival.headline}</span>
+            <span className="sr-only">{arrival.spoken},</span>
+          </span>
+        ) : null}
       </span>
       <span className="col-span-2 row-start-3 mt-3 line-clamp-2 block text-body-5 text-neutral-2 [overflow-wrap:anywhere] xl:col-span-1 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:mt-0 xl:line-clamp-1">
         {dishes}
