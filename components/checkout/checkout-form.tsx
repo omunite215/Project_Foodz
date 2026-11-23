@@ -17,7 +17,6 @@ import {
   cancelOrderAction,
   orderStatusAction,
   placeOrderAction,
-  attemptStatusAction,
 } from '@/server/modules/orders/actions';
 import type {
   CheckoutAddress,
@@ -91,6 +90,7 @@ import {
   type TipTile,
   tipChoiceFor,
 } from '@/lib/checkout-text';
+import { fetchAttemptStatus } from '@/lib/attempt-status';
 import { confirmCard } from '@/lib/confirm-card';
 import {
   type CartLine,
@@ -268,7 +268,7 @@ export function Checkout({
     return page.lastPaymentMethod === 'cash' ? 'cash' : 'card';
   });
   const firstCard = page.savedCards.find((card) => !card.expired)?.id ?? NEW_CARD;
-  const [cardChoice, setCardChoice] = useState(firstCard);
+  const [pickedCard, setCardChoice] = useState(firstCard);
   const [saveCard, setSaveCard] = useState(false);
   const [cardStatus, setCardStatus] = useState<CardFormStatus>('loading');
   const [cardAttempt, setCardAttempt] = useState(0);
@@ -325,6 +325,14 @@ export function Checkout({
   const [undo, setUndo] = useState<{ line: CartLine; title: string } | null>(null);
   const [removingCard, setRemovingCard] = useState<SavedCardDto | null>(null);
   const [goneCards, setGoneCards] = useState<ReadonlySet<string>>(new Set());
+  const listedCards = page.savedCards.filter((saved) => !goneCards.has(saved.id));
+  const usableCards = listedCards.filter((saved) => !saved.expired);
+  // The card shown as chosen is the card charged (S6.11): a choice that is no longer listed falls
+  // back to the most recently used card that is, or to a new card.
+  const cardChoice =
+    pickedCard === NEW_CARD || usableCards.some((saved) => saved.id === pickedCard)
+      ? pickedCard
+      : (usableCards[0]?.id ?? NEW_CARD);
   const cardOpener = useRef<HTMLButtonElement | null>(null);
   const [removedCount, setRemovedCount] = useState(0);
   const [codeEnded, setCodeEnded] = useState<string | null>(null);
@@ -395,16 +403,13 @@ export function Checkout({
     const attempt = readAttempt();
     if (attempt?.pressed) {
       void (async () => {
-        const outcome = await callAction(() => attemptStatusAction({ attemptKey: attempt.key }));
-        if (!outcome.ok) return;
-        if (outcome.data.kind === 'placed') {
-          const here = {
-            orderId: outcome.data.orderId,
-            number: outcome.data.number,
-            confirming: false,
-          };
+        const status = await fetchAttemptStatus(attempt.key);
+        if (!status) return;
+        if (status.kind === 'placed') {
+          const here = { orderId: status.orderId, number: status.number, confirming: false };
           writePlacedHere(here);
           setPlaced(here);
+          forgetOrderChoices();
           cart.clear();
           cart.setPlaced({ orderId: here.orderId, number: here.number });
         }
@@ -797,8 +802,7 @@ export function Checkout({
   const noAddress = !addressId || blockers.includes('outside');
   const cashBlocked =
     quote && !quote.cashAllowed ? cashLimitMessage(quote.totalCents, quote.cashLimitCents) : null;
-  const newCard =
-    method === 'card' && (page.savedCards.length === 0 || demo || cardChoice === NEW_CARD);
+  const newCard = method === 'card' && (demo || cardChoice === NEW_CARD);
 
   const payContent = ((): PayBarContent => {
     if (press === 'slow') {
@@ -882,7 +886,22 @@ export function Checkout({
   })();
 
   // ---------------------------------------------------------------- pressing (design 2.17)
-  const goToOrder = (orderId: string) => router.replace(orderHref(orderId));
+  const goToOrder = (orderId: string) => {
+    // While the press itself is still out, Next would hold a client navigation behind it; a full
+    // load leaves at once (S7.3).
+    if (inFlight.current) window.location.replace(orderHref(orderId));
+    else router.replace(orderHref(orderId));
+  };
+
+  /** The tip, the typed amount and the kitchen note belonged to the order just placed (S4.1). */
+  function forgetOrderChoices() {
+    writeChoices({ ...NO_CHOICES, summaryOpen });
+    setTile(NO_CHOICES.tip);
+    setOtherText('');
+    setLastValidTip(null);
+    note.current = '';
+    form.setFieldValue('kitchenNote', '');
+  }
 
   const placedNow = (orderId: string, number: string, confirming: boolean) => {
     const here = { orderId, number, confirming };
@@ -890,12 +909,15 @@ export function Checkout({
     writeAttempt(null);
     markArrival(orderId);
     setPlaced(here);
+    forgetOrderChoices();
     if (confirming) {
       markConfirming(orderId);
       markClearCart(orderId);
     } else {
       cart.clear();
       cart.setPlaced({ orderId, number });
+      // The order page empties the cart too, in case a full load leaves before it is saved.
+      markClearCart(orderId);
     }
     goToOrder(orderId);
   };
@@ -924,10 +946,11 @@ export function Checkout({
     const key = pendingAttempt.current ?? readAttempt()?.key ?? null;
     if (!key || checking) return;
     setChecking(true);
-    const outcome = await callAction(() => attemptStatusAction({ attemptKey: key }));
+    // A plain fetch, not a Server Action: Next runs actions one at a time, so an action would wait
+    // behind the press it is asking about.
+    const status = await fetchAttemptStatus(key);
     setChecking(false);
-    if (!outcome.ok || pressRef.current !== 'slow') return;
-    const status = outcome.data;
+    if (!status || pressRef.current !== 'slow') return;
     // Not there yet while the press itself is still out: keep checking, never offer a fresh Pay.
     if (status.kind === 'notFound' && inFlight.current) return;
     if (status.kind === 'placed') placedNow(status.orderId, status.number, false);
@@ -1533,7 +1556,7 @@ export function Checkout({
               card={
                 stripeKey ? (
                   <CardSection
-                    savedCards={page.savedCards.filter((saved) => !goneCards.has(saved.id))}
+                    savedCards={listedCards}
                     onRemoveCard={(saved, button) => {
                       cardOpener.current = button;
                       setRemovingCard(saved);
