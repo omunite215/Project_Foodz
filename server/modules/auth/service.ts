@@ -1,13 +1,20 @@
 import 'server-only';
 import { isAPIError } from 'better-auth/api';
 import { headers } from 'next/headers';
-import { resetPasswordLanding, safeRedirectPath, verifyEmailLanding } from '@/lib/redirect';
+import {
+  resetPasswordLanding,
+  safeRedirectPath,
+  signInLanding,
+  verifyEmailLanding,
+} from '@/lib/redirect';
 import { auth, CLIENT_IP_HEADER } from '@/server/auth';
+import { isRole, isStaff } from '@/server/auth/roles';
 import type { UserActor } from '@/server/auth/session';
 import { AppError, conflict, forbidden, invalidInput, rateLimited } from '@/server/errors';
 import { logger } from '@/server/logger';
 import {
   findEmailForReset,
+  isStaffAccount,
   notifyAccountExists,
   passwordChanged,
   prepareEmailChange,
@@ -152,7 +159,11 @@ export async function signIn(input: unknown, request: FlowRequest): Promise<Sign
       };
     }
     if (result.user) await recordSignIn(result.user, 'password');
-    return { status: 'signed-in', redirectTo: returnPath };
+    const role = result.user?.role;
+    return {
+      status: 'signed-in',
+      redirectTo: signInLanding(returnPath, isRole(role) && isStaff(role)),
+    };
   } catch (error) {
     const code = codeOf(error);
     if (code === 'INVALID_EMAIL_OR_PASSWORD') {
@@ -196,7 +207,10 @@ export async function verifyTwoFactor(input: unknown, request: FlowRequest) {
         : await auth.api.verifyBackupCode({ body, headers: forwarded });
     const user = (result as { user?: { id: string; email: string; name: string } }).user;
     if (user) await recordSignIn(user, 'two-factor');
-    return { redirectTo: safeRedirectPath(callbackUrl) };
+    const returnPath = safeRedirectPath(callbackUrl);
+    // Staff with nowhere asked for land on their tools (F5 A1.1); only then is the role read.
+    const staff = returnPath === '/' && (await isStaffAccount(user?.id ?? challenge.userId));
+    return { redirectTo: signInLanding(returnPath, staff) };
   } catch (error) {
     switch (codeOf(error)) {
       case 'INVALID_CODE':

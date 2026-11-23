@@ -405,6 +405,15 @@ describe('two-factor sign-in', () => {
     expect([...browser.jar.keys()].some((name) => name.includes('trust_device'))).toBe(false);
   });
 
+  it('lands staff who asked for nowhere on their tools (F5 A1.1)', async () => {
+    const { email, userId } = await signUp('staff');
+    const otp = await addTwoFactor(userId, 'kitchen');
+    switchBrowser(newBrowser());
+    await actions.signInAction({ email, password: PASSWORD });
+    const ok = await actions.verifyTwoFactorAction({ method: 'totp', code: await otp.totp() });
+    expect(ok?.data).toEqual({ redirectTo: '/admin' });
+  });
+
   it('offers "trust this device" to customers and accepts a backup code once', async () => {
     const { email, userId } = await signUp();
     await addTwoFactor(userId, 'customer');

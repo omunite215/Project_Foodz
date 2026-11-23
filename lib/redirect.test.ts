@@ -3,6 +3,7 @@ import {
   landingFor,
   resetPasswordLanding,
   safeRedirectPath,
+  signInLanding,
   signInPath,
   verifyEmailLanding,
 } from './redirect';
@@ -146,5 +147,17 @@ describe('landingFor', () => {
     undefined,
   ])('falls back to the bare page for %j', (raw) => {
     expect(landingFor('/verify-email', raw)).toBe('/verify-email');
+  });
+});
+
+describe('signInLanding (F5 A1.1)', () => {
+  it('sends staff who asked for nowhere to their tools', () => {
+    expect(signInLanding('/', true)).toBe('/admin');
+  });
+
+  it("keeps the address staff asked for, and everyone else's", () => {
+    expect(signInLanding('/admin/orders/abc', true)).toBe('/admin/orders/abc');
+    expect(signInLanding('/menu', true)).toBe('/menu');
+    expect(signInLanding('/', false)).toBe('/');
   });
 });
