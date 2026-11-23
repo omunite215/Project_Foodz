@@ -201,6 +201,36 @@ describe('timeline and receipt', () => {
     );
   });
 
+  it('promises only what cancelling refunds (security S13)', () => {
+    // Part refunded before: the rest comes back, not "nothing has been charged".
+    const partly = paidCardOrder({
+      payment: { method: 'card', status: 'PARTIALLY_REFUNDED', card: VISA, decline: null },
+      refunds: { refundedCents: 500, entries: [{ amountCents: 500, at: NOW.toISOString() }] },
+    });
+    expect(cancelDescription(partly)).toBe(
+      "We'll refund $56.17 to Visa •••• 4242. It can take 5 to 10 business days to appear.",
+    );
+    // Refunded in full already: charged and refunded, nothing more to come.
+    const refunded = paidCardOrder({
+      payment: { method: 'card', status: 'REFUNDED', card: VISA, decline: null },
+      refunds: { refundedCents: 6117, entries: [{ amountCents: 6117, at: NOW.toISOString() }] },
+    });
+    expect(cancelDescription(refunded)).toBe('Your payment was refunded on November 19.');
+  });
+
+  it('says the rest is on its way after cancelling a partly refunded order (security S13)', () => {
+    const view = paidCardOrder({
+      status: 'CANCELLED',
+      cancelReason: 'customer',
+      payment: { method: 'card', status: 'PARTIALLY_REFUNDED', card: VISA, decline: null },
+      refunds: { refundedCents: 500, entries: [{ amountCents: 500, at: NOW.toISOString() }] },
+    });
+    expect(moneyNotices(view, 'cancelled').map((notice) => notice.text)).toEqual([
+      "We're refunding the remaining $56.17 to Visa •••• 4242. It can take 5 to 10 business days to appear.",
+      'Refunded $5.00 of $61.17 to Visa •••• 4242 on November 19.',
+    ]);
+  });
+
   it('turns the store phone into a tel: target', () => {
     expect(telOf('(617) 555-0142')).toBe('+16175550142');
   });

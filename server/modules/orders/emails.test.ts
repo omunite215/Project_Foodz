@@ -167,7 +167,10 @@ describe('the receipt (S11.5, design 6.1)', () => {
 
 describe('the other order emails (design 6.2)', () => {
   it('cancelled: names the refund for a paid card order, and nothing charged otherwise (D45)', () => {
-    const paid = renderOrderEmail('cancelled', order({ status: 'CANCELLED' }), options);
+    const paid = renderOrderEmail('cancelled', order({ status: 'CANCELLED' }), {
+      ...options,
+      refund: { amountCents: 5582, at: '2026-11-20T15:00:00Z' },
+    });
     expect(paid.subject).toBe('Order 1042 is cancelled');
     expect(paid.text).toContain(
       "You cancelled order 1042. We're refunding $55.82 to Visa •••• 4242. It can take 5 to 10 business days to appear.",
@@ -181,6 +184,30 @@ describe('the other order emails (design 6.2)', () => {
       options,
     );
     expect(cash.text).toContain('You cancelled order 1042. Nothing was charged.');
+  });
+
+  it('cancelled: promises no refund the server did not decide (security S13)', () => {
+    // Refunded in full from the Stripe dashboard, then cancelled: nothing more comes back.
+    const refunded = renderOrderEmail(
+      'cancelled',
+      order({
+        status: 'CANCELLED',
+        payment: { ...order().payment, status: 'REFUNDED' },
+        refunds: {
+          refundedCents: 5582,
+          entries: [{ amountCents: 5582, at: '2026-11-20T14:00:00Z' }],
+        },
+      }),
+      options,
+    );
+    expect(refunded.text).toContain(
+      'You cancelled order 1042. Your payment of $55.82 was already refunded to Visa •••• 4242.',
+    );
+    expect(refunded.text).not.toContain("We're refunding");
+    // Paid, but no refund decided: no promise either way.
+    const undecided = renderOrderEmail('cancelled', order({ status: 'CANCELLED' }), options);
+    expect(undecided.text).not.toContain("We're refunding");
+    expect(undecided.text).not.toContain('Nothing was charged');
   });
 
   it('cancelled: names what is still to come back when part was refunded before (security S2)', () => {

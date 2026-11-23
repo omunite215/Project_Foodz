@@ -212,6 +212,18 @@ export function orderLine(view: OrderView, state: OrderState): string | null {
 /** "Visa •••• 4242", or "your card" when the card isn't known. */
 const cardWords = (view: OrderView) => view.payment.card?.label ?? 'your card';
 
+/**
+ * What cancelling refunds, by the server's rule (security S2): a card order that was paid, or
+ * partly refunded already, gets back what is left of its total. Null when nothing comes back.
+ */
+export function refundOnCancel(view: OrderView): number | null {
+  const refundable =
+    view.payment.method === 'card' &&
+    (view.payment.status === 'PAID' || view.payment.status === 'PARTIALLY_REFUNDED');
+  const rest = view.breakdown.totalCents - view.refunds.refundedCents;
+  return refundable && rest > 0 ? rest : null;
+}
+
 export interface MoneyNotice {
   key: string;
   variant: 'info' | 'error';
@@ -256,6 +268,23 @@ export function moneyNotices(view: OrderView, state: OrderState): MoneyNotice[] 
       key: 'refunding',
       variant: 'info',
       text: `We're refunding ${total} to ${cardWords(view)}. It can take 5 to 10 business days to appear.`,
+    });
+  } else if (
+    state === 'cancelled' &&
+    view.cancelReason === 'customer' &&
+    view.payment.status === 'PARTIALLY_REFUNDED' &&
+    refundOnCancel(view) !== null
+  ) {
+    // Part came back before she cancelled; the rest is on its way (security S2, S13).
+    notices.push({
+      key: 'refunding',
+      variant: 'info',
+      text: `We're refunding the remaining ${formatPrice(refundOnCancel(view) ?? 0)} to ${cardWords(view)}. It can take 5 to 10 business days to appear.`,
+    });
+    notices.push({
+      key: 'partly',
+      variant: 'info',
+      text: `Refunded ${formatPrice(view.refunds.refundedCents)} of ${total} to ${cardWords(view)}${refundedOn}.`,
     });
   } else if (view.payment.status === 'REFUNDED') {
     notices.push({
@@ -335,8 +364,15 @@ export function paymentLine(view: OrderView, state: OrderState) {
 
 /** The cancel dialog's description (design 3.11). */
 export function cancelDescription(view: OrderView): string {
-  if (view.payment.method === 'card' && view.payment.status === 'PAID') {
-    return `We'll refund ${formatPrice(view.breakdown.totalCents)} to ${cardWords(view)}. It can take 5 to 10 business days to appear.`;
+  const refund = refundOnCancel(view);
+  if (refund !== null) {
+    return `We'll refund ${formatPrice(refund)} to ${cardWords(view)}. It can take 5 to 10 business days to appear.`;
+  }
+  if (view.payment.method === 'card' && view.payment.status === 'REFUNDED') {
+    const last = view.refunds.entries.at(-1);
+    return last
+      ? `Your payment was refunded on ${longDate(last.at, view.store.timeZone)}.`
+      : 'Your payment was refunded.';
   }
   return 'Nothing has been charged.';
 }
