@@ -89,7 +89,7 @@ async function main() {
       process.stdout.write(
         [
           '',
-          'Admin two-factor setup (shown only this once):',
+          'Admin two-factor setup (shown only this once, and for this database only):',
           `  Add to your authenticator app: ${result.adminTwoFactor.totpUri}`,
           `  Backup codes: ${result.adminTwoFactor.backupCodes.join(' ')}`,
           '',

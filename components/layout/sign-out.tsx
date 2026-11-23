@@ -1,5 +1,6 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import {
@@ -40,8 +41,9 @@ function focusWhenDrawn(selector: string, ready: () => boolean = () => true, att
  * Signing out of this device (S5.8, S5.10). The request is a POST from a button, never a link.
  * With items in the cart, a dialog says the cart will be emptied first. Afterwards the cart is
  * emptied in every tab, other tabs are told, and focus lands somewhere sensible: Home's content
- * after an account page, otherwise the header's new "Sign in" link. Nothing typed by this person
- * stays behind in the tab: no form draft, and no email for the sign-in form (S2.2).
+ * after an account page, otherwise the header's new "Sign in" link. Nothing typed or fetched for
+ * this person stays behind in the tab: no form draft, no email for the sign-in form (S2.2), and
+ * no cached query.
  *
  * If it fails, the account stays shown and the toast says why: "You're offline" only when the
  * browser is offline or the request never reached the server; a refusal (403, 429, 5xx) asks
@@ -52,6 +54,7 @@ export function useSignOut() {
   const pathname = usePathname();
   const { itemCount } = useCart();
   const endCartSession = useEndCartSession();
+  const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
@@ -91,6 +94,8 @@ export function useSignOut() {
     endCartSession();
     forgetDrafts();
     forgetEmail();
+    // Nothing fetched for this person stays in the tab's cache for whoever signs in next.
+    queryClient.clear();
     postAuthEvent('signed-out');
     setDialogOpen(false);
     if (pathname.startsWith('/account')) {

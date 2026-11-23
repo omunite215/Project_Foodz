@@ -147,3 +147,26 @@ export function savedCardFixture(overrides: Partial<SavedCardDto> = {}): SavedCa
     ...overrides,
   };
 }
+
+/** The six steps with `current` at `at` (F5 design 6.4); earlier steps done a minute apart. */
+export function stepsAt(
+  current: 'placed' | 'accepted' | 'preparing' | 'ready' | 'pickedUp' | 'delivered',
+  { collected = false }: { collected?: boolean } = {},
+): NonNullable<OrderView['progress']['steps']> {
+  const keys = ['placed', 'accepted', 'preparing', 'ready', 'pickedUp', 'delivered'] as const;
+  const index = keys.indexOf(current);
+  return keys.map((key, position) => ({
+    key,
+    state:
+      position < index
+        ? 'done'
+        : position === index
+          ? key === 'delivered'
+            ? 'done'
+            : 'current'
+          : 'upcoming',
+    at:
+      position <= index ? new Date(Date.parse(PLACED_AT) + position * 60_000).toISOString() : null,
+    collected: key === 'pickedUp' && collected,
+  }));
+}

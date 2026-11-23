@@ -702,7 +702,7 @@ describe('refusing a New order (A6)', () => {
       }),
     );
     expect(foreign?.serverError?.fieldErrors).toEqual({
-      lineIds: ["Tick the dishes you can't make."],
+      lineIds: ["Check the dishes you can't make."],
     });
     await move(alex, orderId, 'ACCEPTED');
     const late = await as(alex, () =>
@@ -1029,7 +1029,7 @@ describe('handing over by hand (A9, U23)', () => {
       board.markDeliveredAction({ orderId, expectedVersion: version, reason: 'own-driver' }),
     );
     expect(noCash?.serverError?.fieldErrors).toEqual({
-      cashCollected: ['Tick this once you have the cash.'],
+      cashCollected: ['Check this box once you have the cash.'],
     });
     const delivered = await as(daniel, () =>
       board.markDeliveredAction({

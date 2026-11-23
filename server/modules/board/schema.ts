@@ -135,13 +135,13 @@ export type HandoverReason = (typeof HANDOVER_REASONS)[number];
 
 export const BOARD_FIELD_ERRORS = {
   reason: 'Choose a reason.',
-  dishes: "Tick the dishes you can't make.",
+  dishes: "Check the dishes you can't make.",
   refusalNote: 'Tell us what happened, so support can answer the customer.',
   otherNote: 'Add a note about what happened.',
   noteLength: 'Keep the note under 500 characters.',
   orderNumber: 'Enter an order number, like 1042.',
   /** Mark delivered on a cash order without the tick (A9.2, design 3.6). */
-  cashCollected: 'Tick this once you have the cash.',
+  cashCollected: 'Check this box once you have the cash.',
   /** "Not picked up after all" moves an order back from Out for delivery only. */
   notPickedUp: 'Use this reason only for an order that is out for delivery.',
 } as const;

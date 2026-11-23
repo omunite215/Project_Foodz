@@ -34,6 +34,7 @@ import {
   takeClearCart,
 } from '@/lib/checkout-storage';
 import { useCartActions } from '@/lib/data/cart';
+import { acceptedCancelSentence, currentStep, orderTabTitle } from '@/lib/order-progress';
 import { cancelDescription, moneyNotices, orderStateOf, telOf } from '@/lib/order-text';
 import { useMinuteClock } from '@/lib/use-minute-clock';
 import { useOnline } from '@/lib/use-online';
@@ -45,7 +46,10 @@ import {
   OrderStatusCard,
   Receipt,
 } from './order-parts';
+import { CancellationCard, ProgressCard, TimelineCard, WithPhone } from './order-progress';
 import { PaymentStep } from './payment-step';
+import { useLiveOrder } from './use-live-order';
+import { OrderAgainButton } from './use-reorder';
 
 /*
  * The order page (F4 design 3): the confirmation now and the place every state is explained.
@@ -69,6 +73,13 @@ export interface OrderPageProps {
   } | null;
 }
 
+/** Focus without scrolling when the element is already in view, so a live change keeps her place. */
+function focusInPlace(element: HTMLElement | null) {
+  if (!element) return;
+  const box = element.getBoundingClientRect();
+  const inView = box.top >= 0 && box.bottom <= window.innerHeight;
+  element.focus({ preventScroll: inView });
+}
 export function OrderPage({ view: initial, payment }: OrderPageProps) {
   const online = useOnline();
   const minute = useMinuteClock();
@@ -93,6 +104,7 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
   const [refunding, setRefunding] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const refusalRef = useRef<HTMLDivElement>(null);
+  const tooLateRef = useRef<HTMLParagraphElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const state = orderStateOf(view, confirming);
 
@@ -180,9 +192,15 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
     // oxlint-disable-next-line react/exhaustive-deps
   }, [confirming, confirmingSince]);
 
-  const refetch = async () => {
+  const [signedOut, setSignedOut] = useState(false);
+  const refetch = async (): Promise<OrderView | null> => {
     const outcome = await callAction(() => orderViewAction({ orderId: latest.current.view.id }));
-    if (outcome.ok) settle(outcome.data);
+    if (outcome.ok) {
+      settle(outcome.data);
+      return outcome.data;
+    }
+    if (outcome.error.code === 'UNAUTHENTICATED') setSignedOut(true);
+    return null;
   };
   const refetchRef = useRef(refetch);
   useEffect(() => {
@@ -250,11 +268,64 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
     requestAnimationFrame(() => refusalRef.current?.focus());
   }
 
-  const notices = moneyNotices(view, state);
+  // F5: live updates, the stepper's connection line and the tab title (design 6.6, 6.12).
+  const liveLine = useLiveOrder({ view, refetch: () => refetchRef.current(), signedOut });
+  useEffect(() => {
+    document.title = `${orderTabTitle(view)} | Foodz`;
+  }, [view]);
+
+  const step = currentStep(view);
+  const storeCancelled = view.progress.cancellation?.by === 'store' && view.status === 'CANCELLED';
+  // In the server's HTML it shows at once; only a cancellation that arrives live fades in.
+  const [cancelledAtLoad] = useState(storeCancelled);
+  const cancelHeadingRef = useRef<HTMLHeadingElement>(null);
+  const sentenceRef = useRef<HTMLParagraphElement>(null);
+  const kitchenHas =
+    step === 'accepted' || step === 'preparing' || step === 'ready' || step === 'pickedUp';
+
+  // A live change removed the focused control: focus lands on what replaced it (D25).
+  // Either slot counts: the Cancel button, or the sentence and its phone link that replace it.
+  const cancelHadFocus = useRef(false);
+  const slotFocus = () => {
+    cancelHadFocus.current = true;
+  };
+  const slotBlur = () => {
+    cancelHadFocus.current = false;
+  };
+  useEffect(() => {
+    if (!cancelHadFocus.current) return;
+    cancelHadFocus.current = false;
+    requestAnimationFrame(() => {
+      if (storeCancelled) cancelHeadingRef.current?.focus();
+      else if (kitchenHas) focusInPlace(sentenceRef.current);
+    });
+  }, [kitchenHas, storeCancelled]);
+  // Cancelled by the store while the cancel dialog was open: it closes, focus to the h1 (6.7).
+  useEffect(() => {
+    if (storeCancelled && cancelOpen) {
+      setCancelOpen(false);
+      requestAnimationFrame(() => headingRef.current?.focus());
+    }
+  }, [storeCancelled, cancelOpen]);
+
+  const notices = moneyNotices(view, state).filter(
+    (notice) => !storeCancelled || (notice.key !== 'refunding' && notice.key !== 'refunded'),
+  );
   const showDetails = state !== 'failed' && state !== 'mismatch';
   const canCancel = view.cancellable && !cancelRefusal?.kitchen && state !== 'confirming';
-  const primary =
-    state === 'failed'
+  // The cancel dialog's order was accepted meanwhile: "Too late to cancel" (design 6.7).
+  const tooLate = cancelOpen && !view.cancellable && !cancelling;
+  useEffect(() => {
+    if (!tooLate) return;
+    requestAnimationFrame(() => {
+      tooLateRef.current?.focus();
+      announce(tooLateRef.current?.textContent ?? '');
+    });
+  }, [tooLate]);
+  const reorderable = state === 'delivered' || (state === 'cancelled' && !storeCancelled);
+  const primary = storeCancelled
+    ? null
+    : state === 'failed'
       ? { href: '/checkout' as Route, label: 'Back to checkout' }
       : state === 'expired' || state === 'mismatch'
         ? { href: '/checkout' as Route, label: 'Go to checkout' }
@@ -282,7 +353,77 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
         now={minute}
       />
       <OrderNumber number={view.number} />
-      <OrderStatusCard view={view} state={state} now={new Date(minute)} />
+      {storeCancelled ? (
+        <CancellationCard
+          view={view}
+          headingRef={cancelHeadingRef}
+          animateIn={!cancelledAtLoad}
+          orderAgain={
+            <OrderAgainButton
+              orderId={view.id}
+              number={view.number}
+              variant="outline"
+              className="max-sm:items-stretch max-sm:text-center"
+            />
+          }
+        />
+      ) : null}
+      {view.progress.steps ? (
+        <ProgressCard
+          view={view}
+          now={new Date(minute)}
+          live={{ state: liveLine, returnPath: `/orders/${view.id}` }}
+        />
+      ) : (
+        <OrderStatusCard view={view} state={state} now={new Date(minute)} timeline={false} />
+      )}
+      {canCancel && step === 'placed' ? (
+        <div
+          className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
+          onFocus={slotFocus}
+          onBlur={slotBlur}
+        >
+          <Button
+            ref={cancelButtonRef}
+            type="button"
+            variant="outline"
+            size="touch"
+            aria-disabled={!online || undefined}
+            aria-describedby={online ? undefined : 'cancel-offline'}
+            onClick={() => {
+              if (!online) {
+                announce("You're offline.");
+                return;
+              }
+              setCancelRefusal(null);
+              setCancelOpen(true);
+            }}
+            className="border-destructive bg-white text-destructive hover:bg-tag-4-bg hover:text-destructive"
+          >
+            Cancel order
+          </Button>
+          {online ? null : (
+            <span id="cancel-offline" className="text-body-5 text-neutral-3">
+              You&apos;re offline.
+            </span>
+          )}
+        </div>
+      ) : kitchenHas && !cancelRefusal ? (
+        <div
+          className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
+          onFocus={slotFocus}
+          onBlur={slotBlur}
+        >
+          <p
+            ref={sentenceRef}
+            tabIndex={-1}
+            className="max-w-[480px] text-body-5 text-neutral-3 focus:outline-none"
+          >
+            <WithPhone text={acceptedCancelSentence('{phone}')} phone={view.store.phone} />
+          </p>
+        </div>
+      ) : null}
+      <TimelineCard view={view} now={new Date(minute)} />
       <MoneyNotices notices={notices} />
       {state === 'waiting' && view.payable && payment && arrivalChecked ? (
         <PaymentStep
@@ -330,38 +471,21 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
             Check again
           </Button>
         ) : null}
+        {state === 'delivered' ? (
+          <OrderAgainButton orderId={view.id} number={view.number} variant="primary" />
+        ) : null}
         {primary ? (
-          <Button asChild size="touch" className="uppercase">
+          <Button
+            asChild
+            size="touch"
+            variant={state === 'delivered' ? 'outline' : 'default'}
+            className={state === 'delivered' ? 'bg-white' : 'uppercase'}
+          >
             <Link href={primary.href}>{primary.label}</Link>
           </Button>
         ) : null}
-        {canCancel ? (
-          <div className="flex flex-col items-center gap-1">
-            <Button
-              ref={cancelButtonRef}
-              type="button"
-              variant="outline"
-              size="touch"
-              aria-disabled={!online || undefined}
-              aria-describedby={online ? undefined : 'cancel-offline'}
-              onClick={() => {
-                if (!online) {
-                  announce("You're offline.");
-                  return;
-                }
-                setCancelRefusal(null);
-                setCancelOpen(true);
-              }}
-              className="w-full border-destructive bg-white text-destructive hover:bg-tag-4-bg hover:text-destructive sm:w-auto"
-            >
-              Cancel order
-            </Button>
-            {online ? null : (
-              <span id="cancel-offline" className="text-body-5 text-neutral-3">
-                You&apos;re offline.
-              </span>
-            )}
-          </div>
+        {reorderable && state !== 'delivered' ? (
+          <OrderAgainButton orderId={view.id} number={view.number} variant="outline" />
         ) : null}
       </div>
       <div ref={refusalRef} tabIndex={-1} className="outline-none">
@@ -398,25 +522,47 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
         <AlertDialogContent
           onCloseAutoFocus={(event) => {
             event.preventDefault();
+            // The opener can be gone ("Too late to cancel"): its replacement takes focus (D25).
             if (cancelButtonRef.current?.isConnected) cancelButtonRef.current.focus();
+            else if (sentenceRef.current?.isConnected) focusInPlace(sentenceRef.current);
+            else headingRef.current?.focus();
           }}
         >
-          <AlertDialogTitle>Cancel order {view.number}?</AlertDialogTitle>
-          <AlertDialogDescription>{cancelDescription(view)}</AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep order</AlertDialogCancel>
-            <SubmitButton
-              type="button"
-              variant="danger"
-              pending={cancelling}
-              pendingLabel="Cancelling…"
-              onClick={() => {
-                void cancel();
-              }}
-            >
-              Cancel order
-            </SubmitButton>
-          </AlertDialogFooter>
+          {tooLate ? (
+            <>
+              <AlertDialogTitle>Too late to cancel</AlertDialogTitle>
+              <AlertDialogDescription tabIndex={-1} ref={tooLateRef}>
+                The kitchen has just accepted order {view.number}, so it can&apos;t be cancelled
+                here. Call us on{' '}
+                <a href={`tel:${tel}`} className="font-medium underline">
+                  {view.store.phone}
+                </a>
+                .
+              </AlertDialogDescription>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Close</AlertDialogCancel>
+              </AlertDialogFooter>
+            </>
+          ) : (
+            <>
+              <AlertDialogTitle>Cancel order {view.number}?</AlertDialogTitle>
+              <AlertDialogDescription>{cancelDescription(view)}</AlertDialogDescription>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep order</AlertDialogCancel>
+                <SubmitButton
+                  type="button"
+                  variant="danger"
+                  pending={cancelling}
+                  pendingLabel="Cancelling…"
+                  onClick={() => {
+                    void cancel();
+                  }}
+                >
+                  Cancel order
+                </SubmitButton>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>

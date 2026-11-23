@@ -79,7 +79,8 @@ export function staffShellOf(
     user,
     screens,
     home: board ? '/admin/orders' : null,
-    sidebar: role !== 'kitchen',
+    // A content editor has no screen yet: a sidebar with no entries would look broken (D3).
+    sidebar: board && role !== 'kitchen',
     readOnly: facts.user.isDemo,
     sessionExpiresAt: expires.toISOString(),
     stepUpFreshUntil: freshUntil?.toISOString() ?? null,

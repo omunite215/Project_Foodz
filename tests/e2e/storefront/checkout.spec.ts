@@ -217,11 +217,12 @@ test.describe('Checkout', () => {
     // Orders list (S12.1).
     await open(page, '/account/orders');
     const past = page.getByRole('region', { name: 'Past orders' });
-    await expect(
-      past.getByRole('link', {
-        name: /^Order \d+\s*,\s*Cancelled\s*,\s*Today, .* · Cash\s*,\s*Gimbap, Pad Thai/,
-      }),
-    ).toBeVisible();
+    // F5 D24: the row's one link is named by the number and described by the rest.
+    const row = past.getByRole('link', { name: /^Order \d+$/ }).first();
+    await expect(row).toBeVisible();
+    await expect(row).toHaveAccessibleDescription(
+      /^Cancelled\s*,\s*Today, .* · Cash\s*,\s*Gimbap, Pad Thai/,
+    );
     await expectAccessiblePage(page);
   });
 

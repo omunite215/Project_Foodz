@@ -24,6 +24,8 @@ export const ILLUSTRATIONS = {
   emptyCart: '/illustrations/order-food.svg',
   searching: '/illustrations/cooking.svg',
   favorites: '/illustrations/order-food.svg',
+  // F5's empty board and "Nothing here yet".
+  noData: '/illustrations/no-data.svg',
 } as const;
 
 export interface EmptyStateProps {
@@ -32,6 +34,10 @@ export interface EmptyStateProps {
   /** One action: a button or a link styled as one. */
   action?: ReactNode;
   illustration?: keyof typeof ILLUSTRATIONS;
+  /** A picture other than an illustration (an icon in a disc), decorative. */
+  media?: ReactNode;
+  /** The illustration's size: `compact` is 120 / 160 px (the empty board). */
+  illustrationSize?: 'default' | 'compact';
   /** The heading level that fits the page outline. */
   titleAs?: 'h1' | 'h2' | 'h3';
   /** `page` for a whole page (dish not found), `section` inside a page. */
@@ -45,6 +51,8 @@ export function EmptyState({
   description,
   action,
   illustration,
+  media,
+  illustrationSize = 'default',
   titleAs: Title = 'h2',
   size = 'section',
   className,
@@ -60,14 +68,19 @@ export function EmptyState({
               width={200}
               height={200}
               unoptimized
-              className="size-40 object-contain md:size-50"
+              className={cn(
+                'object-contain',
+                illustrationSize === 'compact' ? 'size-30 md:size-40' : 'size-40 md:size-50',
+              )}
             />
           </EmptyMedia>
+        ) : media ? (
+          <EmptyMedia className="mb-0">{media}</EmptyMedia>
         ) : null}
         <EmptyTitle
           className={cn(
             'font-heading font-normal tracking-normal text-neutral-2',
-            illustration && 'mt-6',
+            (illustration || media) && 'mt-6',
             size === 'page' ? 'text-h4 md:text-h3' : 'text-title-1',
           )}
         >
