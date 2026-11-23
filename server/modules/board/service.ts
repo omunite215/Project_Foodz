@@ -1,4 +1,5 @@
 import 'server-only';
+import { z } from 'zod';
 import { can, type Permission } from '@/server/auth/roles';
 import { requirePermission, type UserActor } from '@/server/auth/session';
 import { type DbContext, runAs } from '@/server/db/context';
@@ -58,6 +59,7 @@ import {
   movedBackEventData,
   moveOrderInput,
   type MoveResult,
+  normalizeOrderNumber,
   REFUSAL_ALERT_AT,
   refuseOrderInput,
   setDishAvailabilityInput,
@@ -361,8 +363,21 @@ export async function getCancelPreview(
 }
 
 /** Exact order number, any date (A11.1). */
+/** The number to look for: the typed query, or a number the action already normalised. */
+function orderNumberOf(input: unknown): string {
+  const normalised = z
+    .object({ number: z.string().max(12) })
+    .strict()
+    .safeParse(input);
+  if (normalised.success) {
+    const number = normalizeOrderNumber(normalised.data.number);
+    if (number) return number;
+  }
+  return findOrderInput.parse(input).number;
+}
+
 export async function findOrder(actor: UserActor, input: unknown): Promise<FindOrderResult> {
-  const { number } = findOrderInput.parse(input);
+  const number = orderNumberOf(input);
   const viewer = await requireBoard(actor, READ, false);
   const found = await runAs(actor, (ctx) => findOrderByNumber(ctx, number));
   if (!found) return { kind: 'none', number };
