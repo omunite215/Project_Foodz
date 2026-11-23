@@ -2,7 +2,7 @@ import 'server-only';
 import { z } from 'zod';
 import { type DbContext, runAsSystem } from '@/server/db/context';
 import { logger } from '@/server/logger';
-import { audit } from '@/server/modules/audit/service';
+import { auditOnce } from '@/server/modules/audit/service';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import {
   getInstanceTag,
@@ -486,13 +486,24 @@ export async function processAutoRefund(
       orderId,
       idempotencyKey: `refund-${orderId}-${order.autoRefundReason}`,
     });
+    // Keyed on Stripe's refund id: a replay that gets the same refund back logs nothing more
+    // (security S15).
     await runAsSystem('refund', (ctx) =>
-      audit(ctx, {
-        action: 'order.refund-issued',
-        targetType: 'order',
-        targetId: orderId,
-        data: { amountCents: remaining, reason: order.autoRefundReason, status: refund.status },
-      }),
+      auditOnce(
+        ctx,
+        {
+          action: 'order.refund-issued',
+          targetType: 'order',
+          targetId: orderId,
+          data: {
+            amountCents: remaining,
+            reason: order.autoRefundReason,
+            status: refund.status,
+            refundId: refund.id,
+          },
+        },
+        'refundId',
+      ),
     );
     if (refund.status === 'failed' || refund.status === 'canceled') {
       logger.error({ orderId }, 'automatic refund failed');

@@ -128,6 +128,13 @@ export const staffTotpSecret = (authSecret: string, email: string) =>
 const TERMS_VERSION = 1;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * 1 Faneuil Hall Square where the address search (Photon) puts it, 1.4 km from the kitchen. The
+ * second customer's Work address and her past order use it, so saving the address and checking
+ * it as a guest give the same distance and fee.
+ */
+export const FANEUIL_HALL = { lat: 42.3600335, lng: -71.0562341 } as const;
+
 /** The demo customer's favorites in local and CI databases (F3): one of them sold out. */
 const DEMO_FAVORITE_SLUGS = ['bulgogi', 'naengmyeon'] as const;
 
@@ -310,7 +317,10 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         }
 
         const workId = seedId('second-customer-work');
-        const work = await tx.address.findUnique({ where: { id: workId }, select: { id: true } });
+        const work = await tx.address.findUnique({
+          where: { id: workId },
+          select: { lat: true, lng: true },
+        });
         if (!work) {
           await tx.address.create({
             data: {
@@ -322,11 +332,14 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
               city: 'Boston, MA 02109',
               notes: 'Front desk takes deliveries',
               isDefault: true,
-              lat: 42.36,
-              lng: -71.0548,
+              ...FANEUIL_HALL,
             },
           });
           count('addresses', true);
+        } else if (work.lat !== FANEUIL_HALL.lat || work.lng !== FANEUIL_HALL.lng) {
+          // Put back where the address search finds it, so the saved address and a guest's
+          // check of the same address give the same distance and fee.
+          await tx.address.update({ where: { id: workId }, data: FANEUIL_HALL });
         }
 
         // F3 fixtures: codes for the refusals nobody could reach otherwise, the second
@@ -454,11 +467,15 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
 
       count(
         'contentVersions',
-        await correctFaqAnswer(tx, admin.id, now, SEED_CORRECTIONS.faqCouponAnswer),
+        await correctParagraph(tx, 'faq', admin.id, now, SEED_CORRECTIONS.faqCouponAnswer),
       );
       count(
         'contentVersions',
-        await correctFaqAnswer(tx, admin.id, now, SEED_CORRECTIONS.faqCashAnswer),
+        await correctParagraph(tx, 'faq', admin.id, now, SEED_CORRECTIONS.faqCashAnswer),
+      );
+      count(
+        'contentVersions',
+        await correctParagraph(tx, 'privacy', admin.id, now, SEED_CORRECTIONS.privacyWhoSeesIt),
       );
 
       // -------------------------------------------------------------- blog
@@ -597,15 +614,15 @@ async function seedPastWelcomeOrder(tx: Tx, userId: string, now: Date): Promise<
       contactPhone: '+16175550123',
       addressText: '1 Faneuil Hall Square, Boston, MA 02109',
       ...PAST_ORDER_SNAPSHOT,
-      addressLat: 42.36,
-      addressLng: -71.0548,
-      distanceKm: 1.3,
+      addressLat: FANEUIL_HALL.lat,
+      addressLng: FANEUIL_HALL.lng,
+      distanceKm: 1.4,
       subtotalCents: 2598,
       discountCents: 260,
-      deliveryFeeCents: 264,
+      deliveryFeeCents: 269,
       taxCents: 164,
       tipCents: 0,
-      totalCents: 2766,
+      totalCents: 2771,
       couponId: welcome.id,
       placedAt,
       deliveredAt: new Date(placedAt.getTime() + 38 * 60 * 1000),
@@ -694,18 +711,20 @@ async function completePastOrderSnapshot(tx: Tx) {
 }
 
 /**
- * FAQ answers earlier seeds published that a feature changed (coupons in F3, cash in F4). When
- * the published version still has the old sentence, a new version with the new one is
- * published, the way the CMS would.
+ * Paragraphs earlier seeds published that a feature changed (FAQ answers for coupons in F3 and
+ * cash in F4, the Privacy Policy's "Who sees it" for Stripe in F4). When the published version
+ * still has the old paragraph, a new version with the new one is published, the way the CMS
+ * would; a page someone edited since is left alone.
  */
-async function correctFaqAnswer(
+async function correctParagraph(
   tx: Tx,
+  slug: string,
   publishedById: string,
   now: Date,
   { from, to }: { from: string; to: string },
 ) {
   const page = await tx.contentPage.findUnique({
-    where: { slug: 'faq' },
+    where: { slug },
     select: {
       id: true,
       publishedVersion: { select: { title: true, content: true, contentHtml: true } },

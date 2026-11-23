@@ -330,7 +330,8 @@ export function PayBar({
         'transition-[transform,visibility] duration-150 motion-reduce:transition-none',
         'data-[typing=true]:invisible data-[typing=true]:translate-y-full',
         'lg:static lg:z-auto lg:mt-12 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:data-[typing=true]:visible lg:data-[typing=true]:translate-y-0',
-        '[@media(max-height:480px)]:static [@media(max-height:480px)]:mt-10 [@media(max-height:480px)]:px-0 [@media(max-height:480px)]:shadow-none',
+        // Short screens (a phone on its side, 200 % zoom): in the form, drawn like the bar from 1024 px.
+        '[@media(max-height:480px)]:static [@media(max-height:480px)]:mt-10 [@media(max-height:480px)]:border-0 [@media(max-height:480px)]:bg-transparent [@media(max-height:480px)]:p-0 [@media(max-height:480px)]:shadow-none',
       )}
     >
       <div className="mx-auto max-w-[672px] lg:max-w-none">

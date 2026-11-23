@@ -176,6 +176,8 @@ test.describe('Dish page', () => {
   });
 
   test('has no accessibility violations', async ({ page }) => {
+    // Three pages, each with a full axe run.
+    test.slow();
     await open(page, '/menu/yangnyeom-chicken');
     await expectAccessible(page);
     await open(page, '/menu/naengmyeon');

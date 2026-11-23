@@ -40,18 +40,20 @@ export function SavedCardRow({
     <li className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
       <span
         aria-hidden
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-neutral-7"
+        className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-neutral-7 min-[360px]:flex"
       >
         <CreditCard className="size-5 text-neutral-2" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
+        <p className="text-body-4 font-medium whitespace-nowrap text-neutral-1">
           <CardName card={card} />
         </p>
         {card.expired ? (
           <ExpiredChip expiry={card.expiry} />
         ) : (
-          <p className="mt-0.5 text-body-5 text-neutral-3">Expires {card.expiry}</p>
+          <p className="mt-0.5 text-body-5 whitespace-nowrap text-neutral-3">
+            Expires {card.expiry}
+          </p>
         )}
       </div>
       <div className="flex flex-col items-end">

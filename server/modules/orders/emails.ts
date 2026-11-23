@@ -252,17 +252,19 @@ export function renderOrderEmail(
         return storeCancellationEmail(order, cancellation, options);
       }
       // D45: her own cancellation of a paid card order sends this email only, with the refund.
-      const paidByCard = order.payment.method === 'card' && order.payment.status !== 'UNPAID';
-      // The amount promised at cancellation: less than the total when part was refunded before.
-      const refunding = options.refund ? formatPrice(options.refund.amountCents) : total;
-      return notice(
-        order,
-        options,
-        `Order ${order.number} is cancelled`,
-        paidByCard
-          ? `You cancelled order ${order.number}. We're refunding ${refunding} to ${cardOf(order)}. ${REFUND_DELAY}`
-          : `You cancelled order ${order.number}. Nothing was charged.`,
-      );
+      // A refund is promised only when the server decided one (security S13): the amount left
+      // after anything refunded before.
+      const byCard = order.payment.method === 'card' && order.payment.status !== 'UNPAID';
+      const done = `You cancelled order ${order.number}.`;
+      let line = `${done} Nothing was charged.`;
+      if (options.refund) {
+        line = `${done} We're refunding ${formatPrice(options.refund.amountCents)} to ${cardOf(order)}. ${REFUND_DELAY}`;
+      } else if (byCard && order.payment.status === 'REFUNDED') {
+        line = `${done} Your payment of ${formatPrice(order.refunds.refundedCents || order.breakdown.totalCents)} was already refunded to ${cardOf(order)}.`;
+      } else if (byCard) {
+        line = done;
+      }
+      return notice(order, options, `Order ${order.number} is cancelled`, line);
     }
     case 'refunded': {
       const at = options.refund?.at ?? new Date().toISOString();

@@ -61,6 +61,13 @@ export const FAQ_CASH_ANSWER =
  * Seeded values earlier runs wrote and F3 changed. A database still holding the old value gets
  * the new one; a value someone has edited since is left alone.
  */
+/**
+ * Privacy, "Who sees it" (F4 security S14): what Stripe receives with each card payment, and that
+ * it keeps its records after the Foodz account is deleted.
+ */
+export const PRIVACY_WHO_SEES_IT =
+  'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. When you pay by card, your card details go straight to our payment processor, Stripe, and never reach our servers. With each card payment Stripe also receives the name and delivery address on the order and the order number, which it needs to process the payment and check it for fraud. Stripe keeps its own record of each payment under its privacy policy, including after you delete your Foodz account.';
+
 export const SEED_CORRECTIONS = {
   taxRateBps: { from: 625, to: 700 },
   welcome10Description: {
@@ -75,6 +82,10 @@ export const SEED_CORRECTIONS = {
   faqCashAnswer: {
     from: 'Yes. Choose cash at checkout and pay the courier when your order arrives.',
     to: FAQ_CASH_ANSWER,
+  },
+  privacyWhoSeesIt: {
+    from: 'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. Card details go straight to our payment processor and never reach our servers.',
+    to: PRIVACY_WHO_SEES_IT,
   },
 } as const;
 
@@ -128,7 +139,7 @@ const pages: { slug: string; title: string; blocks: Block[] }[] = [
       },
       { h2: 'Who sees it' },
       {
-        p: 'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. Card details go straight to our payment processor and never reach our servers.',
+        p: PRIVACY_WHO_SEES_IT,
       },
       { h2: 'How long we keep it' },
       {

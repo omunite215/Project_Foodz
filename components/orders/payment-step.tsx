@@ -47,8 +47,13 @@ export function PaymentStep({
   onPaid,
   onChanged,
 }: PaymentStepProps) {
-  const firstCard = savedCards.find((card) => !card.expired)?.id ?? NEW_CARD;
-  const [choice, setChoice] = useState(firstCard);
+  const usableCards = savedCards.filter((card) => !card.expired);
+  const firstCard = usableCards[0]?.id ?? NEW_CARD;
+  const [picked, setChoice] = useState(firstCard);
+  // The card shown as chosen is the card charged, as at checkout (S6.11): a choice that isn't
+  // listed (the list changed since) falls back to the most recently used card, or a new one.
+  const choice =
+    picked === NEW_CARD || usableCards.some((card) => card.id === picked) ? picked : firstCard;
   const [saveCard, setSaveCard] = useState(false);
   const [formStatus, setFormStatus] = useState<CardFormStatus>('loading');
   const [formAttempt, setFormAttempt] = useState(0);
@@ -56,7 +61,7 @@ export function PaymentStep({
   const [alert, setAlert] = useState<PaymentAlertState | null>(null);
   const fields = useRef<CardFieldsHandle>(null);
   const alertRef = useRef<HTMLDivElement>(null);
-  const newCard = savedCards.length === 0 || choice === NEW_CARD;
+  const newCard = choice === NEW_CARD;
   const busy = phase !== 'idle';
 
   const say = (state: PaymentAlertState, text: string) => {

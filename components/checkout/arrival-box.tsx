@@ -2,6 +2,7 @@ import { Clock } from 'lucide-react';
 import type { Quote } from '@/server/modules/cart/schema';
 import { ARRIVAL_UNAVAILABLE, arrivalWords } from '@/lib/checkout-text';
 import { orderingOpensText } from '@/lib/cart-text';
+import { RangeText } from '@/components/orders/order-parts';
 import { cn } from '@/lib/utils';
 
 /*
@@ -68,7 +69,9 @@ export function ArrivalBox({
                 : 'text-body-3 font-semibold',
           )}
         >
-          <span aria-hidden>{words.line1}</span>
+          <span aria-hidden>
+            <RangeText text={words.line1} />
+          </span>
           <span className="sr-only">{words.spoken}</span>
         </p>
         {words.line2 ? (

@@ -82,7 +82,13 @@ export function PlacedGate({
             ? `Confirming your payment for order ${number}…`
             : `Order ${number} is placed.`}
         </h1>
-        {confirming ? null : (
+        {confirming ? (
+          <div className="mt-8">
+            <Button asChild variant="outline" size="touch" className="bg-white">
+              <Link href={href}>View your order</Link>
+            </Button>
+          </div>
+        ) : (
           <>
             <p className="mt-3 text-body-4 text-neutral-3">You&apos;ll find it in your orders.</p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">

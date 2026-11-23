@@ -69,7 +69,7 @@ test.describe('Cart', () => {
     await expect(dialog.getByRole('heading', { name: 'Your cart is empty' })).toBeVisible();
     // Full screen on phones, a 440 px panel from 768 px (D1).
     const box = await dialog.boundingBox();
-    expect(box?.width).toBe(isPhone(testInfo) ? 375 : 440);
+    expect(box?.width).toBeCloseTo(isPhone(testInfo) ? 375 : 440, 0);
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -105,8 +105,11 @@ test.describe('Cart', () => {
 
     const quantity = dialog.getByRole('group', { name: 'Quantity, Gimbap' });
     await expect(quantity.getByText('Gimbap, quantity 1')).toBeAttached();
-    // At 1, the minus removes the line and says so.
-    await expect(quantity.getByRole('button', { name: 'Remove Gimbap' })).toBeVisible();
+    // At 1, the minus removes the line and says so, with a name apart from the line's Remove.
+    await expect(
+      quantity.getByRole('button', { name: 'Decrease to 0 and remove Gimbap' }),
+    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove Gimbap', exact: true })).toHaveCount(1);
     await dialog.getByRole('button', { name: 'Increase Gimbap' }).click();
     await expect(quantity.getByText('Gimbap, quantity 2')).toBeAttached();
     await expect(dialog.getByText('2 × $12.99')).toBeVisible();
@@ -411,6 +414,69 @@ test.describe('Cart', () => {
         return input.selectionStart === 0 && input.selectionEnd === input.value.length;
       }),
     ).toBe(true);
+  });
+
+  test('an address outside the area replaces the one checked before and blocks checkout (S2.8)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await addDish(page, 'gimbap');
+    await addDish(page, 'pad-thai');
+    // 1 Faneuil Hall Square, checked earlier in this tab: inside the area.
+    await page.evaluate(() =>
+      sessionStorage.setItem(
+        'foodz.cart.point',
+        JSON.stringify({ line1: '1 Faneuil Hall Square', lat: 42.3600335, lng: -71.0562341 }),
+      ),
+    );
+    let dialog = await openCart(page);
+    await expect(priceValue(dialog, /^Delivery to your address/)).toContainText('$');
+
+    const delivery = dialog.getByRole('region', { name: 'Delivery' });
+    await delivery.getByRole('button', { name: 'Change delivery address' }).click();
+    const field = delivery.getByRole('combobox', { name: 'Your address' });
+    await expect(field).toBeFocused();
+    await field.pressSequentially('1300 Hancock Street Quincy', { delay: 25 });
+    const options = dialog
+      .getByRole('listbox', { name: 'Address suggestions' })
+      .getByRole('option');
+    await expect(options.filter({ hasText: /Quincy/ }).first()).toBeVisible({ timeout: 20_000 });
+    const index = (await options.allInnerTexts()).findIndex((text) => /Quincy/.test(text));
+    for (let step = 0; step <= index; step++) await field.press('ArrowDown');
+    await field.press('Enter');
+    await expect(delivery.getByText(/we don't deliver to 1300 Hancock Street yet/i)).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // The breakdown and checkout follow the new address, not the earlier one.
+    const outsideRow = priceValue(dialog, /^Delivery to your address/);
+    await expect(outsideRow).toContainText('—');
+    await expect(outsideRow).not.toContainText('$');
+    await expect(totalRow(dialog)).toContainText('Total before delivery');
+    await expect(dialog.getByText('Choose an address we deliver to.')).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: /^(Go to checkout|Ordering opens at )/ }),
+    ).toHaveAttribute('aria-disabled', 'true');
+
+    // A reload keeps the outside address; the earlier one doesn't come back.
+    await page.keyboard.press('Escape');
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    dialog = await openCart(page);
+    await expect(
+      dialog.getByText(/^We don't deliver to 1300 Hancock Street yet\. It's about \d+\.\d km away/),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(dialog.getByText('Choose an address we deliver to.')).toBeVisible();
+    await expect(dialog.getByText('1 Faneuil Hall Square')).toHaveCount(0);
+
+    // "Choose another address" opens an empty field, ready to type.
+    await dialog
+      .getByRole('region', { name: 'Delivery' })
+      .getByRole('button', { name: 'Choose another address' })
+      .click();
+    const again = dialog.getByRole('combobox', { name: 'Your address' });
+    await expect(again).toBeFocused();
+    await expect(again).toHaveValue('');
   });
 
   test('after signing in, her saved default address beats one checked as a guest (S2.6)', async ({

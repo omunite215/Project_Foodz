@@ -24,10 +24,12 @@ test.describe('Favorites', () => {
     // The dish is named by this tab, never by the address.
     await expect(page.getByText('Sign in to save Bulgogi to your favorites.')).toBeVisible();
 
-    // "Create an account" keeps the reason, so the same notice shows there.
+    // "Create an account" keeps the reason, so the notice follows in sign-up wording.
     await page.getByRole('link', { name: 'Create an account' }).click();
     await expect(page).toHaveURL(/\/sign-up\?callbackUrl=%2Fmenu&reason=favorite$/);
-    await expect(page.getByText('Sign in to save Bulgogi to your favorites.')).toBeVisible();
+    await expect(
+      page.getByText('Create an account to save Bulgogi to your favorites.'),
+    ).toBeVisible();
     await signUp(page, { from: page.url().replace(/^https?:\/\/[^/]+/, '') });
 
     await expect(page).toHaveURL(/\/menu$/);
@@ -72,7 +74,12 @@ test.describe('Favorites', () => {
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Kimchi', 'Bulgogi']);
 
     await heart(page, 'Kimchi').click();
-    await expect(page.getByText('Kimchi removed from your favorites.')).toBeVisible();
+    // The visible notice; the screen-reader announcer may hold the same words for a moment.
+    await expect(
+      page.locator('[data-slot="alert-description"]', {
+        hasText: 'Kimchi removed from your favorites.',
+      }),
+    ).toBeVisible();
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Bulgogi']);
     await expect(page.locator('main').getByRole('link', { name: /^Bulgogi,/ })).toBeFocused();
     await page.getByRole('button', { name: 'Undo removing Kimchi' }).click();

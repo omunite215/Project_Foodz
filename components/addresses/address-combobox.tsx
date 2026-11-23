@@ -219,6 +219,8 @@ export function AddressCombobox({
   const [active, setActive] = useState(-1);
   const [confirm, setConfirm] = useState<AddressSuggestion | null>(null);
   const requestRef = useRef(0);
+  /** The suggestions on screen, to keep the highlighted one when a refined search answers. */
+  const shownItems = useRef<readonly AddressSuggestion[]>([]);
   const announceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const ownRef = useRef<HTMLInputElement>(null);
   const inputRef = givenRef ?? ownRef;
@@ -245,7 +247,10 @@ export function AddressCombobox({
       setOpen(true);
       return;
     }
-    setState({ kind: 'searching' });
+    // Refining a search keeps the suggestions on screen until the new ones arrive: the list
+    // doesn't blink shut, and Enter still picks the one she has highlighted (that pick drops the
+    // late answer).
+    setState((current) => (current.kind === 'results' ? current : { kind: 'searching' }));
     if (!fromAutofill) setOpen(true);
     const outcome = await callAction(() => searchAction({ query: query.trim() }), {
       timeoutMs: SEARCH_TIMEOUT_MS,
@@ -270,8 +275,15 @@ export function AddressCombobox({
       next = { kind: 'down' };
       spoken = SEARCH_DOWN_TEXT;
     }
+    const previous = shownItems.current;
     setState(next);
-    setActive(-1);
+    // The highlighted suggestion stays highlighted when the new list still has it.
+    setActive((current) => {
+      const kept = current >= 0 ? previous[current]?.id : undefined;
+      return kept !== undefined && next.kind === 'results'
+        ? next.items.findIndex((item) => item.id === kept)
+        : -1;
+    });
 
     if (fromAutofill && next.kind === 'results') {
       setConfirm(next.items[0] ?? null);
@@ -285,6 +297,9 @@ export function AddressCombobox({
   const debouncer = useDebouncer((query: string) => void search(query), { wait: 250 });
 
   const items = state.kind === 'results' ? state.items : [];
+  useEffect(() => {
+    shownItems.current = items;
+  });
   const expanded = open && state.kind !== 'idle' && !(state.kind === 'searching' && !slow);
 
   const pick = (item: AddressSuggestion) => {
