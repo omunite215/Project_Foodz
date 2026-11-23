@@ -41,6 +41,7 @@ import {
   placedLine,
   PRIMARY_WORDS,
   promisedLine,
+  readyByLine,
   READ_ONLY_CAPTION,
   timeBlockText,
   undoSpoken,
@@ -615,9 +616,9 @@ export function StaffOrderDetailView({
         <Section title="Times" level={level}>
           <ul className="space-y-1 text-body-4 text-neutral-1 tabular-nums">
             {detail.placedAt ? <li>{placedLine(detail.placedAt, now, timeZone)}</li> : null}
-            {detail.readyBy ? <li>Ready by {boardClock(detail.readyBy, timeZone)}</li> : null}
+            {detail.readyBy ? <li>{readyByLine(detail.readyBy, now, timeZone)}</li> : null}
             {detail.promised ? (
-              <li>{promisedLine(detail.promised.from, detail.promised.to, timeZone)}</li>
+              <li>{promisedLine(detail.promised.from, detail.promised.to, timeZone, now)}</li>
             ) : null}
             {howItWent ? <li className="text-neutral-3">{howItWent}</li> : null}
           </ul>

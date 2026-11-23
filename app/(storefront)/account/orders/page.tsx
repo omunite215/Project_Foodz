@@ -23,6 +23,7 @@ export default async function OrdersPage() {
         page={page}
         timeZone={status?.timeZone ?? STORE_TIME_ZONE}
         now={new Date().toISOString()}
+        userId={actor.userId}
       />
     </>
   );

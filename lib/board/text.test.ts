@@ -33,11 +33,13 @@ import {
   paymentChipText,
   placedLine,
   promisedLine,
+  readyByLine,
   refuseOutcomeText,
   sessionEndingText,
   soldOutStripText,
   tabText,
   timeBlockText,
+  titleWithUnseen,
   timelineText,
   waitingBannerText,
 } from './text';
@@ -336,6 +338,14 @@ describe('the detail (design 5)', () => {
   it('words times, the promise and how it went', () => {
     expect(placedLine(at('19:12'), now, TZ)).toBe('Placed 7:12 pm · 18 min ago');
     expect(promisedLine(at('20:09'), at('20:19'), TZ)).toBe('Promised for 8:09–8:19 pm');
+    // Another day carries its date, never "4372 min ago" (admin acceptance A10.2).
+    const later = new Date(Date.parse(at('19:30')) + 3 * 24 * 60 * 60_000);
+    expect(placedLine(at('07:53'), later, TZ)).toMatch(/^Placed \w{3}, \w{3} \d+, 7:53 am$/);
+    expect(readyByLine(at('08:17'), later, TZ)).toMatch(/^Ready by \w{3}, \w{3} \d+, 8:17 am$/);
+    expect(promisedLine(at('08:28'), at('08:38'), TZ, later)).toMatch(
+      /^Promised for \w{3}, \w{3} \d+, 8:28–8:38 am$/,
+    );
+    expect(placedLine(at('17:00'), now, TZ)).toBe('Placed 5:00 pm · 2 h ago');
     expect(
       howItWentLine({ acceptedAfterMinutes: 1, cookedInMinutes: 19, readyLateMinutes: 3 }),
     ).toBe('Accepted after 1 min · cooked in 19 min · ready 3 min late');
@@ -381,5 +391,15 @@ describe('the detail (design 5)', () => {
       timelineText({ ...TIMELINE[11]!, type: 'refunded', amountCents: null, cardLabel: null })
         .sentence,
     ).toBe('Refunded to the customer');
+  });
+});
+
+describe('the hidden-tab title (A3.1)', () => {
+  it('counts unseen orders in front of the title, and drops the count once seen', () => {
+    expect(titleWithUnseen('Order board | Foodz Admin', 1)).toBe('(1) Order board | Foodz Admin');
+    expect(titleWithUnseen('(1) Order board | Foodz Admin', 3)).toBe(
+      '(3) Order board | Foodz Admin',
+    );
+    expect(titleWithUnseen('(3) Order board | Foodz Admin', 0)).toBe('Order board | Foodz Admin');
   });
 });

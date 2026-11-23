@@ -114,6 +114,30 @@ export const STATUS_WORDS: Record<OrderStatusWord, string> = {
   expired: 'Expired, not paid',
 };
 
+/** The chip's word, "Collected" included (U23). */
+export const chipWord = (order: Pick<OrderSummary, 'statusWord' | 'collected'>) =>
+  order.statusWord === 'pickedUp' && order.collected ? 'Collected' : STATUS_WORDS[order.statusWord];
+
+/**
+ * Fresh rows for the open list (F5 S7.2 to S7.4): each row held takes its fresh copy in place,
+ * so nothing moves while she reads; a new chip is read out once, politely ("Order 1042:
+ * Cooking."). Rows the fresh copy doesn't have stay as they were.
+ */
+export function freshenRows(
+  held: readonly OrderSummary[],
+  fresh: readonly OrderSummary[],
+): { rows: OrderSummary[]; spoken: string[] } {
+  const byId = new Map(fresh.map((order) => [order.id, order]));
+  const spoken: string[] = [];
+  const rows = held.map((order) => {
+    const next = byId.get(order.id);
+    if (!next) return order;
+    if (chipWord(next) !== chipWord(order)) spoken.push(`Order ${next.number}: ${chipWord(next)}.`);
+    return next;
+  });
+  return { rows, spoken };
+}
+
 export const MONEY_FLAG_WORDS: Record<NonNullable<OrderSummary['moneyFlag']>, string> = {
   refunded: 'Refunded',
   partlyRefunded: 'Partly refunded',

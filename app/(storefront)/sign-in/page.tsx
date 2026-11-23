@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { isStaff } from '@/server/auth/roles';
 import { getActor } from '@/server/auth/session';
 import { getAuthOptions } from '@/server/modules/account/service';
 import { signInReason } from '@/server/modules/auth/schema';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { SignInForm } from '@/components/auth/sign-in-form';
 import { returnRoute } from '@/lib/auth-links';
-import { safeRedirectPath } from '@/lib/redirect';
+import { safeRedirectPath, signInLanding } from '@/lib/redirect';
 import { firstParam } from '@/lib/search-params';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -22,7 +23,10 @@ const isNotice = (value: unknown): value is Notice =>
 export default async function SignInPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const callbackUrl = safeRedirectPath(firstParam(params.callbackUrl));
-  if ((await getActor()).kind === 'user') redirect(returnRoute(callbackUrl));
+  const actor = await getActor();
+  if (actor.kind === 'user') {
+    redirect(returnRoute(signInLanding(callbackUrl, isStaff(actor.role))));
+  }
 
   const notice = firstParam(params.notice);
   return (

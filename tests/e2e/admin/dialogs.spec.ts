@@ -78,6 +78,17 @@ test.describe('staff "Cancel order" (A7)', () => {
 });
 
 test.describe('the order detail (A10)', () => {
+  test('an order from another day carries its date (A10.2)', async ({ page }) => {
+    await signInStaff(page, STAFF.support, '/admin/orders');
+    await page.getByLabel('Find order').fill('S1001');
+    await page.getByRole('button', { name: 'Find' }).click();
+    await expect(page.getByRole('heading', { name: 'Order S1001' }).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/^Placed \w{3}, \w{3} \d+, \d+:\d\d [ap]m$/)).toBeVisible();
+    await expect(page.getByText(/min ago$/)).toHaveCount(0);
+  });
+
   test('loads as a full page, and a number in place of an id is "Order not found"', async ({
     page,
   }) => {
@@ -90,7 +101,8 @@ test.describe('the order detail (A10)', () => {
     await expect(page.getByRole('heading', { name: 'Customer' })).toBeVisible();
     await expectNoAxeViolations(page);
 
-    await open(page, '/admin/orders/1042');
+    const missing = await open(page, '/admin/orders/1042');
+    expect(missing?.status()).toBe(404);
     await expect(page.getByRole('heading', { level: 1, name: 'Order not found' })).toBeVisible();
   });
 });

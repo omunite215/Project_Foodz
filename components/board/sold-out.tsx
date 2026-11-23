@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Sheet,
   SheetClose,
@@ -210,9 +211,16 @@ export function SoldOutSheet({
       }
       return outcome.data.dishes;
     },
-    enabled: open,
+    // Read once the board is up, so the sheet opens with its rows (States: "Rows render with
+    // the board's data"); read again each time it opens.
     staleTime: 0,
   });
+  const refetchDishes = dishes.refetch;
+  useEffect(() => {
+    if (open) void refetchDishes();
+  }, [open, refetchDishes]);
+  // A cold open that still waits: two placeholder rows after 150 ms, never an empty sheet.
+  const waiting = useSlowPending(open && dishes.isPending, 150);
 
   useEffect(() => {
     // eslint-disable-next-line no-param-reassign
@@ -342,6 +350,12 @@ export function SoldOutSheet({
               />
             </div>
             <div className="space-y-6 px-4 py-4" aria-busy={dishes.isPending || undefined}>
+              {waiting ? (
+                <div aria-hidden className="space-y-2" data-dishes-loading="">
+                  <Skeleton className="h-16 rounded-xl" />
+                  <Skeleton className="h-16 rounded-xl" />
+                </div>
+              ) : null}
               {dishes.isError ? (
                 <p className="text-body-5 text-destructive">
                   We couldn&apos;t load the dishes. Close this and try again.

@@ -38,6 +38,7 @@ import { acceptedCancelSentence, currentStep, orderTabTitle } from '@/lib/order-
 import { cancelDescription, moneyNotices, orderStateOf, telOf } from '@/lib/order-text';
 import { useMinuteClock } from '@/lib/use-minute-clock';
 import { useOnline } from '@/lib/use-online';
+import { cn } from '@/lib/utils';
 import {
   DeliveryCard,
   MoneyNotices,
@@ -46,7 +47,13 @@ import {
   OrderStatusCard,
   Receipt,
 } from './order-parts';
-import { CancellationCard, ProgressCard, TimelineCard, WithPhone } from './order-progress';
+import {
+  CancellationCard,
+  PHONE_LINK_TARGET,
+  ProgressCard,
+  TimelineCard,
+  WithPhone,
+} from './order-progress';
 import { PaymentStep } from './payment-step';
 import { useLiveOrder } from './use-live-order';
 import { OrderAgainButton } from './use-reorder';
@@ -495,7 +502,7 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
               <>
                 The kitchen has already started on order {view.number}, so it can&apos;t be
                 cancelled here. Call us on{' '}
-                <a href={`tel:${tel}`} className="font-medium underline">
+                <a href={`tel:${tel}`} className={cn('font-medium underline', PHONE_LINK_TARGET)}>
                   {view.store.phone}
                 </a>
                 .
@@ -508,7 +515,10 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
       </div>
       <p className="mt-6 text-center text-body-5 text-neutral-3">
         Need help? Call{' '}
-        <a href={`tel:${tel}`} className="text-neutral-1 underline underline-offset-4">
+        <a
+          href={`tel:${tel}`}
+          className={cn('text-neutral-1 underline underline-offset-4', PHONE_LINK_TARGET)}
+        >
           {view.store.phone}
         </a>
       </p>
@@ -534,7 +544,7 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
               <AlertDialogDescription tabIndex={-1} ref={tooLateRef}>
                 The kitchen has just accepted order {view.number}, so it can&apos;t be cancelled
                 here. Call us on{' '}
-                <a href={`tel:${tel}`} className="font-medium underline">
+                <a href={`tel:${tel}`} className={cn('font-medium underline', PHONE_LINK_TARGET)}>
                   {view.store.phone}
                 </a>
                 .

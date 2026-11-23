@@ -41,7 +41,37 @@ test.describe('the live order page', () => {
     await expect(page.getByRole('button', { name: 'Cancel order' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Timeline' })).toBeVisible();
     await expect(page).toHaveTitle('Cooking · Order S1105 | Foodz');
+    // Phone numbers inside sentences are 44 px targets (S8.5).
+    const phones = page.getByRole('link', { name: '(617) 555-0142' });
+    expect(await phones.count()).toBeGreaterThan(0);
+    for (const box of await phones.evaluateAll((links) =>
+      links.map((link) => link.getBoundingClientRect().height),
+    )) {
+      expect(box).toBeGreaterThanOrEqual(44);
+    }
     await expectNoAxeViolations(page);
+  });
+
+  test('the orders list puts the arrival on one line under the date from 1280 px', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!SAMPLE_PASSWORD, 'Needs the sample password (E2E_SEED_OUTPUT).');
+    test.skip(testInfo.project.name !== 'admin-1440', 'The one-line row is the xl layout.');
+    await signIn(page, ACCOUNTS.second, SAMPLE_PASSWORD);
+    await open(page, '/account/orders');
+    const row = page
+      .locator('[data-order-row]')
+      .filter({ has: page.getByRole('link', { name: 'Order S1105', exact: true }) });
+    // The visible line (its spoken twin is screen-reader text).
+    const arrival = row.getByText(/^(Now arriving about|Arriving about|Due by) /).first();
+    const date = row.getByText(/ · (Cash|Card|Paid)/).first();
+    const [arrivalBox, dateBox] = [await arrival.boundingBox(), await date.boundingBox()];
+    expect(arrivalBox && dateBox).toBeTruthy();
+    if (!arrivalBox || !dateBox) return;
+    // Its own line, under the date and lined up with it, on one line (design review R2-2).
+    expect(arrivalBox.y).toBeGreaterThan(dateBox.y);
+    expect(Math.abs(arrivalBox.x - dateBox.x)).toBeLessThan(24);
+    expect(arrivalBox.height).toBeLessThan(28);
   });
 
   test("a cancellation in the page's HTML shows at once, never hidden by script", async ({

@@ -20,6 +20,7 @@ import {
 } from '@/lib/board/model';
 import type { OrderChangedEvent } from '@/lib/realtime/events';
 import { useHydrated } from '@/lib/use-hydrated';
+import { midpoint } from '@/lib/board/clock';
 
 /*
  * The order board's data (F5 design 2, 2.12): a TanStack DB collection of cards fed by
@@ -76,12 +77,13 @@ function metaOf(snapshot: BoardSnapshot, receivedAt: number): BoardMeta {
 }
 
 async function readSnapshot(queryClient: QueryClient): Promise<BoardCard[]> {
+  const sentAt = Date.now();
   const outcome = await callAction(() => boardSnapshotAction({}));
   if (!outcome.ok) {
     reportFailure(outcome.error);
     throw new BoardReadError(outcome.error);
   }
-  queryClient.setQueryData(BOARD_META_KEY, metaOf(outcome.data, Date.now()));
+  queryClient.setQueryData(BOARD_META_KEY, metaOf(outcome.data, midpoint(sentAt, Date.now())));
   // An event that arrived while this copy was on its way may hold a newer version (A12.5).
   const held = queryClient.getQueryData<BoardCard[]>(BOARD_CARDS_KEY) ?? [];
   return mergeCards(held, outcome.data.cards);

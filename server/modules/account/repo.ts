@@ -51,6 +51,10 @@ export function findUserIdByEmail(ctx: DbContext, email: string) {
   return db(ctx).user.findUnique({ where: { email }, select: { id: true } });
 }
 
+export function findUserRoleById(ctx: DbContext, id: string) {
+  return db(ctx).user.findUnique({ where: { id }, select: { role: true } });
+}
+
 /** The account a password-reset token belongs to (the token row holds the user id). */
 export async function findEmailForResetToken(ctx: DbContext, token: string) {
   const verification = await db(ctx).verification.findFirst({

@@ -121,6 +121,12 @@ export const collapsedSuffix = (count: ColumnCount) =>
 export const expandLabel = (column: BoardColumn, count: ColumnCount) =>
   `Expand ${COLUMN_WORDS[column]}${collapsedSuffix(count)}`;
 
+/** "(2) Order board | Foodz Admin" while orders arrived unseen; the bare title otherwise (A3.1). */
+export function titleWithUnseen(title: string, unseen: number): string {
+  const bare = title.replace(/^\(\d+\) /, '');
+  return unseen > 0 ? `(${unseen}) ${bare}` : bare;
+}
+
 export const newBelowText = (count: number) =>
   `${count} new ${count === 1 ? 'order' : 'orders'} below`;
 
@@ -559,18 +565,53 @@ export const PAYMENT_STATUS_WORDS: Record<PaymentStatus, string> = {
   REFUNDED: 'Refunded',
 };
 
-/** "Placed 7:29 pm · 18 min ago". */
-export function placedLine(placedAt: string, now: Date, timeZone: string): string {
-  const ago = Math.max(0, Math.floor((now.getTime() - Date.parse(placedAt)) / 60_000));
-  return `Placed ${boardClock(placedAt, timeZone)} · ${ago < 1 ? 'just now' : `${minutes(ago)} ago`}`;
+/** "Fri, Nov 20" for a time on another day in the store's time zone; null for today. */
+export function otherDay(iso: string, now: Date, timeZone: string): string | null {
+  const dayOf = (instant: Date) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone, dateStyle: 'short' }).format(instant);
+  const at = new Date(iso);
+  if (dayOf(at) === dayOf(now)) return null;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(at);
 }
 
-/** "Promised for 8:09–8:19 pm" (both ends keep am/pm only when they differ). */
-export function promisedLine(from: string, to: string, timeZone: string): string {
+/** "7:29 pm" today, "Fri, Nov 20, 7:29 pm" on another day. */
+const dayAndClock = (iso: string, now: Date, timeZone: string) => {
+  const day = otherDay(iso, now, timeZone);
+  return day ? `${day}, ${boardClock(iso, timeZone)}` : boardClock(iso, timeZone);
+};
+
+/**
+ * "Placed 7:29 pm · 18 min ago"; "· 2 h ago" from an hour; an order from another day carries its
+ * date instead ("Placed Fri, Nov 20, 7:53 am"), never "4372 min ago".
+ */
+export function placedLine(placedAt: string, now: Date, timeZone: string): string {
+  const day = otherDay(placedAt, now, timeZone);
+  if (day) return `Placed ${day}, ${boardClock(placedAt, timeZone)}`;
+  const ago = Math.max(0, Math.floor((now.getTime() - Date.parse(placedAt)) / 60_000));
+  const since =
+    ago < 1 ? 'just now' : ago < 60 ? `${minutes(ago)} ago` : `${Math.floor(ago / 60)} h ago`;
+  return `Placed ${boardClock(placedAt, timeZone)} · ${since}`;
+}
+
+/** "Ready by 7:53 pm", or "Ready by Fri, Nov 20, 8:17 am" on another day. */
+export const readyByLine = (readyBy: string, now: Date, timeZone: string) =>
+  `Ready by ${dayAndClock(readyBy, now, timeZone)}`;
+
+/**
+ * "Promised for 8:09–8:19 pm" (both ends keep am/pm only when they differ); on another day
+ * "Promised for Fri, Nov 20, 8:28–8:38 am".
+ */
+export function promisedLine(from: string, to: string, timeZone: string, now?: Date): string {
   const start = boardClock(from, timeZone);
   const end = boardClock(to, timeZone);
   const sameHalf = start.slice(-2) === end.slice(-2);
-  return `Promised for ${sameHalf ? start.slice(0, -3) : start}–${end}`;
+  const day = now ? otherDay(from, now, timeZone) : null;
+  return `Promised for ${day ? `${day}, ` : ''}${sameHalf ? start.slice(0, -3) : start}–${end}`;
 }
 
 /** "Accepted after 1 min · cooked in 19 min · ready 3 min late"; null with nothing to say. */

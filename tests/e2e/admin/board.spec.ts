@@ -151,6 +151,8 @@ test.describe('the kitchen board (A2)', () => {
     await expect(panel.getByRole('heading', { name: 'Timeline' })).toBeVisible({
       timeout: 15_000,
     });
+    // The tab names the order open over the board (A1.9).
+    await expect(page).toHaveTitle('Order S1101 | Foodz Admin');
     await expectNoAxeViolations(page);
     await page.keyboard.press('Escape');
     await expect(card(page, 'S1101').getByRole('link', { name: 'Order S1101' })).toBeFocused();
@@ -191,8 +193,14 @@ test.describe('fit and states (design review)', () => {
     expect(ended.ok()).toBe(true);
     await context.clearCookies();
     const heading = page.getByRole('heading', { name: "You've been signed out" });
-    // Realtime may notice first; then there is nothing to search for.
-    if (!(await heading.isVisible())) {
+    // Coming back to the tab reads the board again, which finds the session gone. A search
+    // is the fallback; it changes nothing either.
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    const noticed = await heading
+      .waitFor({ timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!noticed) {
       await page.getByLabel('Find order').fill('9999');
       await page.getByRole('button', { name: 'Find' }).click();
     }
@@ -206,10 +214,39 @@ test.describe('fit and states (design review)', () => {
   });
 });
 
+test.describe('filters and the sold-out sheet (A11.2, design review R2-3)', () => {
+  test('two quick taps keep both filters', async ({ page }) => {
+    await signInStaff(page, STAFF.kitchen, '/admin/orders');
+    await page.getByRole('button', { name: 'Late only' }).click();
+    await page.getByRole('radio', { name: 'Cash' }).click();
+    // The address follows each tap once the server has drawn the board for it.
+    await expect(page).toHaveURL(/late=1/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/pay=cash/, { timeout: 15_000 });
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page).not.toHaveURL(/late=1|pay=cash/, { timeout: 15_000 });
+  });
+
+  test('the sold-out sheet opens with its rows, never an empty body', async ({ page }) => {
+    await signInStaff(page, STAFF.kitchen, '/admin/orders');
+    await page
+      .getByRole('button', { name: /^Sold out/ })
+      .first()
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'Dish availability' });
+    await expect(
+      sheet.getByRole('listitem').first().or(sheet.locator('[data-dishes-loading]')),
+    ).toBeVisible({ timeout: 1_000 });
+    await expect(sheet.getByRole('button', { name: /^Mark .+ sold out$/ }).first()).toBeVisible();
+  });
+});
+
 test.describe('the phone board (A16.3)', () => {
   test('uses status tabs over one list', async ({ page }, testInfo) => {
     test.skip(!isPhone(testInfo), 'Phone width only.');
     await signInStaff(page, STAFF.kitchen, '/admin/orders');
+    // Order numbers are 44 px targets on phones.
+    const number = card(page, 'S1101').getByRole('link', { name: 'Order S1101' });
+    expect((await number.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     await expect(page.getByRole('tab', { name: /^New 2/ })).toHaveAttribute(
       'aria-selected',
       'true',

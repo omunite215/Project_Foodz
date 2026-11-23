@@ -1,5 +1,6 @@
 import {
   ACCOUNTS,
+  codeFor,
   expect,
   expectNoAxeViolations,
   isPhone,
@@ -69,6 +70,24 @@ test.describe('who may enter /admin (A1.2 to A1.5)', () => {
     ).toBeVisible();
     await expect(page).toHaveTitle('No access | Foodz Admin');
   });
+});
+
+test.describe('where staff land (A1.1)', () => {
+  for (const [who, email] of [
+    ['kitchen', STAFF.kitchen],
+    ['support', STAFF.support],
+  ] as const) {
+    test(`${who} signing in with no address lands on the board`, async ({ page }) => {
+      await open(page, '/sign-in');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill(SAMPLE_PASSWORD);
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      await page.getByLabel('6-digit code').fill(await codeFor(email));
+      await page.getByRole('button', { name: 'Continue' }).click();
+      await expect(page).toHaveURL(/\/admin\/orders$/, { timeout: 30_000 });
+      await expect(page.getByRole('heading', { level: 1, name: 'Order board' })).toBeVisible();
+    });
+  }
 });
 
 test.describe('frames (A1.6, A16.1)', () => {

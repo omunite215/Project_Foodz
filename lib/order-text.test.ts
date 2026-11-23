@@ -7,6 +7,8 @@ import {
 } from '@/components/orders/orders.fixtures';
 import {
   arrivingText,
+  chipWord,
+  freshenRows,
   cancelDescription,
   countdownText,
   dishesText,
@@ -203,5 +205,38 @@ describe('timeline and receipt', () => {
 
   it('turns the store phone into a tel: target', () => {
     expect(telOf('(617) 555-0142')).toBe('+16175550142');
+  });
+});
+
+describe('the open orders list (F5 S7.2 to S7.4)', () => {
+  const accepted = orderSummaryFixture({
+    id: 'a',
+    number: '1042',
+    status: 'ACCEPTED',
+    statusWord: 'accepted',
+  });
+  const placed = orderSummaryFixture({
+    id: 'b',
+    number: '1043',
+    status: 'PLACED',
+    statusWord: 'placed',
+  });
+
+  it('takes fresh rows in place and reads out only the chips that changed', () => {
+    const cooking = { ...accepted, status: 'PREPARING' as const, statusWord: 'preparing' as const };
+    const { rows, spoken } = freshenRows([accepted, placed], [placed, cooking]);
+    expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
+    expect(rows[0]?.statusWord).toBe('preparing');
+    expect(spoken).toEqual(['Order 1042: Cooking.']);
+  });
+
+  it("keeps rows the fresh page doesn't have, and says nothing when nothing changed", () => {
+    expect(freshenRows([accepted], [])).toEqual({ rows: [accepted], spoken: [] });
+    expect(freshenRows([accepted], [accepted]).spoken).toEqual([]);
+  });
+
+  it('names a collected order "Collected" (U23)', () => {
+    expect(chipWord({ statusWord: 'pickedUp', collected: true })).toBe('Collected');
+    expect(chipWord({ statusWord: 'pickedUp', collected: false })).toBe('On its way');
   });
 });

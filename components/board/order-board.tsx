@@ -51,8 +51,10 @@ import {
   movedAnnouncement,
   movedBackAnnouncement,
   newOrdersAnnouncement,
+  titleWithUnseen,
   waitingBannerText,
 } from '@/lib/board/text';
+import { addUnseen, clearUnseen, useUnseen } from '@/lib/board/unseen';
 import { onBoardReadFailure, useBoard, useBoardWriter } from '@/lib/data/board';
 import { useChannelEvent } from '@/lib/realtime/client';
 import { isSitePath } from '@/lib/navigation';
@@ -154,9 +156,26 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
 
   // ---------------------------------------------------------------- filters (A11.2)
   const filters = parseFilters(searchParams);
+  // Two taps can land before the address changes: each builds on the last one asked for, so
+  // "Late only" then "Cash" keeps both (A11.2). A request the address never reached is
+  // forgotten after 2 s (Back, or a refused navigation).
+  const shownFilters = useRef(filters);
+  useEffect(() => {
+    shownFilters.current = filters;
+  });
+  const askedFilters = useRef<{ filters: typeof filters; at: number } | null>(null);
+  const filtersKey = filtersQuery(filters);
+  useEffect(() => {
+    const asked = askedFilters.current;
+    if (asked && filtersQuery(asked.filters) === filtersKey) askedFilters.current = null;
+  }, [filtersKey]);
   const setFilters = useCallback(
-    (next: typeof filters) => {
-      const query = filtersQuery(next);
+    (next: typeof filters | ((current: typeof filters) => typeof filters)) => {
+      const asked = askedFilters.current;
+      const base = asked && Date.now() - asked.at < 2_000 ? asked.filters : shownFilters.current;
+      const value = typeof next === 'function' ? next(base) : next;
+      askedFilters.current = { filters: value, at: Date.now() };
+      const query = filtersQuery(value);
       const href = `${pathname}${query ? `?${query}` : ''}${window.location.hash}`;
       router.replace(isSitePath(href) ? href : '/admin/orders', { scroll: false });
     },
@@ -253,7 +272,7 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
   const capture = useBoardFlip(boardRef, outlineMoved);
   const [newIds, setNewIds] = useState<string[]>([]);
   const [hiddenNew, setHiddenNew] = useState<string[]>([]);
-  const [unseen, setUnseen] = useState(0);
+  const unseen = useUnseen();
 
   const arrive = useCallback(
     (added: BoardCard[]) => {
@@ -265,7 +284,7 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
       setNewIds((current) => [...current, ...added.map((card) => card.id)]);
       announce(newOrdersAnnouncement(added));
       sound.chime();
-      if (document.visibilityState === 'hidden') setUnseen((count) => count + added.length);
+      if (document.visibilityState === 'hidden') addUnseen(added.length);
       const hidden = added.filter(
         (card) => !matchesFilters(card, filters, lateNow(card, serverNow(offset), meta.thresholds)),
       );
@@ -274,13 +293,22 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     [filters, highlight, meta.thresholds, offset, sound],
   );
 
-  // A3.1: "(1) Order board | Foodz Admin" while the tab is hidden.
+  // A3.1: "(1) Order board | Foodz Admin" until the tab is seen again. Anything that writes the
+  // page's title meanwhile (a refresh of the page's metadata) gets the count put back.
   useEffect(() => {
-    document.title = unseen > 0 ? `(${unseen}) ${BASE_TITLE}` : BASE_TITLE;
+    const apply = () => {
+      const wanted = titleWithUnseen(document.title || BASE_TITLE, unseen);
+      if (document.title !== wanted) document.title = wanted;
+    };
+    apply();
+    if (unseen === 0) return undefined;
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
   }, [unseen]);
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') setUnseen(0);
+      if (document.visibilityState === 'visible') clearUnseen();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -290,11 +318,15 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
   const waitingLong = cards.some(
     (card) => card.status === 'PLACED' && waitedMinutes(card, now) >= CHIME_REPEAT_AFTER_MINUTES,
   );
+  // The timer depends only on whether it should run: the board draws again every few seconds,
+  // and restarting it each time meant it never reached 60 s.
+  const repeatChime = sound.chime;
+  const soundOn = sound.state === 'on';
   useEffect(() => {
-    if (!waitingLong || sound.state !== 'on') return undefined;
-    const timer = setInterval(() => sound.chime(), CHIME_REPEAT_MS);
+    if (!waitingLong || !soundOn) return undefined;
+    const timer = setInterval(repeatChime, CHIME_REPEAT_MS);
     return () => clearInterval(timer);
-  }, [waitingLong, sound]);
+  }, [waitingLong, soundOn, repeatChime]);
 
   // ---------------------------------------------------------------- cards that left (A3.7)
   const focusAfterLeaving = useCallback(
