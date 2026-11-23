@@ -27,7 +27,11 @@ export async function auditOnce(
   entry: Omit<AuditEntry, 'ip' | 'userAgent'> & { targetId: string },
   key: string,
 ) {
-  const value = (entry.data as Record<string, unknown> | undefined)?.[key];
+  const data = entry.data;
+  const value =
+    typeof data === 'object' && data !== null && !Array.isArray(data)
+      ? Reflect.get(data, key)
+      : undefined;
   if (
     typeof value === 'string' &&
     (await hasAuditEntry(ctx, { action: entry.action, targetId: entry.targetId, key, value }))

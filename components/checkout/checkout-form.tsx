@@ -1237,19 +1237,19 @@ export function Checkout({
     const call = placeOrderAction(input);
     inFlight.current = call;
     // An answer that comes after the 15 s panel took over: show it, or let the check move on.
-    void call.then(
-      (raw) => {
-        if (inFlight.current === call) inFlight.current = null;
-        if (pressRef.current !== 'slow' || pendingAttempt.current !== attemptKey) return;
-        const late = readActionResult(raw);
-        if (!late.ok) refused(late.error);
-        else void checkRef.current();
-      },
-      () => {
-        if (inFlight.current === call) inFlight.current = null;
-        if (pressRef.current === 'slow') void checkRef.current();
-      },
-    );
+    void (async () => {
+      let raw: Awaited<typeof call> | null = null;
+      try {
+        raw = await call;
+      } catch {
+        // Never reached the server: the next check says so.
+      }
+      if (inFlight.current === call) inFlight.current = null;
+      if (pressRef.current !== 'slow' || pendingAttempt.current !== attemptKey) return;
+      const late = raw ? readActionResult(raw) : null;
+      if (late && !late.ok) refused(late.error);
+      else void checkRef.current();
+    })();
     const outcome = await callAction(() => call);
     if (!outcome.ok) {
       refused(outcome.error);
