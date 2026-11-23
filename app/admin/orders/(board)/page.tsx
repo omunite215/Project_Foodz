@@ -3,7 +3,7 @@ import { getBoard } from '@/server/modules/board/service';
 import { AdminPage } from '@/components/admin/admin-page';
 import { StaffGate } from '@/components/admin/staff-gate';
 import { OrderBoard } from '@/components/board/order-board';
-import { boardAccess, staffPageMetadata } from '../staff-access';
+import { boardAccess, staffPageMetadata } from '../../staff-access';
 
 export function generateMetadata(): Promise<Metadata> {
   return staffPageMetadata('Order board');
