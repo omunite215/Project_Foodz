@@ -26,12 +26,13 @@ export function findProfile(ctx: DbContext, userId: string) {
 }
 
 export async function findSignInMethods(ctx: DbContext, userId: string) {
-  const [providers, withPassword] = await Promise.all([
-    db(ctx).account.findMany({ where: { userId }, select: { providerId: true } }),
-    db(ctx).account.count({
-      where: { userId, providerId: 'credential', password: { not: null } },
-    }),
-  ]);
+  const providers = await db(ctx).account.findMany({
+    where: { userId },
+    select: { providerId: true },
+  });
+  const withPassword = await db(ctx).account.count({
+    where: { userId, providerId: 'credential', password: { not: null } },
+  });
   return { providers: providers.map((row) => row.providerId), hasPassword: withPassword > 0 };
 }
 
