@@ -27,15 +27,27 @@ describe('returnPathFor', () => {
 });
 
 describe('confirmedContinue (S3.2, F6 P1.3)', () => {
-  it('continues where the person was going, such as the partner application', () => {
-    expect(confirmedContinue('/partner/apply')).toEqual({
+  it('sends someone applying to deliver on with their application, in its own words', () => {
+    const apply = {
       href: '/partner/apply',
       label: 'Continue',
+      line: 'Carry on with your application.',
+    };
+    expect(confirmedContinue('/partner/apply')).toEqual(apply);
+    expect(confirmedContinue('/partner/apply?step=1')).toEqual(apply);
+    expect(confirmedContinue('/partnership')).not.toEqual(apply);
+  });
+
+  it('continues where the person was going', () => {
+    expect(confirmedContinue('/menu/bulgogi')).toEqual({
+      href: '/menu/bulgogi',
+      label: 'Continue',
+      line: "You're ready to order.",
     });
   });
 
   it('offers the menu when they were going nowhere in particular, or somewhere unsafe', () => {
-    const menu = { href: '/menu', label: 'Continue to the menu' };
+    const menu = { href: '/menu', label: 'Continue to the menu', line: "You're ready to order." };
     expect(confirmedContinue('/')).toEqual(menu);
     expect(confirmedContinue('/menu')).toEqual(menu);
     expect(confirmedContinue(undefined)).toEqual(menu);

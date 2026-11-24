@@ -84,15 +84,6 @@ function SendNewLink() {
   );
 }
 
-function ContinueLink({ to }: { to: string | undefined }) {
-  const next = confirmedContinue(to);
-  return (
-    <Button asChild size="touch" className="mt-8 uppercase">
-      <Link href={next.href}>{next.label}</Link>
-    </Button>
-  );
-}
-
 /** The result of opening a confirm-email link (S3.2, S3.5, design 3.7). The h1 takes focus. */
 export function EmailResult({ result }: { result: EmailResultCase }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -101,6 +92,9 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
   }, []);
 
   const expired = result.kind === 'expired-signed-in' || result.kind === 'expired-signed-out';
+  const next = confirmedContinue(
+    result.kind === 'confirmed-new-session' ? result.continueTo : undefined,
+  );
   const art = expired ? ILLUSTRATION.warning : ILLUSTRATION.mail;
   const title = expired
     ? 'This link has expired'
@@ -115,7 +109,7 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
         ? 'Sign in with your new email to carry on.'
         : result.kind === 'confirmed-other-account'
           ? 'That email address is confirmed. It belongs to another Foodz account, so nothing changed here.'
-          : "You're ready to order.";
+          : next.line;
   const signedInAs =
     result.kind === 'confirmed-other-account'
       ? result.accountEmail
@@ -155,9 +149,9 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
         </Button>
       ) : null}
       {result.kind === 'confirmed-new-session' || result.kind === 'confirmed-other-account' ? (
-        <ContinueLink
-          to={result.kind === 'confirmed-new-session' ? result.continueTo : undefined}
-        />
+        <Button asChild size="touch" className="mt-8 uppercase">
+          <Link href={next.href}>{next.label}</Link>
+        </Button>
       ) : null}
       {result.kind === 'already-confirmed' ? (
         <Button asChild size="touch" className="mt-8 uppercase">
