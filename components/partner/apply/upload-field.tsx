@@ -260,7 +260,9 @@ export function UploadField({
     if (file) void upload(file);
   };
 
-  const describedBy = [hintId, statusId, error ? errorId : null].filter(Boolean).join(' ');
+  // A missing-photo error goes while a new photo uploads or is checked (it no longer applies).
+  const shownError = phase.kind === 'uploading' || phase.kind === 'checking' ? null : error;
+  const describedBy = [hintId, statusId, shownError ? errorId : null].filter(Boolean).join(' ');
   const busy = phase.kind === 'uploading' || phase.kind === 'checking';
   const ready = phase.kind === 'ready';
 
@@ -278,7 +280,7 @@ export function UploadField({
       accept={ACCEPT_ATTRIBUTE}
       {...(capture ? { capture } : {})}
       aria-describedby={describedBy}
-      aria-invalid={error ? true : undefined}
+      aria-invalid={shownError ? true : undefined}
       className="sr-only"
       onChange={(event) => {
         onFiles(event.target.files);
@@ -299,7 +301,7 @@ export function UploadField({
     return (
       <label
         className={cn(
-          'inline-flex h-12 min-w-12 cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 text-button-1 font-medium text-strong hover:bg-muted dark:border-input has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:outline-solid',
+          'inline-flex h-12 min-w-12 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-button-1 font-medium whitespace-nowrap text-strong hover:bg-muted dark:border-input has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:outline-solid',
           full && 'w-full',
         )}
       >
@@ -453,7 +455,7 @@ export function UploadField({
       {ready ? (
         <div className="mt-4">{label(Images, 'Change photo', null, chooseRef, true, true)}</div>
       ) : null}
-      <FieldError id={errorId}>{error}</FieldError>
+      <FieldError id={errorId}>{shownError}</FieldError>
     </fieldset>
   );
 }

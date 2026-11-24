@@ -145,6 +145,7 @@ export default function IdleMap({
   useEffect(() => {
     let cancelled = false;
     let map: MapLibreMap | null = null;
+    let observer: ResizeObserver | null = null;
     const timeout = setTimeout(() => {
       if (!cancelled) setState((current) => (current === 'loading' ? 'failed' : current));
     }, LOAD_TIMEOUT_MS);
@@ -192,7 +193,15 @@ export default function IdleMap({
             source: 'accuracy',
             paint: { 'line-color': color, 'line-opacity': 0.5, 'line-width': 1.5 },
           });
+          // The canvas follows its box (176 or 224 px tall), and the view is framed again.
+          map.resize();
           viewFor(map, start.at, start.kitchen, false);
+          observer = new ResizeObserver(() => {
+            if (!map) return;
+            map.resize();
+            viewFor(map, latest.current.at, latest.current.kitchen, false);
+          });
+          observer.observe(container);
           setState('ready');
         });
         map.on('error', (event) => {
@@ -206,6 +215,7 @@ export default function IdleMap({
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      observer?.disconnect();
       map?.remove();
       mapRef.current = null;
       dotRef.current = null;

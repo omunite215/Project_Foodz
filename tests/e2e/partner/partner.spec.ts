@@ -163,14 +163,14 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   await open(page, '/partner');
   await expect(page).toHaveTitle('Home | Foodz Partner');
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
-  await expect(page.getByRole('banner').getByText(/^Offline/)).toBeVisible();
+  await expect(page.getByRole('banner').getByText('Offline', { exact: true })).toBeVisible();
   await expectNoAxeViolations(page);
 
   await page.getByRole('button', { name: 'Go online' }).click();
   await expect(page.getByRole('heading', { name: 'Waiting for orders' })).toBeVisible({
     timeout: 20_000,
   });
-  await expect(page.getByRole('banner').getByText(/^Online/)).toBeVisible();
+  await expect(page.getByRole('banner').getByText('Online', { exact: true })).toBeVisible();
   await expect(page.getByText('At the kitchen')).toBeVisible();
   // He rides two steps along route R: the distance follows each fix (P10.2).
   await context.setGeolocation({ ...ROUTE.R2, accuracy: 15 });
@@ -182,7 +182,7 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   // Profile keeps the status in view; Appearance applies at once.
   await page.getByRole('link', { name: 'Profile' }).last().click();
   await expect(page.getByRole('heading', { level: 1, name: 'Diego Alvarez' })).toBeVisible();
-  await expect(page.getByRole('banner').getByText(/^Online/)).toBeVisible();
+  await expect(page.getByRole('banner').getByText('Online', { exact: true })).toBeVisible();
   await page.getByText('Dark', { exact: true }).click();
   await expect(page.locator('.partner')).toHaveAttribute('data-theme', 'dark');
   await expectNoAxeViolations(page);
@@ -191,7 +191,7 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   await page.getByRole('link', { name: 'Home' }).click();
   await page.getByRole('button', { name: 'Go offline' }).click();
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
-  await expect(page.getByRole('banner').getByText(/^Offline/)).toBeVisible();
+  await expect(page.getByRole('banner').getByText('Offline', { exact: true })).toBeVisible();
 });
 
 test('the location explainer comes before the browser asks', async ({ page }, testInfo) => {

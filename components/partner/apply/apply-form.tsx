@@ -12,6 +12,7 @@ import {
   updateApplicationAction,
 } from '@/server/modules/partners/actions';
 import type { ApplicationSummary } from '@/server/modules/partners/schema';
+import { uploadStatusAction } from '@/server/modules/uploads/actions';
 import { needsPlate, normalizePlate } from '@/server/modules/partners/rules';
 import { DOCUMENT_WORDS, storeDate, VEHICLE_WORDS } from '@/server/modules/partners/text';
 import { FormAlert } from '@/components/forms/form-alert';
@@ -51,7 +52,9 @@ import {
   idNumberLabel,
   keepNumberHint,
   licenseNeededLine,
+  rejectedUploadError,
   stepLine,
+  UPLOAD_ERRORS,
 } from '@/lib/partner/text';
 import { DEFAULT_PHONE_COUNTRY, parsePhone } from '@/lib/phone';
 import type { PhoneCountry } from '@/lib/phone-countries';
@@ -175,6 +178,7 @@ export function ApplyForm(props: ApplyFormProps) {
   const termsLinkRef = useRef<HTMLAnchorElement>(null);
   const turnstileRef = useRef<TurnstileHandle>(null);
   const focusHeading = useRef(false);
+  const fadeNext = useRef(false);
 
   const form = useForm({ defaultValues: initialValues(props) });
   const values = useStore(form.store, (state) => state.values);
@@ -205,6 +209,30 @@ export function ApplyForm(props: ApplyFormProps) {
 
   // ---------------------------------------------------------------- the draft (design 4.2)
 
+  /**
+   * A draft's upload, asked about once on resume, whichever step opens first (design 4.2): a
+   * ready one gets a fresh preview link (the summary's thumbnails too); a gone or refused one
+   * empties its field with the reason.
+   */
+  async function refreshUpload(slot: 'photo' | 'idPhoto', uploadId: string) {
+    const kind = slot === 'photo' ? 'photo' : 'id';
+    const outcome = await callAction(() => uploadStatusAction({ uploadId }));
+    const keep = (next: UploadValue | null, error: string | null = null) => {
+      setUploads((current) =>
+        current[slot]?.uploadId === uploadId ? { ...current, [slot]: next } : current,
+      );
+      if (error) setUploadErrors((current) => ({ ...current, [slot]: error }));
+    };
+    if (outcome.ok) {
+      const view = outcome.data;
+      if (view.status === 'READY') keep({ uploadId, status: 'ready', url: view.url });
+      else if (view.status === 'CHECKING') keep({ uploadId, status: 'checking', url: null });
+      else keep(null, rejectedUploadError(view.code, kind));
+    } else if (outcome.error.code === 'NOT_FOUND') {
+      keep(null, UPLOAD_ERRORS.expired);
+    }
+  }
+
   const restore = useEffectEvent(() => {
     const draft = readApplyDraft(userId);
     if (!draft) return;
@@ -227,6 +255,8 @@ export function ApplyForm(props: ApplyFormProps) {
         : current.idPhoto,
     }));
     setRecheckUploads(true);
+    if (draft.photoUploadId) void refreshUpload('photo', draft.photoUploadId);
+    if (draft.idDocumentUploadId) void refreshUpload('idPhoto', draft.idDocumentUploadId);
     setDraftRestored(true);
     setDraftNotice(true);
     if (!search.get('step') && draft.step > 1) {
@@ -268,6 +298,7 @@ export function ApplyForm(props: ApplyFormProps) {
 
   function goTo(next: ApplyStep) {
     focusHeading.current = true;
+    fadeNext.current = true;
     if (next > step) {
       pushedSteps.current += 1;
       window.history.pushState(null, '', stepHref(next));
@@ -289,10 +320,17 @@ export function ApplyForm(props: ApplyFormProps) {
       headingRef.current?.focus();
     }
   }, [step]);
+  // Only a step the person moved to fades in: never the first paint or a restored draft (the
+  // Motion rule), and always to full opacity, so a quick second change can't freeze it half-way.
   useMotion(
     (motion) => {
-      if (!contentRef.current) return;
-      motion.from(contentRef.current, { opacity: 0, duration: 0.15, ease: 'power2.out' });
+      if (!contentRef.current || !fadeNext.current) return;
+      fadeNext.current = false;
+      motion.fromTo(
+        contentRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.15, ease: 'power2.out', clearProps: 'opacity' },
+      );
     },
     { scope: contentRef, dependencies: [step] },
   );

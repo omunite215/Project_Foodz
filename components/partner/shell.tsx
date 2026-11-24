@@ -330,14 +330,15 @@ export function PlainHeader({
 function HeaderStartButton({ start }: { start: HeaderStart }) {
   if (start.kind === 'logo') {
     return (
-      <span className="flex size-12 shrink-0 items-center justify-center">
+      // The whole wordmark, in brand green in both themes (it reads on the dark page too).
+      <span className="flex h-12 shrink-0 items-center px-3">
         <Image
           src="/Logo/logo.svg"
           alt=""
           width={84}
           height={24}
           unoptimized
-          className="h-6 w-6 object-cover object-left dark:brightness-0 dark:invert"
+          className="h-6 w-auto"
         />
       </span>
     );
@@ -392,9 +393,9 @@ export function StatusHeader({
     >
       <p className="flex items-center gap-2 text-body-2 font-semibold">
         <Icon className="size-6" aria-hidden />
-        {online ? 'Online' : 'Offline'}
+        <span aria-hidden>{online ? 'Online' : 'Offline'}</span>
         <span className="sr-only">
-          {online ? ', sharing your location' : ', not sharing your location'}
+          {online ? 'Online, sharing your location' : 'Offline, not sharing your location'}
         </span>
       </p>
       <Link

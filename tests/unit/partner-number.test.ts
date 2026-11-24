@@ -32,7 +32,8 @@ describe('the partner ID number is never decrypted by the app (U26)', () => {
       readFileSync(path.join(root, file), 'utf8').includes('decryptField'),
     );
     expect(users.filter((file) => !ALLOWED.has(file))).toEqual([]);
-  });
+    // It reads every source file, which takes longer than the default 5 s on a busy machine.
+  }, 30_000);
 
   it('never puts the partner context next to a decryption', () => {
     const account = readFileSync(

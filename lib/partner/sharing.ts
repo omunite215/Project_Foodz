@@ -163,7 +163,7 @@ let backTimer: ReturnType<typeof setTimeout> | null = null;
 let offlinePending = false;
 let wakeLock: WakeLockSentinel | null = null;
 let listening = false;
-let resolveFirstFix: ((fix: Fix) => void) | null = null;
+let resolveFirstFix: ((fix: Fix | null) => void) | null = null;
 const ownChanges = new Set<string>();
 /*
  * The realtime echo of this device's own change can arrive before the answer that names its
@@ -262,6 +262,8 @@ function stopWatching() {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   clearFindTimers();
+  // Whoever waits for a first fix hears that none is coming.
+  resolveFirstFix?.(null);
   resolveFirstFix = null;
   coarseSince = null;
 }
@@ -297,9 +299,16 @@ function onFix(position: GeolocationPosition) {
       resolveFirstFix?.(fix);
       return;
     }
-    // D21: weak fixes are ignored while GPS warms up; 10 s of only these means "approximate".
-    coarseSince ??= Date.now();
-    if (Date.now() - coarseSince >= APPROXIMATE_AFTER_MS) failFinding('approximate');
+    // D21, P9.6: fixes worse than 500 m are ignored while GPS warms up; 10 s of only these means
+    // "approximate", also when the phone never sends a second fix (Precise Location off).
+    if (coarseSince === null) {
+      coarseSince = Date.now();
+      findTimers.push(
+        setTimeout(() => {
+          if (get().phase === 'finding') failFinding('approximate');
+        }, APPROXIMATE_AFTER_MS),
+      );
+    }
     return;
   }
   if (state.phase !== 'online') return;
@@ -634,20 +643,21 @@ export async function retryFromHelp() {
 async function find() {
   set({ phase: 'finding', help: null, dockReason: null });
   coarseSince = null;
-  const firstFix = new Promise<Fix>((resolve) => {
+  const firstFix = new Promise<Fix | null>((resolve) => {
     resolveFirstFix = resolve;
   });
   startWatching();
   findTimers.push(
     setTimeout(() => {
       if (get().phase !== 'finding') return;
-      if (coarseSince === null) failFinding('notFound');
+      // No good fix at all: "approximate" when only coarse ones came, "not found" otherwise.
+      failFinding(coarseSince === null ? 'notFound' : 'approximate');
     }, NOT_FOUND_AFTER_MS),
   );
   const fix = await firstFix;
   resolveFirstFix = null;
   clearFindTimers();
-  if (get().phase !== 'finding') return;
+  if (!fix || get().phase !== 'finding') return;
   set({ lastFix: fix });
   await sendOnline(fix);
 }

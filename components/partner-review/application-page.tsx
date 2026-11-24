@@ -339,6 +339,7 @@ function FlagsList({ flags, timeZone }: { flags: readonly ReviewFlag[]; timeZone
     <section aria-labelledby={id}>
       <h2 id={id} className="flex items-center gap-2 text-body-3 font-semibold text-neutral-1">
         Flags
+        <span className="sr-only">, </span>
         <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-tag-6-bg px-1.5 text-caption font-semibold text-neutral-1 tabular-nums">
           {flags.length}
         </span>
@@ -753,7 +754,7 @@ export function ApplicationPage({ initial }: { initial: PartnerReview }) {
   );
 
   return (
-    <AdminPage title="Partners">
+    <AdminPage title="Partners" titleAs="p">
       <div
         className="mx-auto w-full max-w-[1200px] px-4 pb-12 lg:px-6"
         inert={signedOut || undefined}
