@@ -617,20 +617,20 @@ export async function seedCatalog(tx: Tx, options: { now: Date; updatedById?: st
 
   // Values earlier runs seeded and F3 changed; edited values are left alone.
   const { taxRateBps, welcome10Description, freeDeliveryBar } = SEED_CORRECTIONS;
-  const corrected = await Promise.all([
-    tx.siteSettings.updateMany({
+  const corrected = [
+    await tx.siteSettings.updateMany({
       where: { id: 1, taxRateBps: taxRateBps.from },
       data: { taxRateBps: taxRateBps.to },
     }),
-    tx.coupon.updateMany({
+    await tx.coupon.updateMany({
       where: { code: 'WELCOME10', description: welcome10Description.from },
       data: { description: welcome10Description.to },
     }),
-    tx.campaign.updateMany({
+    await tx.campaign.updateMany({
       where: { id: seedId('campaign:bar-free-delivery'), subtitle: freeDeliveryBar.from },
       data: { subtitle: freeDeliveryBar.to },
     }),
-  ]);
+  ];
 
   return {
     siteSettings: siteSettingsCreated,
@@ -649,10 +649,14 @@ export async function seedCatalog(tx: Tx, options: { now: Date; updatedById?: st
 async function seedPastWelcomeOrder(tx: Tx, userId: string, now: Date): Promise<boolean> {
   const id = seedId('second-customer-past-order');
   if (await tx.order.findUnique({ where: { id }, select: { id: true } })) return false;
-  const [welcome, gimbap] = await Promise.all([
-    tx.coupon.findUniqueOrThrow({ where: { code: 'WELCOME10' }, select: { id: true } }),
-    tx.menuItem.findUniqueOrThrow({ where: { slug: 'gimbap' }, select: { id: true, title: true } }),
-  ]);
+  const welcome = await tx.coupon.findUniqueOrThrow({
+    where: { code: 'WELCOME10' },
+    select: { id: true },
+  });
+  const gimbap = await tx.menuItem.findUniqueOrThrow({
+    where: { slug: 'gimbap' },
+    select: { id: true, title: true },
+  });
   const placedAt = new Date(now.getTime() - 3 * DAY_MS);
   await tx.order.create({
     data: {

@@ -137,11 +137,9 @@ async function requireInside(ctx: DbContext, data: AddressWrite) {
 
 export async function getAddressBook(actor: UserActor): Promise<AddressBook> {
   return runAs(actor, async (ctx) => {
-    const [rows, areas, store] = await Promise.all([
-      listOwn(ctx, actor.userId),
-      checkSaved(ctx, actor.userId),
-      storeArea(ctx),
-    ]);
+    const rows = await listOwn(ctx, actor.userId);
+    const areas = await checkSaved(ctx, actor.userId);
+    const store = await storeArea(ctx);
     return {
       addresses: rows.map((row) => toDto(row, areas.get(row.id))),
       limit: ADDRESS_LIMIT,

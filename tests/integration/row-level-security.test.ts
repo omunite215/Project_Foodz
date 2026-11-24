@@ -114,24 +114,22 @@ describe('row-level security on orders', () => {
   });
 
   it('lets kitchen staff see orders but not customer addresses', async () => {
-    const { orders, addresses } = await runAs(asRole('kitchen'), async (ctx) => {
-      await runAsSystem('seed address', (sys) =>
-        db(sys).address.create({
-          data: {
-            userId: customerA,
-            label: 'Home',
-            line1: '1 Test St',
-            city: 'Boston',
-            lat: 1,
-            lng: 1,
-          },
-        }),
-      );
-      return {
-        orders: await db(ctx).order.count(),
-        addresses: await db(ctx).address.count(),
-      };
-    });
+    await runAsSystem('seed address', (sys) =>
+      db(sys).address.create({
+        data: {
+          userId: customerA,
+          label: 'Home',
+          line1: '1 Test St',
+          city: 'Boston',
+          lat: 1,
+          lng: 1,
+        },
+      }),
+    );
+    const { orders, addresses } = await runAs(asRole('kitchen'), async (ctx) => ({
+      orders: await db(ctx).order.count(),
+      addresses: await db(ctx).address.count(),
+    }));
     expect(orders).toBeGreaterThanOrEqual(2);
     expect(addresses).toBe(0);
   });
