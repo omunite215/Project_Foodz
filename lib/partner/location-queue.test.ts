@@ -39,8 +39,10 @@ describe('which fixes are sent (P10.3, P16.5)', () => {
     expect(shouldQueue(fix(5_000, R0), last, 5_000)).toBe(false);
   });
 
-  it('sends a heartbeat every 30 s while standing still', () => {
+  it('sends a heartbeat every 15 s while standing still', () => {
     const last = toPoint(fix(0));
+    expect(HEARTBEAT_MS).toBe(15_000);
+    expect(shouldQueue(fix(HEARTBEAT_MS - 1, R0), last, HEARTBEAT_MS - 1)).toBe(false);
     expect(shouldQueue(fix(HEARTBEAT_MS, R0), last, HEARTBEAT_MS)).toBe(true);
   });
 });

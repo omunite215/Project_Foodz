@@ -203,6 +203,26 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   await expect(page.getByRole('button', { name: 'Go offline' })).toBeVisible();
   await expectNoAxeViolations(page);
 
+  // Standing still, with no new fix from the phone, a point still goes every 15 s (P10.3).
+  await page.waitForRequest(
+    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/partner/locations'),
+    { timeout: 25_000 },
+  );
+
+  // A dead zone: the banner pins, what he rides meanwhile waits, and goes when he's back
+  // (P11.1, P11.2). The banners are paragraphs; the live region repeats their words.
+  const banner = (text: string) => page.getByRole('paragraph').filter({ hasText: text });
+  await context.setOffline(true);
+  await expect(banner("No connection. You're still online.")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByRole('banner').getByText('Online', { exact: true })).toBeVisible();
+  await context.setGeolocation({ ...ROUTE.R0, accuracy: 15 });
+  await expect(page.getByText('At the kitchen')).toBeVisible({ timeout: 15_000 });
+  await context.setOffline(false);
+  await expect(banner('Back online. Location sent.')).toBeVisible({ timeout: 15_000 });
+  await expect(banner("No connection. You're still online.")).toHaveCount(0);
+  // It stays 4 seconds, then the screen is as before.
+  await expect(banner('Back online. Location sent.')).toHaveCount(0, { timeout: 10_000 });
+
   // Profile keeps the status in view; Appearance applies at once.
   await page.getByRole('link', { name: 'Profile' }).last().click();
   await expect(page.getByRole('heading', { level: 1, name: 'Diego Alvarez' })).toBeVisible();
