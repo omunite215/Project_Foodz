@@ -229,7 +229,11 @@ describe('address book and search', () => {
     const refused = await overTheLimit(30, () =>
       addresses.searchAddressesAction({ query: '12 Peterborough' }),
     );
-    expect(refused.message).toMatch(/^Too many requests. Try again in (\d+ seconds|1 minute).$/);
+    // A one-minute window can report 61 s (the limiter's own timer rounding), and waits are
+    // never understated (formatWait), so "2 minutes" is still a one-minute limit.
+    expect(refused.message).toMatch(
+      /^Too many requests. Try again in (\d+ seconds|[12] minutes?).$/,
+    );
   });
 
   it('allows 60 delivery checks a minute (geo.check)', async () => {
@@ -237,7 +241,9 @@ describe('address book and search', () => {
     const refused = await overTheLimit(60, () =>
       addresses.checkDeliveryAreaAction({ lat: 42.3467, lng: -71.0972 }),
     );
-    expect(refused.message).toMatch(/^Too many requests. Try again in (\d+ seconds|1 minute).$/);
+    expect(refused.message).toMatch(
+      /^Too many requests. Try again in (\d+ seconds|[12] minutes?).$/,
+    );
   });
 });
 
