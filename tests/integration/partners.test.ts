@@ -6,7 +6,7 @@ import { redis } from '@/server/redis';
 import { objectSize } from '@/server/storage/s3';
 import { seedCatalog } from '../../prisma/seeding';
 import { asBrowser, type Browser, nextHeaders, switchBrowser } from './support/browser';
-import { openAllDay } from './support/checkout';
+import { openAllDay, restoreHours } from './support/checkout';
 import { readyUpload, seedBulkApplicants } from './support/partners';
 import { signedInAgo, type StaffMember, staffMember } from './support/staff';
 
@@ -189,6 +189,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // Leave the store's hours as the seed set them; the suites share one database.
+  await restoreHours(migrator);
   await migrator.$disconnect();
 });
 
