@@ -92,6 +92,8 @@ async function readBody(request: Request): Promise<unknown> {
 export function partnerRoute<T>(options: {
   name: string;
   rateLimit: RateLimitPolicy;
+  /** Count the limit per session instead of per account (the shared demo partner's practice). */
+  rateLimitBy?: 'session';
   handler: (context: RouteContext) => Promise<T>;
 }) {
   return async function handle(request: Request, context?: HandlerContext): Promise<Response> {
@@ -101,12 +103,18 @@ export function partnerRoute<T>(options: {
       const actor = await getActor();
       if (actor.kind !== 'user') throw unauthenticated();
       if (isStaff(actor.role)) throw STAFF_REFUSAL();
-      await enforceRateLimit(options.rateLimit, `user:${actor.userId}`);
-      const body = await readBody(request);
       const session = await getSession();
+      const sessionId = session && session.user.id === actor.userId ? session.session.id : null;
+      await enforceRateLimit(
+        options.rateLimit,
+        options.rateLimitBy === 'session' && sessionId
+          ? `session:${sessionId}`
+          : `user:${actor.userId}`,
+      );
+      const body = await readBody(request);
       const result = await options.handler({
         actor,
-        sessionId: session && session.user.id === actor.userId ? session.session.id : null,
+        sessionId,
         body,
         params: await readParams(context),
       });

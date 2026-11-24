@@ -88,6 +88,8 @@ export interface DispatchOrderRow {
   paymentStatus: string;
   totalCents: number;
   addressText: string;
+  /** The city line ("Boston, MA 02109"): all of the address shown before acceptance. */
+  addressCity: string | null;
   addressLat: number;
   addressLng: number;
   courierInstructions: string | null;
@@ -113,6 +115,7 @@ export async function findOrderForDispatch(
            o.delivery_fee_cents AS "deliveryFeeCents", o.tip_cents AS "tipCents",
            o.payment_method::text AS "paymentMethod", o.payment_status::text AS "paymentStatus",
            o.total_cents AS "totalCents", o.address_text AS "addressText",
+           o.address_city AS "addressCity",
            o.address_lat AS "addressLat", o.address_lng AS "addressLng",
            o.courier_instructions AS "courierInstructions", o.contact_name AS "contactName",
            (SELECT coalesce(sum(i.quantity), 0)::int FROM order_items i WHERE i.order_id = o.id) AS "items",
@@ -747,6 +750,15 @@ export async function findActiveDeliveryOfPartner(
     WHERE d.partner_id = ${partnerId}::uuid AND d.status = ANY (${ACTIVE}::"DeliveryStatus"[])
     LIMIT 1`;
   return rows[0] ?? null;
+}
+
+/** S2: late accepts a partner sent since a time, for the alert on repeated ones. */
+export async function countLateAccepts(ctx: DbContext, partnerId: string, since: Date) {
+  const rows = await db(ctx).$queryRaw<{ count: number }[]>`
+    SELECT count(*)::int AS "count" FROM delivery_offers
+    WHERE partner_id = ${partnerId}::uuid AND pressed_at IS NOT NULL AND created_at >= ${since}
+      AND status IN ('PENDING', 'EXPIRED')`;
+  return rows[0]?.count ?? 0;
 }
 
 /** W13.2: give-backs by one partner since a time. */

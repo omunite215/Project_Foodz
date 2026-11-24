@@ -281,6 +281,33 @@ describe('answers, misses and the re-check (W4 to W7)', () => {
     expect(notice?.body).toContain('missed 3 offers in a row');
   });
 
+  it('takes a late accept only after the offer ended, so it never stands in for an answer (S2)', async () => {
+    await goOnlineAt(migrator, grace, { km: 1.4 });
+    const order = await readyOrder(migrator, priya.userId);
+    const deliveryId = await openSearchFor(order.id);
+    const turn = await dispatch.searchTurn(deliveryId);
+    if (turn.kind !== 'offered') throw new Error('expected an offer');
+    await migrator.$executeRaw`
+      UPDATE delivery_offers SET created_at = app_now() - interval '10 seconds' WHERE id = ${turn.offerId}::uuid`;
+    const pressedAt = new Date(Date.now() - 5000).toISOString();
+    expect(await dispatch.recordLateAccept(grace.actor, turn.offerId, { pressedAt })).toEqual({
+      recorded: false,
+    });
+    expect(await timeOut(turn.offerId)).toMatchObject({ outcome: 'expired' });
+    const missed = await migrator.deliveryPartner.findUniqueOrThrow({
+      where: { id: grace.partnerId },
+    });
+    expect(missed.missedInRow).toBe(1);
+    // Sent after the end, for a press before it (P28.2): kept, and the miss is taken back.
+    expect(await dispatch.recordLateAccept(grace.actor, turn.offerId, { pressedAt })).toEqual({
+      recorded: true,
+    });
+    const after = await migrator.deliveryPartner.findUniqueOrThrow({
+      where: { id: grace.partnerId },
+    });
+    expect(after.missedInRow).toBe(0);
+  });
+
   it('counts an offer that never reached the phone toward the pause, not the misses (W7.4)', async () => {
     await goOnlineAt(migrator, grace, { km: 1.4 });
     const order = await readyOrder(migrator, priya.userId);
@@ -552,6 +579,22 @@ describe('order changes (F5 hooks) and what people see', () => {
     expect(line).toMatchObject({ state: 'offered', words: 'Offered to Grace O.', tone: 'neutral' });
     const masked = (await dispatch.courierLines({ isDemo: true }, facts)).get(order.id);
     expect(masked?.words).not.toContain('Grace');
+  });
+
+  it("never shows a real courier's plate to the demo admin (S1)", async () => {
+    await goOnlineAt(migrator, diego, { km: 0.2 });
+    const order = await readyOrder(migrator, priya.userId);
+    const deliveryId = await openSearchFor(order.id);
+    const turn = await dispatch.searchTurn(deliveryId);
+    if (turn.kind !== 'offered') throw new Error('expected an offer');
+    await dispatch.acceptOffer(diego.actor, turn.offerId);
+    const facts = [{ id: order.id, status: 'READY', readyAt: new Date(Date.now() - 60_000) }];
+    const staffLine = (await dispatch.courierLines({ isDemo: false }, facts)).get(order.id);
+    expect(staffLine).toMatchObject({ state: 'assigned', plate: '2FD 881' });
+    expect(staffLine?.words).toContain('2FD 881');
+    const demoLine = (await dispatch.courierLines({ isDemo: true }, facts)).get(order.id);
+    expect(demoLine).toMatchObject({ state: 'assigned', plate: null, vehicleWords: 'Scooter' });
+    expect(JSON.stringify(demoLine)).not.toContain('2FD');
   });
 
   it('gives the demo partner practice offers only, never in the delivery tables (P34, W12)', async () => {

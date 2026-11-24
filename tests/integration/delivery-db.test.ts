@@ -224,7 +224,42 @@ describe('who may write deliveries and offers', () => {
           VALUES (gen_random_uuid(), ${delivery.id}::uuid, ${luis.partnerId}::uuid, 'PENDING', 'staff',
                   ${staff.support}::uuid, app_now() + interval '60 seconds')`,
       ),
+    ).rejects.toThrow(DENIED);
+    // The order's delivery fee plus its tip, to an online partner of the order's pool (S5).
+    await expect(
+      runAs(
+        support,
+        (ctx) =>
+          db(ctx).$executeRaw`
+          INSERT INTO delivery_offers (id, delivery_id, partner_id, status, kind, offered_by,
+                                       pay_cents, tip_cents, expires_at)
+          VALUES (gen_random_uuid(), ${delivery.id}::uuid, ${luis.partnerId}::uuid, 'PENDING', 'staff',
+                  ${staff.support}::uuid, 764, 500, app_now() + interval '60 seconds')`,
+      ),
     ).resolves.toBe(1);
+  });
+});
+
+describe('what a partner may read of an order (S4)', () => {
+  it('reads the order only while carrying it, and never its timeline', async () => {
+    const order = await readyOrder(migrator, customer.userId);
+    await migrator.orderEvent.create({
+      data: { orderId: order.id, type: 'moved-back', data: { note: 'Staff note about Priya' } },
+    });
+    const delivery = await migrator.delivery.create({
+      data: { orderId: order.id, status: 'ASSIGNED', partnerId: luis.partnerId },
+      select: { id: true },
+    });
+    const reads = (actor: Actor) =>
+      runAs(actor, async (ctx) => ({
+        orders: await db(ctx).order.count({ where: { id: order.id } }),
+        events: await db(ctx).orderEvent.count({ where: { orderId: order.id } }),
+      }));
+    expect(await reads(luis.actor)).toEqual({ orders: 1, events: 0 });
+    expect(await reads(grace.actor)).toEqual({ orders: 0, events: 0 });
+    await migrator.delivery.update({ where: { id: delivery.id }, data: { status: 'DELIVERED' } });
+    expect(await reads(luis.actor)).toEqual({ orders: 0, events: 0 });
+    expect(await reads(customer.actor)).toEqual({ orders: 1, events: 1 });
   });
 });
 
@@ -291,6 +326,15 @@ describe('accepting an offer (W6)', () => {
     await expireAsJob(late);
     const closed = await migrator.deliveryOffer.findUniqueOrThrow({ where: { id: late } });
     expect(closed).toMatchObject({ status: 'EXPIRED', endedReason: 'expired' });
+    const stretched = await openOffer(delivery.id, luis.partnerId, -10);
+    const [asked] = await runAs(
+      luis.actor,
+      (ctx) =>
+        db(ctx).$queryRaw<{ result: Record<string, unknown> }[]>`
+        SELECT app_accept_offer(${stretched}::uuid, 3600) AS "result"`,
+    );
+    expect(asked?.result).toEqual({ outcome: 'gone', why: 'expired' });
+    await expireAsJob(stretched);
     const inGrace = await openOffer(delivery.id, luis.partnerId, -1);
     expect(await accept(luis, inGrace)).toMatchObject({ outcome: 'accepted' });
   });

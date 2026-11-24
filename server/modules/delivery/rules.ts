@@ -45,16 +45,33 @@ const TIMING_KEYS = [
   'freshPointSeconds',
 ] as const satisfies readonly (keyof DispatchTimings)[];
 
-/** True when a test override is set where it must never apply (W14.1): refused at boot. */
-export function dispatchOverridesRefused(env: Record<string, string | undefined>): boolean {
-  const production = env.NODE_ENV === 'production' && !env.CI && env.E2E !== '1';
-  return production && Object.values(OVERRIDES).some((name) => Boolean(env[name]));
+type Env = Record<string, string | undefined>;
+const isOn = (value: string | undefined) => value === '1' || value === 'true';
+
+/**
+ * W14.1: test timings need the explicit test-only flag `FOODZ_TEST_TIMING=1`, which a production
+ * deployment refuses at boot (the same rule as `CLIENT_IP_FROM_HEADER`).
+ */
+export function dispatchOverridesRefused(env: Env): boolean {
+  return isOn(env.FOODZ_TEST_TIMING) && env.VERCEL_ENV === 'production';
+}
+
+const testTimingOn = (env: Env) => isOn(env.FOODZ_TEST_TIMING) && !dispatchOverridesRefused(env);
+
+/** The startup warning, like CLIENT_IP_FROM_HEADER's: test timing on, or overrides ignored. */
+export function dispatchTimingWarning(env: Env): string | null {
+  if (testTimingOn(env)) {
+    return 'FOODZ_TEST_TIMING is on: DISPATCH_* overrides shorten offers and searches. Use it for tests only.';
+  }
+  return Object.values(OVERRIDES).some((name) => Boolean(env[name]))
+    ? 'DISPATCH_* timing overrides are ignored without FOODZ_TEST_TIMING=1.'
+    : null;
 }
 
 /** The timings in force: the story's values, or positive whole-number test overrides. */
-export function dispatchTimings(env: Record<string, string | undefined>): DispatchTimings {
+export function dispatchTimings(env: Env): DispatchTimings {
   const timings: DispatchTimings = { ...DISPATCH_DEFAULTS };
-  if (dispatchOverridesRefused(env)) return timings;
+  if (!testTimingOn(env)) return timings;
   for (const key of TIMING_KEYS) {
     const value = Number(env[OVERRIDES[key]]);
     if (Number.isInteger(value) && value > 0 && value <= DISPATCH_DEFAULTS[key] * 4) {

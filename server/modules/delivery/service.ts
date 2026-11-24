@@ -84,6 +84,7 @@ const DEMO_CANNOT = 'Read-only in the demo';
 const PHOTO_SECONDS = 300;
 const RELEASE_NOTICE_MS = 30 * 60_000;
 const GIVE_BACK_ALERT_AT = 10;
+const LATE_ACCEPT_ALERT_AT = 5;
 const DAY_MS = 24 * 60 * 60_000;
 const ASSIGN = { delivery: ['assign'] } as const satisfies Permission;
 const ASSIGN_READ = { order: ['read-any'], delivery: ['assign'] } as const satisfies Permission;
@@ -212,7 +213,7 @@ function detailOf(offer: OfferRowData, order: DispatchOrderRow, seconds: number)
     payCents: offer.payCents,
     tipCents: offer.tipCents,
     pickupM: offer.pickupM,
-    dropoffAddress: order.addressText,
+    dropoffCity: order.addressCity,
     dropoffM: order.dropoffM,
     items: order.items,
     cashTotalCents: order.paymentMethod === 'CASH' ? order.totalCents : null,
@@ -264,7 +265,7 @@ function practiceDetail(practice: StoredPractice): OfferDetail {
     payCents: 564,
     tipCents: 300,
     pickupM: 0,
-    dropoffAddress: '1 Faneuil Hall Square, Boston, MA 02109',
+    dropoffCity: 'Boston, MA 02109',
     dropoffM: 1300,
     items: 3,
     cashTotalCents: null,
@@ -492,11 +493,23 @@ export async function recordLateAccept(
 ): Promise<{ recorded: boolean }> {
   const { offerId } = offerIdParam.parse({ offerId: rawOfferId });
   const { pressedAt } = offerLateAcceptInput.parse(input);
-  await partnerOf(actor);
+  const me = await partnerOf(actor);
   const result = lateOutcome.parse(
     await runAs(actor, (ctx) => repo.recordLateAccept(ctx, offerId, new Date(pressedAt))),
   );
   if (result.outcome === 'not-found') throw offerNotFound();
+  if (result.outcome === 'recorded') {
+    const since = new Date(Date.now() - 60 * 60_000);
+    const count = await runAsSystem('late accepts', (ctx) =>
+      repo.countLateAccepts(ctx, me.id, since),
+    );
+    if (count === LATE_ACCEPT_ALERT_AT) {
+      logger.error(
+        { partnerId: me.id, alert: 'partner-late-accepts' },
+        'five late accepts by one partner within an hour',
+      );
+    }
+  }
   return { recorded: result.outcome === 'recorded' };
 }
 
@@ -515,7 +528,7 @@ export async function getCurrentDelivery(actor: UserActor): Promise<PartnerDeliv
       payCents: delivery.partnerFeeCents,
       tipCents: delivery.tipCents,
       pickupM: 0,
-      dropoffAddress: order.addressText,
+      dropoffCity: order.addressCity,
       dropoffM: order.dropoffM,
       items: order.items,
       cashTotalCents: order.paymentMethod === 'CASH' ? order.totalCents : null,
@@ -1203,6 +1216,8 @@ function lineFor(
     t.startDelaySeconds,
   );
   if (!state) return null;
+  // A36.5: the demo admin never sees a real courier's plate.
+  const plate = holder && !(viewer.isDemo && !holder.shownToDemo) ? holder.vehiclePlate : null;
   const named = offer ? (context.partners.get(offer.partnerId) ?? null) : holder;
   const short = named ? shortName(nameFor(viewer, named.name, named.shownToDemo)) : null;
   const sender = offer?.offeredBy ? context.staff.get(offer.offeredBy) : undefined;
@@ -1217,7 +1232,7 @@ function lineFor(
     offeredBy,
     reachKm: state === 'between' ? REACHES_KM[0] : (offer?.reachKm ?? null),
     vehicle: holder?.vehicleType ?? null,
-    plate: holder?.vehiclePlate ?? null,
+    plate,
     distanceM: holder?.distanceM ?? null,
     staleMinutes,
   });
@@ -1228,8 +1243,8 @@ function lineFor(
     expiresAt: offer?.expiresAt.toISOString() ?? null,
     offeredBy,
     shortName: short,
-    vehicleWords: holder ? courierVehicle(holder.vehicleType, holder.vehiclePlate) : null,
-    plate: holder?.vehiclePlate ?? null,
+    vehicleWords: holder ? courierVehicle(holder.vehicleType, plate) : null,
+    plate,
     distanceWords:
       holder?.distanceM === null || holder?.distanceM === undefined
         ? null
@@ -1430,6 +1445,7 @@ export async function getCustomerDispatch(
   const shown = (state === 'assigned' || state === 'pickedUp') && partner;
   let photo: { url: string; expiresAt: string } | null = null;
   if (shown && partner.photoKey) {
+    logger.info({ orderId, partnerId: partner.partnerId }, 'courier photo link');
     photo = {
       url: await presignDownload('PRIVATE', partner.photoKey, PHOTO_SECONDS),
       expiresAt: new Date(Date.now() + PHOTO_SECONDS * 1000).toISOString(),

@@ -17,7 +17,7 @@ describe('the offer card words (P20.1)', () => {
         payCents: 764,
         tipCents: 500,
         pickupM: 210,
-        dropoffAddress: '1 Faneuil Hall Square, Boston, MA 02109',
+        dropoffCity: 'Boston, MA 02109',
         dropoffM: 1300,
         items: 3,
         cashTotalCents: 5897,
@@ -39,7 +39,7 @@ describe('the offer card words (P20.1)', () => {
       payCents: 529,
       tipCents: 0,
       pickupM: 40,
-      dropoffAddress: 'Harvard Square, Cambridge, MA 02138',
+      dropoffCity: 'Cambridge, MA 02138',
       dropoffM: 6600,
       items: 1,
       cashTotalCents: null,
@@ -54,9 +54,12 @@ describe('the offer card words (P20.1)', () => {
     expect(words.summary).not.toMatch(/Harvard Square,/);
   });
 
-  it('never shows the street, only the city and ZIP code (U11)', () => {
-    expect(cityAndZip('1 Faneuil Hall Square, Boston, MA 02109')).toBe('Boston 02109');
-    expect(cityAndZip('12 Peterborough Street, Apt 3, Boston, MA 02215')).toBe('Boston 02215');
+  it('words the city line only, so no part of the street can reach the card (U11)', () => {
+    expect(cityAndZip('Boston, MA 02109')).toBe('Boston 02109');
+    expect(cityAndZip('Boston MA 02215')).toBe('Boston MA 02215');
+    expect(cityAndZip('Boston')).toBe('Boston');
+    expect(cityAndZip('02215')).toBe('02215');
+    expect(cityAndZip(null)).toBe('Drop-off');
   });
 });
 

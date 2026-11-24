@@ -9,6 +9,7 @@ import {
   courierStateOf,
   customerStateOf,
   dispatchOverridesRefused,
+  dispatchTimingWarning,
   dispatchTimings,
   notOfferable,
   offerPay,
@@ -239,23 +240,37 @@ describe('answers and misses (W6.1, P25, W7.4)', () => {
 });
 
 describe('test timings (B13, W14.1)', () => {
-  it('uses the story values unless a test override is set', () => {
+  it('uses the story values unless the test-only flag is on with an override', () => {
     expect(dispatchTimings({})).toEqual(DISPATCH_DEFAULTS);
+    expect(dispatchTimings({ DISPATCH_OFFER_SECONDS: '5' })).toEqual(DISPATCH_DEFAULTS);
+    expect(dispatchTimings({ DISPATCH_OFFER_SECONDS: '5', CI: 'true', E2E: '1' })).toEqual(
+      DISPATCH_DEFAULTS,
+    );
     expect(
-      dispatchTimings({ DISPATCH_OFFER_SECONDS: '5', DISPATCH_START_DELAY_SECONDS: 'x' }),
+      dispatchTimings({
+        FOODZ_TEST_TIMING: '1',
+        DISPATCH_OFFER_SECONDS: '5',
+        DISPATCH_START_DELAY_SECONDS: 'x',
+      }),
     ).toMatchObject({
       offerSeconds: 5,
       startDelaySeconds: 12,
     });
   });
 
-  it('refuses overrides in production', () => {
-    const env = { NODE_ENV: 'production', DISPATCH_OFFER_SECONDS: '5' };
+  it('warns at startup while test timing is on, and when overrides are ignored', () => {
+    expect(dispatchTimingWarning({})).toBeNull();
+    expect(dispatchTimingWarning({ FOODZ_TEST_TIMING: '1' })).toMatch(/tests only/);
+    expect(dispatchTimingWarning({ DISPATCH_OFFER_SECONDS: '5' })).toMatch(/ignored/);
+  });
+
+  it('refuses the flag on a production deployment', () => {
+    const env = { VERCEL_ENV: 'production', FOODZ_TEST_TIMING: '1', DISPATCH_OFFER_SECONDS: '5' };
     expect(dispatchOverridesRefused(env)).toBe(true);
     expect(dispatchTimings(env).offerSeconds).toBe(30);
-    expect(
-      dispatchOverridesRefused({ NODE_ENV: 'production', CI: 'true', DISPATCH_OFFER_SECONDS: '5' }),
-    ).toBe(false);
+    expect(dispatchOverridesRefused({ NODE_ENV: 'production', FOODZ_TEST_TIMING: '1' })).toBe(
+      false,
+    );
   });
 });
 

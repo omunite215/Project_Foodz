@@ -5,5 +5,6 @@ import { partnerRoute } from '@/server/route';
 export const POST = partnerRoute({
   name: 'partner.practice-offers',
   rateLimit: 'partner.practice-offer',
+  rateLimitBy: 'session',
   handler: ({ actor, sessionId }) => sendPracticeOffer(actor, sessionId),
 });

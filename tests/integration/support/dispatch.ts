@@ -132,6 +132,8 @@ export async function readyOrder(
       contactName: 'Priya Shah',
       contactPhone: '+16175550101',
       addressText: '1 Faneuil Hall Square, Boston, MA 02109',
+      addressLine1: '1 Faneuil Hall Square',
+      addressCity: 'Boston, MA 02109',
       addressLat: 42.3601,
       addressLng: -71.0549,
       distanceKm: 1.3,

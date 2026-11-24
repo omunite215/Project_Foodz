@@ -268,7 +268,22 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.status = 'PENDING' AND NEW.kind = 'staff' AND NEW.offered_by = app_user_id()
       AND NEW.seen_at IS NULL AND NEW.pressed_at IS NULL AND NEW.responded_at IS NULL
-      AND NEW.expires_at <= app_now() + interval '61 seconds' THEN
+      AND NEW.expires_at <= app_now() + interval '61 seconds'
+      -- The pay is the order's delivery fee plus its tip (U12), and the partner an approved,
+      -- online partner of the order's pool (W12): the service computes both, this holds staff
+      -- to them.
+      AND EXISTS (
+        SELECT 1
+        FROM deliveries d
+        JOIN orders o ON o.id = d.order_id
+        JOIN delivery_partners p ON p.id = NEW.partner_id
+        JOIN users u ON u.id = p.user_id
+        WHERE d.id = NEW.delivery_id
+          AND NEW.pay_cents = o.delivery_fee_cents + o.tip_cents
+          AND NEW.tip_cents = o.tip_cents
+          AND p.status = 'APPROVED' AND p.is_online AND NOT coalesce(u.banned, false)
+          AND u.is_demo = (d.pool = 'DEMO')
+      ) THEN
       RETURN NEW;
     END IF;
     RAISE EXCEPTION 'permission denied: staff send only their own open offers' USING ERRCODE = 'insufficient_privilege';
@@ -324,6 +339,8 @@ DECLARE
   busy text;
   waited timestamp(3);
 BEGIN
+  -- The grace is the story's 2 seconds; a caller can shorten it but never stretch it.
+  grace_seconds := least(greatest(coalesce(grace_seconds, 2), 0), 5);
   IF me IS NULL THEN
     RETURN jsonb_build_object('outcome', 'not-found');
   END IF;
@@ -405,6 +422,8 @@ DECLARE
   o delivery_offers%ROWTYPE;
   d deliveries%ROWTYPE;
 BEGIN
+  -- The grace is the story's 2 seconds; a caller can shorten it but never stretch it.
+  grace_seconds := least(greatest(coalesce(grace_seconds, 2), 0), 5);
   IF me IS NULL THEN
     RETURN jsonb_build_object('outcome', 'not-found');
   END IF;
@@ -466,7 +485,8 @@ $$;
 
 -- P28.2: Accept was pressed before the end but reached the server too late. The press is kept
 -- so the offer isn't counted as a miss (a miss already counted is taken back); nothing is
--- assigned.
+-- assigned. It counts only once the offer has ended, and for a few minutes after: sent while the
+-- offer is still open it is ignored, so it can't stand in for an answer and dodge the miss limit.
 CREATE OR REPLACE FUNCTION app_offer_late_accept(target uuid, pressed timestamp(3)) RETURNS jsonb
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
   AS $$
@@ -482,7 +502,9 @@ BEGIN
     RETURN jsonb_build_object('outcome', 'not-found');
   END IF;
   IF o.pressed_at IS NOT NULL OR pressed IS NULL OR pressed < o.created_at OR pressed >= o.expires_at
-    OR pressed > app_now() OR o.status::text NOT IN ('PENDING', 'EXPIRED') THEN
+    OR pressed > app_now() OR app_now() <= o.expires_at
+    OR app_now() > o.expires_at + interval '5 minutes'
+    OR o.status::text NOT IN ('PENDING', 'EXPIRED') THEN
     RETURN jsonb_build_object('outcome', 'ignored');
   END IF;
   UPDATE delivery_offers SET pressed_at = pressed WHERE id = target;
@@ -532,17 +554,55 @@ BEGIN
 END
 $$;
 
+-- ---------------------------------------------------------------- what a partner may read of an order
+
+-- F7 is the first feature that sets `partner_id`: a partner reads an order only while carrying
+-- it (not after delivery or a release), and never its timeline, which holds staff names and
+-- notes. F8 gives the partner's own reads their own view.
+CREATE OR REPLACE FUNCTION app_partner_delivers(target uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+  AS $$
+    SELECT EXISTS (
+      SELECT 1 FROM deliveries d
+      WHERE d.order_id = target
+        AND d.partner_id IS NOT NULL
+        AND d.partner_id = app_partner_id()
+        AND d.status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP')
+    )
+  $$;
+
+-- The customer and operations staff (demo staff: demo and sample people's orders only).
+CREATE OR REPLACE FUNCTION app_can_see_order_timeline(target uuid) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+  AS $$
+    SELECT EXISTS (
+      SELECT 1 FROM orders o
+      WHERE o.id = target
+        AND (
+          o.user_id = app_user_id()
+          OR (app_is_operations() AND (NOT app_is_demo() OR app_shown_to_demo(o.user_id)))
+        )
+    )
+  $$;
+
+DROP POLICY order_events_read ON "order_events";
+
+CREATE POLICY order_events_read ON "order_events" FOR SELECT
+  USING (app_can_see_order_timeline(order_id));
+
 -- ---------------------------------------------------------------- grants
 
 REVOKE ALL ON FUNCTION app_accept_offer(uuid, integer), app_decline_offer(uuid, timestamp, integer),
   app_offer_seen(uuid), app_offer_late_accept(uuid, timestamp), app_give_back(uuid, text),
-  app_offer_gone_why(text), app_now(), app_is_dispatcher() FROM PUBLIC;
+  app_offer_gone_why(text), app_now(), app_is_dispatcher(), app_can_see_order_timeline(uuid)
+  FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foodz_app') THEN
     GRANT EXECUTE ON FUNCTION app_accept_offer(uuid, integer), app_decline_offer(uuid, timestamp, integer),
       app_offer_seen(uuid), app_offer_late_accept(uuid, timestamp), app_give_back(uuid, text),
-      app_offer_gone_why(text), app_now(), app_is_dispatcher() TO foodz_app;
+      app_offer_gone_why(text), app_now(), app_is_dispatcher(),
+      app_can_see_order_timeline(uuid) TO foodz_app;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foodz_readonly') THEN
     GRANT EXECUTE ON FUNCTION app_now(), app_is_dispatcher() TO foodz_readonly;

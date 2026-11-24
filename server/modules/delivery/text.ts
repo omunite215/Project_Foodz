@@ -32,14 +32,18 @@ export const courierVehicle = (vehicle: VehicleType, plate: string | null) =>
 /** "1.3 km", one decimal. */
 export const km = (meters: number) => `${(Math.round(meters / 100) / 10).toFixed(1)} km`;
 
-/** "Boston 02109" from a stored address line ("1 Faneuil Hall Square, Boston, MA 02109"). */
-export function cityAndZip(addressText: string): string {
-  const zip = /\b(\d{5})(?:-\d{4})?\b(?!.*\b\d{5}\b)/.exec(addressText)?.[1] ?? null;
-  const parts = addressText
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const city = parts.length >= 3 ? parts[parts.length - 2] : parts[1];
+/**
+ * "Boston 02109" from the order's city line (`address_city`, "Boston, MA 02109"), the only part
+ * of the address a partner sees before accepting (U11). Never derived from the full address.
+ */
+export function cityAndZip(cityLine: string | null): string {
+  if (!cityLine) return 'Drop-off';
+  const zip = /\b(\d{5})(?:-\d{4})?\b/.exec(cityLine)?.[1] ?? null;
+  const city =
+    cityLine
+      .split(',')[0]
+      ?.replace(/\b\d{5}(?:-\d{4})?\b/, '')
+      .trim() || null;
   return [city, zip].filter(Boolean).join(' ') || 'Drop-off';
 }
 
@@ -56,7 +60,8 @@ export function offerWords(offer: {
   payCents: number;
   tipCents: number;
   pickupM: number;
-  dropoffAddress: string;
+  /** The order's city line, never the street (U11). */
+  dropoffCity: string | null;
   dropoffM: number;
   items: number;
   cashTotalCents: number | null;
@@ -67,7 +72,7 @@ export function offerWords(offer: {
     offer.pickupM <= AT_KITCHEN_M
       ? "Foodz Kitchen · you're at the kitchen"
       : `Foodz Kitchen · ${km(offer.pickupM)} from you`;
-  const dropoffText = `${cityAndZip(offer.dropoffAddress)} · ${km(offer.dropoffM)} from the kitchen`;
+  const dropoffText = `${cityAndZip(offer.dropoffCity)} · ${km(offer.dropoffM)} from the kitchen`;
   const itemsText = `${offer.items} ${offer.items === 1 ? 'item' : 'items'}`;
   const payment =
     offer.cashTotalCents === null
