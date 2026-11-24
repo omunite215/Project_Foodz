@@ -15,7 +15,10 @@ export interface CspOptions {
   socketOrigins?: string[];
   /**
    * The private bucket's origin (F6 contract 11.6): the partner app PUTs uploads to presigned
-   * URLs there, and staff and partners load 5-minute image links from it.
+   * URLs there, and staff and partners load 5-minute image links from it. On every page: a
+   * policy belongs to the document, and the partner app is often reached by a client-side
+   * navigation (after signing in) that keeps the previous page's document. Every request still
+   * needs a presigned URL.
    */
   privateBucketOrigins?: string[];
   reportUri?: string;
@@ -81,10 +84,6 @@ export function buildCsp(options: CspOptions): string {
   if (options.reportUri) parts.push(`report-uri ${options.reportUri}`);
   return parts.join('; ');
 }
-
-/** Pages that upload to, or show images from, the private bucket (F6 contract 11.6). */
-export const usesPrivateBucket = (pathname: string) =>
-  pathname.startsWith('/partner') || pathname.startsWith('/admin');
 
 /** Geolocation is only offered where it is needed: the partner app and checkout. */
 export function permissionsPolicy(pathname: string): string {
