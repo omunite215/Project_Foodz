@@ -132,7 +132,10 @@ export function AssignCourierDialog({
   const query = useQuery({
     queryKey: assignableKey(card.id),
     queryFn: () => readAssignable(card.id),
+    // Read afresh every time the dialog opens: a decline or give-back since the last look
+    // must show as its tag, and the version sent must be today's (review S1).
     staleTime: 0,
+    gcTime: 0,
     retry: false,
   });
   const data = query.data;

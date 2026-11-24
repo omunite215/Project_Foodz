@@ -7,6 +7,7 @@ import { type MouseEvent, useEffect, useId, useRef, useState } from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { announce } from '@/lib/announce';
 import { OFFER_COPY } from '@/lib/partner/offer-text';
+import { NO_TAP, nextTap, TAP_WINDOW_MS, type TapState } from '@/lib/partner/slide-tap';
 import { prefersReducedMotion, useMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +24,6 @@ gsap.registerPlugin(Draggable);
 export type SlideState = 'ready' | 'blocked' | 'accepting' | 'waiting' | 'accepted';
 
 export const ACCEPT_AT = 0.8;
-const TAP_WINDOW_MS = 3_000;
 
 export function SlideToAccept({
   state,
@@ -48,9 +48,9 @@ export function SlideToAccept({
   const fillRef = useRef<HTMLSpanElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
   const draggable = useRef<Draggable | null>(null);
-  const pointerOnHandle = useRef(false);
+  // One tap path for every caller (review B1): the arm is a time, taken at once.
+  const taps = useRef<TapState>(NO_TAP);
   const [armed, setArmed] = useState(false);
-  const armedRef = useRef(false);
   const labelId = useId();
   const ready = state === 'ready';
   const busy = state === 'accepting' || state === 'waiting' || state === 'accepted';
@@ -64,7 +64,7 @@ export function SlideToAccept({
   useEffect(() => {
     if (!armed) return undefined;
     const timer = setTimeout(() => {
-      armedRef.current = false;
+      taps.current = { ...taps.current, armedAt: null };
       setArmed(false);
     }, TAP_WINDOW_MS);
     return () => clearTimeout(timer);
@@ -98,13 +98,14 @@ export function SlideToAccept({
 
   const tap = () => {
     if (!latest.current.ready) return;
-    if (armedRef.current) {
-      armedRef.current = false;
+    const next = nextTap(taps.current, performance.now());
+    taps.current = next.state;
+    if (next.outcome === 'ignore') return;
+    if (next.outcome === 'accept') {
       setArmed(false);
       latest.current.onAccept();
       return;
     }
-    armedRef.current = true;
     setArmed(true);
     announce(OFFER_COPY.tapAgain);
     const handle = handleRef.current;
@@ -128,9 +129,6 @@ export function SlideToAccept({
       minimumMovement: 4,
       allowNativeTouchScrolling: false,
       zIndexBoost: false,
-      onPress: () => {
-        pointerOnHandle.current = true;
-      },
       onDrag() {
         showProgress(this.x);
       },
@@ -147,6 +145,7 @@ export function SlideToAccept({
           springBack();
         }
       },
+      // The handle's own taps take the same path; one press reported twice counts once.
       onClick: () => tap(),
     });
     draggable.current = created ?? null;
@@ -210,8 +209,6 @@ export function SlideToAccept({
               : OFFER_COPY.slide;
 
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
-    const fromHandle = pointerOnHandle.current;
-    pointerOnHandle.current = false;
     if (state === 'blocked') {
       announce(OFFER_COPY.loading);
       return;
@@ -222,7 +219,7 @@ export function SlideToAccept({
       onAccept();
       return;
     }
-    if (!fromHandle) tap();
+    tap();
   };
 
   return (
@@ -235,14 +232,7 @@ export function SlideToAccept({
       aria-describedby={describedBy}
       aria-disabled={!ready || undefined}
       data-state={state}
-      onPointerDown={(event) => {
-        onTouch();
-        pointerOnHandle.current = Boolean(
-          handleRef.current &&
-          event.target instanceof Node &&
-          handleRef.current.contains(event.target),
-        );
-      }}
+      onPointerDown={onTouch}
       onClick={onClick}
       className={cn(
         'relative flex min-h-14 w-full touch-pan-y items-center overflow-hidden rounded-full select-none',

@@ -177,8 +177,10 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
     await accept.focus();
     await page.keyboard.press('Enter');
   } else if (projectOf(testInfo) === 'partner-375') {
+    // Two taps a second apart (U13): the first arms at once, the second accepts (review B1).
     await accept.click();
-    await expect(offer.getByText('Tap again to accept')).toBeVisible();
+    await expect(offer.getByText('Tap again to accept', { exact: true })).toBeVisible();
+    await page.waitForTimeout(1_000);
     await accept.click();
   } else {
     const box = await accept.boundingBox();
@@ -294,7 +296,16 @@ test('Riley tries practice offers', async ({ page }, testInfo) => {
   await expect(offer.getByText('$5.64', { exact: true })).toBeVisible();
   await expect(offer.getByText('Paid by card', { exact: true })).toBeVisible();
   await expectNoAxeViolations(page);
-  await offer.getByRole('button', { name: 'Accept practice offer' }).press('Enter');
+  // A tap arms the slider for 3 s only; after that a tap arms it again, and a second accepts.
+  const slider = offer.getByRole('button', { name: /Accept practice offer/ });
+  await slider.click();
+  await expect(offer.getByText('Tap again to accept', { exact: true })).toBeVisible();
+  await page.waitForTimeout(3_500);
+  await expect(offer.getByText('Slide to accept', { exact: true })).toBeVisible();
+  await slider.click();
+  await expect(offer.getByText('Tap again to accept', { exact: true })).toBeVisible();
+  await page.waitForTimeout(400);
+  await slider.click();
   await expect(
     offer.getByRole('heading', {
       name: "Practice offer accepted. On a real order you'd now head to Foodz Kitchen to pick it up.",

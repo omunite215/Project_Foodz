@@ -63,10 +63,12 @@ import {
   courierLineWords,
   courierVehicle,
   firstNameOf,
+  fromKitchenWords,
   km,
   offerWords,
   outcomeWords,
   shortName,
+  waitingWords,
 } from './text';
 
 /*
@@ -818,15 +820,12 @@ export async function listAssignableCouriers(
           !row.isDemo && (staleMs === null || staleMs > t.freshPointSeconds * 1000)
             ? Math.max(1, Math.round((staleMs ?? 60_000) / 60_000))
             : null;
-        const waiting = row.waitingSince
-          ? Math.max(0, Math.round((now.getTime() - row.waitingSince.getTime()) / 60_000))
-          : 0;
-        const distance =
-          row.distanceM === null ? 'no location' : `${km(row.distanceM)} from the kitchen`;
+        const waited = row.waitingSince ? now.getTime() - row.waitingSince.getTime() : 0;
+        const distance = row.distanceM === null ? 'no location' : fromKitchenWords(row.distanceM);
         return {
           partnerId: row.partnerId,
           name,
-          words: `${name} · ${courierVehicle(row.vehicleType, null)} · ${distance} · waiting ${waiting} min`,
+          words: `${name} · ${courierVehicle(row.vehicleType, null)} · ${distance} · ${waitingWords(waited)}`,
           tags: {
             declinedAt: declined?.respondedAt?.toISOString() ?? null,
             gaveBackAt:
@@ -1358,7 +1357,7 @@ export async function courierSection(
       },
       sentBy: sentByOf(viewer, offer, staff),
       reachWords: offer.reachKm ? `Within ${offer.reachKm} km` : null,
-      distanceWords: `${km(offer.pickupM)} from the kitchen`,
+      distanceWords: fromKitchenWords(offer.pickupM),
       seenAt: offer.seenAt?.toISOString() ?? null,
       ending,
       outcomeWords: outcomeWords(ending, {
@@ -1458,8 +1457,10 @@ export async function getCustomerDispatch(
       : null,
   });
   const partner = facts.partner;
-  // The courier stays on the page after delivery ("Delivered by Luis."); never a position.
-  const shown = (state === 'assigned' || state === 'pickedUp' || state === 'delivered') && partner;
+  // The courier card while he has the order; after delivery only his first name ("Delivered by
+  // Luis."), never a photo link, vehicle, plate or rating (security S8), and never a position.
+  const shown = (state === 'assigned' || state === 'pickedUp') && partner;
+  const named = state === 'delivered' && partner;
   const delivery = facts.delivery;
   let photo: { url: string; expiresAt: string } | null = null;
   if (shown && partner.photoKey) {
@@ -1485,10 +1486,11 @@ export async function getCustomerDispatch(
               : null,
         }
       : null,
-    changed: Boolean(shown && state !== 'delivered' && delivery?.courierChanged),
-    assignedAt: shown ? (delivery?.assignedAt?.toISOString() ?? null) : null,
-    pickedUpAt: shown ? (delivery?.pickedUpAt?.toISOString() ?? null) : null,
-    deliveredAt: shown ? (delivery?.deliveredAt?.toISOString() ?? null) : null,
+    changed: Boolean(shown && delivery?.courierChanged),
+    deliveredBy: named ? { firstName: firstNameOf(partner.name) } : null,
+    assignedAt: shown || named ? (delivery?.assignedAt?.toISOString() ?? null) : null,
+    pickedUpAt: shown || named ? (delivery?.pickedUpAt?.toISOString() ?? null) : null,
+    deliveredAt: shown || named ? (delivery?.deliveredAt?.toISOString() ?? null) : null,
   };
 }
 
@@ -1502,9 +1504,8 @@ export async function courierPhotoLink(
   if (!own) throw orderNotFound();
   const partner = await runAsSystem('courier photo', async (ctx) => {
     const delivery = await repo.findDeliveryByOrder(ctx, orderId);
-    if (!delivery?.partnerId || !(isActive(delivery.status) || delivery.status === 'DELIVERED')) {
-      return null;
-    }
+    // Only while the courier holds the order: no photo is signed once it's delivered (S8).
+    if (!delivery?.partnerId || !isActive(delivery.status)) return null;
     const [found] = await repo.listCourierFacts(ctx, [delivery.partnerId]);
     return found ?? null;
   });

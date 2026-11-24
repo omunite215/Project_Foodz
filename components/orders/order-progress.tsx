@@ -24,6 +24,7 @@ import {
   TriangleAlert,
   Truck,
   Undo2,
+  UserRoundCheck,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -36,7 +37,9 @@ import { Button } from '@/components/ui/button';
 import { useMotion } from '@/lib/motion';
 import {
   arrivalText,
+  courierChangedShown,
   courierShown,
+  courierTimelineEntry,
   courierTimelineText,
   cancellationMoney,
   cancellationOpener,
@@ -379,7 +382,7 @@ export function ProgressCard({
         <CourierBlock
           key={courier.firstName}
           courier={courier}
-          changed={view.progress.dispatch?.changed ?? false}
+          changed={courierChangedShown(view)}
           animateIn={courierAtLoad !== courier.firstName}
         />
       ) : null}
@@ -493,8 +496,9 @@ const DOTS: Record<string, { icon: LucideIcon; className: string }> = {
 };
 
 /** The timeline in its own card with an h2 (design 6.9). */
-/** The courier's vehicle on the timeline disc (F7 design 3.4). */
-function vehicleIcon(vehicleWords: string): LucideIcon {
+/** The courier's vehicle on the timeline disc (F7 design 3.4); a plain mark after delivery. */
+function vehicleIcon(vehicleWords: string | null): LucideIcon {
+  if (!vehicleWords) return UserRoundCheck;
   const kind = vehicleWords.split(' ')[0];
   if (kind === 'Bicycle') return Bike;
   if (kind === 'Motorbike') return Motorbike;
@@ -505,7 +509,13 @@ function vehicleIcon(vehicleWords: string): LucideIcon {
 /** A timeline row as drawn: the server's entries plus the current courier's (F7 S2.3). */
 type TimelineRow =
   | { key: string; kind: 'entry'; entry: OrderView['timeline'][number] }
-  | { key: string; kind: 'courier'; firstName: string; vehicleWords: string };
+  | {
+      key: string;
+      kind: 'courier';
+      firstName: string;
+      vehicleWords: string | null;
+      at: string | null;
+    };
 
 function timelineRows(view: OrderView): TimelineRow[] {
   const rows: TimelineRow[] = view.timeline.map((entry) => ({
@@ -513,7 +523,7 @@ function timelineRows(view: OrderView): TimelineRow[] {
     kind: 'entry',
     entry,
   }));
-  const courier = courierShown(view);
+  const courier = courierTimelineEntry(view);
   if (!courier) return rows;
   // After "Ready" (the courier accepts a ready order), before "On its way".
   const ready = rows.findIndex((row) => row.kind === 'entry' && row.entry.kind === 'ready');
@@ -523,6 +533,7 @@ function timelineRows(view: OrderView): TimelineRow[] {
     kind: 'courier',
     firstName: courier.firstName,
     vehicleWords: courier.vehicleWords,
+    at: courier.at,
   });
   return rows;
 }
@@ -554,8 +565,15 @@ export function TimelineCard({ view, now }: { view: OrderView; now: Date }) {
                 >
                   <Vehicle className="size-3.5 text-white" strokeWidth={2.5} />
                 </span>
-                <span className="block min-w-0 text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
-                  {courierTimelineText(row.firstName)}
+                <span className="min-w-0">
+                  <span className="block text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
+                    {courierTimelineText(row.firstName)}
+                  </span>
+                  {row.at ? (
+                    <span className="block text-body-5 text-neutral-3 tabular-nums">
+                      {timelineTime(row.at, now, view.store.timeZone)}
+                    </span>
+                  ) : null}
                 </span>
               </li>
             );

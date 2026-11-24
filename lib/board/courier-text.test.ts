@@ -59,6 +59,22 @@ describe('the courier line', () => {
     expect(offerSecondsLeft(null, NOW)).toBeNull();
   });
 
+  it('keeps the capital of a name at the start of the spoken line (review S4)', () => {
+    const staff = line({
+      state: 'staffOffered',
+      words: 'Morgan offered it to Luis M.',
+      shortName: 'Luis M.',
+      offeredBy: 'Morgan',
+      expiresAt: new Date(NOW.getTime() + 58_200).toISOString(),
+    });
+    expect(courierLineText(staff, NOW).spoken).toBe(
+      'Courier: Morgan offered it to Luis M., 58 seconds left',
+    );
+    expect(
+      courierLineText(line({ state: 'starting', words: 'Finding a courier…' }), NOW).spoken,
+    ).toBe('Courier: finding a courier…');
+  });
+
   it('spells out an assigned courier for screen readers', () => {
     const assigned = line({
       state: 'assigned',

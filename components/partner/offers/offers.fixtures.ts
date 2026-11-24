@@ -20,7 +20,7 @@ export const AUTO_OFFER: OfferDetail = {
   payment: { kind: 'cash', text: 'Cash order · collect $58.97' },
   heading: 'New order',
   summary:
-    'You earn $7.64, includes $5.00 tip. Foodz Kitchen · 0.2 km from you. Boston 02109 · 1.3 km from the kitchen. 3 items. Cash order · collect $58.97',
+    'You earn $7.64, includes $5.00 tip. Pickup: Foodz Kitchen, 0.2 km from you. Drop-off: Boston 02109, 1.3 km from the kitchen. 3 items. Cash order, collect $58.97.',
   seen: true,
 };
 
@@ -32,7 +32,7 @@ export const STAFF_OFFER: OfferDetail = {
   payment: { kind: 'card', text: 'Paid by card' },
   heading: 'Foodz support picked you for this order.',
   summary:
-    'You earn $7.64, includes $5.00 tip. Foodz Kitchen · 0.2 km from you. Boston 02109 · 1.3 km from the kitchen. 3 items. Paid by card',
+    'You earn $7.64, includes $5.00 tip. Pickup: Foodz Kitchen, 0.2 km from you. Drop-off: Boston 02109, 1.3 km from the kitchen. 3 items. Paid by card.',
 };
 
 export const PRACTICE_OFFER: OfferDetail = {
@@ -46,7 +46,7 @@ export const PRACTICE_OFFER: OfferDetail = {
   payment: { kind: 'card', text: 'Paid by card' },
   heading: 'Practice offer',
   summary:
-    "You'd earn $5.64, includes $3.00 tip. Foodz Kitchen · you're at the kitchen. Boston 02109 · 1.3 km from the kitchen. 3 items. Paid by card",
+    "You'd earn $5.64, includes $3.00 tip. Pickup: Foodz Kitchen, you're at the kitchen. Drop-off: Boston 02109, 1.3 km from the kitchen. 3 items. Paid by card.",
 };
 
 /** A card that ends `seconds` from now on the device's clock (stories count down live). */

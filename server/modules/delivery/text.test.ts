@@ -5,9 +5,11 @@ import {
   courierTimelineWords,
   courierVehicle,
   customerLine,
+  fromKitchenWords,
   offerWords,
   outcomeWords,
   shortName,
+  waitingWords,
 } from './text';
 
 describe('the offer card words (P20.1)', () => {
@@ -31,7 +33,17 @@ describe('the offer card words (P20.1)', () => {
       dropoffText: 'Boston 02109 · 1.3 km from the kitchen',
       itemsText: '3 items',
       payment: { kind: 'cash', text: 'Cash order · collect $58.97' },
+      summary:
+        'You earn $7.64, includes $5.00 tip. Pickup: Foodz Kitchen, 0.2 km from you. Drop-off: Boston 02109, 1.3 km from the kitchen. 3 items. Cash order, collect $58.97.',
     });
+  });
+
+  it('words distances and waits for the staff lists (design 2.7)', () => {
+    expect(fromKitchenWords(80)).toBe('at the kitchen');
+    expect(fromKitchenWords(1_440)).toBe('1.4 km from the kitchen');
+    expect(waitingWords(40_000)).toBe('waiting under 1 min');
+    expect(waitingWords(10 * 60_000 + 5_000)).toBe('waiting 10 min');
+    expect(waitingWords(-5)).toBe('waiting under 1 min');
   });
 
   it('says "at the kitchen" within 100 m and leaves out a zero tip', () => {

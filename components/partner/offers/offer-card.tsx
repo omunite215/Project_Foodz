@@ -43,6 +43,22 @@ import { type SlideState, SlideToAccept } from './slide-to-accept';
  * countdown sits beside the pay so the whole card fits at 320 × 568 (D3).
  */
 
+/** True while the element's content is taller than the element (200% text, short phones). */
+function useScrollable(ref: React.RefObject<HTMLElement | null>): boolean {
+  const [scrollable, setScrollable] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === 'undefined') return undefined;
+    const check = () => setScrollable(element.scrollHeight > element.clientHeight + 1);
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    for (const child of element.children) observer.observe(child);
+    check();
+    return () => observer.disconnect();
+  }, [ref]);
+  return scrollable;
+}
+
 /** Re-renders every 250 ms so the seconds change on the second. */
 function useSecondsLeft(expiresAt: string, offset: number, running: boolean) {
   const [left, setLeft] = useState(() => secondsLeft(expiresAt, offset));
@@ -87,7 +103,9 @@ function FactRow({
         />
         {label}
       </dt>
-      <dd className="text-body-3 font-medium text-strong [overflow-wrap:anywhere]">{value}</dd>
+      <dd className="text-body-3 font-medium text-strong [overflow-wrap:anywhere] [@media(max-height:700px)]:text-body-4">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -133,6 +151,8 @@ export function OfferCardView({
   onTouch: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const scrollable = useScrollable(bodyRef);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const summaryId = useId();
@@ -250,11 +270,11 @@ export function OfferCardView({
       data-offer={card.offerId}
       inert={exiting || undefined}
       onKeyDown={trapFocus}
-      className="fixed inset-0 z-[55] mx-auto flex w-full max-w-md flex-col overflow-y-auto overscroll-contain bg-background md:border-x md:border-border"
+      className="fixed inset-0 z-[55] mx-auto flex w-full max-w-md flex-col bg-background md:border-x md:border-border"
     >
       <div
         className={cn(
-          'relative overflow-hidden px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4',
+          'relative shrink-0 overflow-hidden px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4',
           practice ? 'bg-tag-8 text-white' : 'bg-status-online text-status-online-foreground',
         )}
       >
@@ -280,7 +300,15 @@ export function OfferCardView({
         </PinnedBanner>
       ) : null}
 
-      <div className="flex-1 px-4 pt-6 pb-4">
+      {/* Only the body scrolls (design 1.2): band and dock never move or shrink. While it
+          scrolls it takes focus, so the keyboard can scroll it too. */}
+      <div
+        ref={bodyRef}
+        tabIndex={scrollable ? 0 : undefined}
+        role={scrollable ? 'region' : undefined}
+        aria-label={scrollable ? 'Offer details' : undefined}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid [@media(max-height:700px)]:pt-4"
+      >
         {card.phase === 'offlineExpired' ? (
           <div className="pt-6 text-center">
             <IconDisc icon={WifiOff} />
@@ -317,7 +345,7 @@ export function OfferCardView({
               </div>
             </div>
             {detail ? (
-              <dl className="mt-6 divide-y divide-border rounded-2xl border border-border bg-card">
+              <dl className="mt-6 divide-y divide-border rounded-2xl border border-border bg-card [@media(max-height:700px)]:mt-4">
                 <FactRow icon={Store} label={OFFER_COPY.pickup} value={detail.pickupText} />
                 <FactRow icon={MapPin} label={OFFER_COPY.dropoff} value={detail.dropoffText} />
                 <FactRow icon={ShoppingBag} label={OFFER_COPY.items} value={detail.itemsText} />
@@ -341,7 +369,7 @@ export function OfferCardView({
         </p>
       </div>
 
-      <div className="sticky bottom-0 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {finished ? (
           <Button type="button" size="dock" onClick={onBackToWaiting}>
             {OFFER_COPY.backToWaiting}

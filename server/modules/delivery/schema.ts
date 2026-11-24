@@ -396,8 +396,15 @@ export interface CustomerDispatchView {
   /** True when the courier changed while this order was assigned before (S4.2). */
   changed: boolean;
   /**
+   * After delivery, only the courier's first name ("Delivered by Luis."); `courier` is null by
+   * then, so no photo link, vehicle, plate or rating outlives the delivery (security S8).
+   * Always sent; optional so fixtures still compile.
+   */
+  deliveredBy?: { firstName: string } | null;
+  /**
    * When the current courier accepted (the timeline's "Luis is on the way to the kitchen"), picked
-   * up and delivered, while a courier is shown. Always sent; optional so fixtures still compile.
+   * up and delivered, while a courier is shown or named. Always sent; optional so fixtures still
+   * compile.
    */
   assignedAt?: string | null;
   pickedUpAt?: string | null;

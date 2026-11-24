@@ -29,7 +29,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { readSwitch, writeSwitch } from '@/lib/board/preferences';
 import { boardClock, clockWithSeconds, timelineText } from '@/lib/board/text';
 import { useMotion } from '@/lib/motion';
-import { eventTimeText } from '@/lib/order-text';
+import { eventTimeText, sameStoreDay } from '@/lib/order-text';
 import { cn } from '@/lib/utils';
 
 /*
@@ -173,7 +173,8 @@ function Entry({
 }) {
   const disc = entry.type === 'courier' ? COURIER_DISCS[entry.event] : DISCS[entry.type];
   const text = timelineText(entry);
-  const sameDay = eventTimeText(entry.at, now, timeZone).includes(':');
+  // By the day itself: "6 pm" has no colon, so a colon test took it for another day (review S3).
+  const sameDay = sameStoreDay(entry.at, now, timeZone);
   const clock = seconds ? clockWithSeconds(entry.at, timeZone) : boardClock(entry.at, timeZone);
   const time = sameDay ? clock : `${eventTimeText(entry.at, now, timeZone)}, ${clock}`;
 

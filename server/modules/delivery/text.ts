@@ -32,6 +32,16 @@ export const courierVehicle = (vehicle: VehicleType, plate: string | null) =>
 /** "1.3 km", one decimal. */
 export const km = (meters: number) => `${(Math.round(meters / 100) / 10).toFixed(1)} km`;
 
+/** "1.4 km from the kitchen", or "at the kitchen" within 100 m (design 2.1, 2.7). */
+export const fromKitchenWords = (meters: number) =>
+  meters <= AT_KITCHEN_M ? 'at the kitchen' : `${km(meters)} from the kitchen`;
+
+/** "waiting 10 min", or "waiting under 1 min" (design 2.7). */
+export function waitingWords(waitedMs: number): string {
+  const minutes = Math.floor(Math.max(0, waitedMs) / 60_000);
+  return minutes < 1 ? 'waiting under 1 min' : `waiting ${minutes} min`;
+}
+
 /**
  * "Boston 02109" from the order's city line (`address_city`, "Boston, MA 02109"), the only part
  * of the address a partner sees before accepting (U11). Never derived from the full address.
@@ -90,13 +100,15 @@ export function offerWords(offer: {
     dropoffText,
     itemsText,
     payment,
-    summary: [
+    // Read with labels and commas, not the card's dots (design 1.2): "… Pickup: Foodz Kitchen,
+    // 0.2 km from you. Drop-off: Boston 02109, 1.3 km from the kitchen. 3 items. …"
+    summary: `${[
       `${earn} ${payText}${tipText ? `, ${tipText}` : ''}`,
-      pickupText,
-      dropoffText,
+      `Pickup: ${pickupText.replaceAll(' · ', ', ')}`,
+      `Drop-off: ${dropoffText.replaceAll(' · ', ', ')}`,
       itemsText,
-      payment.text,
-    ].join('. '),
+      payment.text.replaceAll(' · ', ', '),
+    ].join('. ')}.`,
   };
 }
 

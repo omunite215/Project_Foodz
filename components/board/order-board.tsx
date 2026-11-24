@@ -496,7 +496,7 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
 
   // ---------------------------------------------------------------- couriers (F7 A34.4, A35)
   // A delivery change names its order: the card's courier line is read again. The couriers
-  // count comes with the board's snapshot, at most every 10 s while deliveries change.
+  // count comes with the board's snapshot, at once and then at most every 5 s.
   const courierChanges = useCallback(
     async (ids: string[]) => {
       try {
@@ -528,9 +528,11 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
   );
   const countThrottler = useMemo(
     () =>
+      // At once on the first change, then at most every 5 s (A35.1): a courier who takes an
+      // order stops counting as free on the same refresh (review P5).
       new Throttler(() => void writer.refresh().catch(() => undefined), {
-        wait: 10_000,
-        leading: false,
+        wait: 5_000,
+        leading: true,
         trailing: true,
       }),
     [writer],

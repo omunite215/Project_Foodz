@@ -13,6 +13,7 @@ import {
   countdownText,
   dishesText,
   eventTimeText,
+  sameStoreDay,
   moneyNotices,
   ORDER_HEADINGS,
   orderDateText,
@@ -39,6 +40,9 @@ describe('dates in Boston time (design 4.2)', () => {
   it('gives the timeline a clock time today and a date otherwise', () => {
     expect(eventTimeText('2026-11-20T00:02:00.000Z', NOW, TZ)).toBe('7:02 pm');
     expect(eventTimeText('2026-11-18T15:00:00.000Z', NOW, TZ)).toBe('Nov 18');
+    // On the hour there is no colon ("6 pm"): the day itself decides (F7 review S3).
+    expect(sameStoreDay('2026-11-19T23:00:00.000Z', NOW, TZ)).toBe(true);
+    expect(sameStoreDay('2026-11-18T15:00:00.000Z', NOW, TZ)).toBe(false);
   });
 
   it('writes the receipt date in full', () => {

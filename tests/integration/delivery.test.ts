@@ -444,6 +444,29 @@ describe('staff (A37 to A39)', () => {
     });
   });
 
+  it('tags a courier who declined a staff offer in the assign list (A37.2, review S1)', async () => {
+    await goOnlineAt(migrator, diego, { km: 0.05, waitingMinutes: 0 });
+    const order = await readyOrder(migrator, priya.userId);
+    const sent = await asBrowser(morgan.browser, () =>
+      actions.sendStaffOfferAction({
+        orderId: order.id,
+        partnerId: diego.partnerId,
+        expectedVersion: 0,
+      }),
+    );
+    expect(sent?.serverError).toBeUndefined();
+    const offer = await migrator.deliveryOffer.findFirstOrThrow({
+      where: { partnerId: diego.partnerId, status: 'PENDING' },
+    });
+    await dispatch.declineOffer(diego.actor, offer.id, {});
+    const list = await asBrowser(morgan.browser, () =>
+      actions.assignableCouriersAction({ orderId: order.id }),
+    );
+    const row = list?.data?.rows.find((item) => item.partnerId === diego.partnerId);
+    expect(row?.tags.declinedAt).toBeTruthy();
+    expect(row?.words).toMatch(/ · at the kitchen · waiting under 1 min$/);
+  });
+
   it('refuses the kitchen and the demo admin', async () => {
     await goOnlineAt(migrator, diego, { km: 0.2 });
     const order = await readyOrder(migrator, priya.userId);
@@ -570,13 +593,20 @@ describe('order changes (F5 hooks) and what people see', () => {
     expect(await dispatch.getCustomerDispatch(maya.actor, order.id)).toBeNull();
     expect(view?.assignedAt).toBeTruthy();
 
-    // "Delivered by Omar.": the courier stays on the page once the order is delivered.
+    // "Delivered by Omar.": only his first name once the order is delivered (security S8).
     await migrator.order.update({ where: { id: order.id }, data: { status: 'PICKED_UP' } });
     await dispatch.orderChanged(order.id, 'picked-up-by-courier');
     await migrator.order.update({ where: { id: order.id }, data: { status: 'DELIVERED' } });
     await dispatch.orderChanged(order.id, 'delivered');
     const delivered = await dispatch.getCustomerDispatch(priya.actor, order.id);
-    expect(delivered).toMatchObject({ state: 'delivered', courier: { firstName: 'Omar' } });
+    expect(delivered).toMatchObject({
+      state: 'delivered',
+      courier: null,
+      deliveredBy: { firstName: 'Omar' },
+      changed: false,
+    });
+    expect(JSON.stringify(delivered)).not.toMatch(/5OH 318|photoUrl|rating|vehicle/);
+    expect(await dispatch.courierPhotoLink(priya.actor, { orderId: order.id })).toBeNull();
     expect(delivered?.assignedAt).toBe(view?.assignedAt);
     expect(delivered?.pickedUpAt).toBeTruthy();
     expect(delivered?.deliveredAt).toBeTruthy();

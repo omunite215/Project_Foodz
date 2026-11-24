@@ -41,6 +41,8 @@ export const UNASSIGNED: ReadonlySet<CourierState> = new Set([
   'notLooking',
 ]);
 
+const FIXED_OPENING = /^(Finding|Offered|No couriers|No courier|Not looking)/;
+
 /** "Scooter · 7KT 342" read aloud: "scooter, plate 7KT 342". */
 export function vehicleSpoken(vehicleWords: string | null): string | null {
   if (!vehicleWords) return null;
@@ -85,8 +87,8 @@ export function courierLineText(
     const parts = [courier.shortName, vehicleSpoken(courier.vehicleWords), courier.distanceWords];
     spoken = `Courier: ${parts.filter(Boolean).join(', ')}`;
   } else {
-    const first = courier.words.charAt(0).toLowerCase() + courier.words.slice(1);
-    const text = courier.state === 'assignedStale' ? courier.words : first;
+    // Only the line's own openings drop their capital; a name keeps it (review S4).
+    const text = courier.words.replace(FIXED_OPENING, (opening) => opening.toLowerCase());
     spoken = `Courier: ${text.replaceAll(' · ', ', ')}${left === null ? '' : `, ${left} ${left === 1 ? 'second' : 'seconds'} left`}`;
   }
   return { words: courier.words, seconds, spoken, tone: courier.tone, state: courier.state };

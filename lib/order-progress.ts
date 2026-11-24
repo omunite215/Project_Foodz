@@ -172,9 +172,42 @@ export function courierOnItsWayLine(view: Pick<OrderView, 'progress'>): string |
 /** "Delivered by Luis." on its own line after the delivered line (F7 design 3.1). */
 export function deliveredByLine(view: Pick<OrderView, 'progress'>): string | null {
   const dispatch = view.progress.dispatch;
-  if (dispatch?.state !== 'delivered' || !dispatch.courier) return null;
-  return `Delivered by ${dispatch.courier.firstName}.`;
+  if (dispatch?.state !== 'delivered') return null;
+  // After delivery the server names the courier only (security S8).
+  const firstName = dispatch.deliveredBy?.firstName ?? dispatch.courier?.firstName;
+  return firstName ? `Delivered by ${firstName}.` : null;
 }
+
+/**
+ * The timeline's courier entry (F7 S2.3, design 3.4): the current courier and when they
+ * accepted. It stays once the order is picked up and delivered: it's history. Without a
+ * vehicle after delivery (S8), the disc shows a plain courier mark.
+ */
+export function courierTimelineEntry(
+  view: Pick<OrderView, 'progress'>,
+): { firstName: string; vehicleWords: string | null; at: string | null } | null {
+  const dispatch = view.progress.dispatch;
+  if (!dispatch) return null;
+  const at = dispatch.assignedAt ?? null;
+  if ((dispatch.state === 'assigned' || dispatch.state === 'pickedUp') && dispatch.courier) {
+    return {
+      firstName: dispatch.courier.firstName,
+      vehicleWords: dispatch.courier.vehicleWords,
+      at,
+    };
+  }
+  if (dispatch.state === 'delivered') {
+    const firstName = dispatch.deliveredBy?.firstName ?? dispatch.courier?.firstName;
+    return firstName
+      ? { firstName, vehicleWords: dispatch.courier?.vehicleWords ?? null, at }
+      : null;
+  }
+  return null;
+}
+
+/** The changed notice shows until the order is picked up (design 3.3, amended after review). */
+export const courierChangedShown = (view: Pick<OrderView, 'progress'>) =>
+  Boolean(view.progress.dispatch?.changed && view.progress.dispatch.state === 'assigned');
 
 /** The courier block shows from acceptance until delivery (F7 S2.1). */
 export function courierShown(view: Pick<OrderView, 'progress'>) {

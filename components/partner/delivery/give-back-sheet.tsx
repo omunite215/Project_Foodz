@@ -148,7 +148,6 @@ export function GiveBackSheet({
         >
           {giveBackTitle(orderNumber)}
         </SheetTitle>
-        <SheetDescription className="sr-only">{GIVE_BACK_COPY.line}</SheetDescription>
         <form
           ref={formRef}
           noValidate
@@ -212,7 +211,10 @@ export function GiveBackSheet({
               );
             }}
           </form.Field>
-          <p className="mt-4 text-body-4 text-foreground">{GIVE_BACK_COPY.line}</p>
+          {/* The visible line is the sheet's description: read once (review P2). */}
+          <SheetDescription className="mt-4 text-body-4 text-foreground">
+            {GIVE_BACK_COPY.line}
+          </SheetDescription>
           <div className="mt-6 flex flex-col gap-3">
             <SubmitButton
               size="dock"
