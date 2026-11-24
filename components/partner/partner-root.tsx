@@ -73,7 +73,7 @@ export function PartnerRoot({
   // The installed app's files and offline page (design 2.6). Pages and answers are never kept.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('/partner/sw.js', { scope: '/partner/' }).catch(() => {
+    navigator.serviceWorker.register('/partner/sw.js', { scope: '/partner' }).catch(() => {
       // Without a worker the app still works online.
     });
   }, []);

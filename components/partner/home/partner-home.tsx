@@ -512,7 +512,7 @@ function UpdateBanner() {
     if (!('serviceWorker' in navigator)) return undefined;
     let cancelled = false;
     const watch = async () => {
-      const registration = await navigator.serviceWorker.getRegistration('/partner/');
+      const registration = await navigator.serviceWorker.getRegistration('/partner');
       if (cancelled || !registration) return;
       if (registration.waiting) setWaiting(registration.waiting);
       registration.addEventListener('updatefound', () => {

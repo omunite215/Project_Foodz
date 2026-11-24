@@ -3,7 +3,7 @@
   "short_name": "Foodz Partner",
   "id": "/partner",
   "start_url": "/partner",
-  "scope": "/partner/",
+  "scope": "/partner",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#23262f",

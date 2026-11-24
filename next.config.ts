@@ -53,6 +53,8 @@ const nextConfig: NextConfig = {
       // The partner app and its API (F6 B15): never indexed, never cached by the browser.
       { source: '/partner/:path*', headers: adminHeaders },
       { source: '/api/v1/partner/:path*', headers: adminHeaders },
+      // The worker lives under /partner/ but controls /partner itself, the start page (B14).
+      { source: '/partner/sw.js', headers: [{ key: 'Service-Worker-Allowed', value: '/partner' }] },
     ];
   },
   async redirects() {

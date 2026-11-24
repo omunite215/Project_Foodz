@@ -1,5 +1,6 @@
 /*
- * The partner app's service worker (F6 design 2.6, B14), scope /partner/. It keeps the app's
+ * The partner app's service worker (F6 design 2.6, B14), scope /partner, so it also controls the
+ * app's start page (served with Service-Worker-Allowed: /partner). It keeps the app's
  * own files (scripts, styles, fonts, icons, the doodles) and a static offline page, so an
  * installed app opened without a connection says so instead of failing. It never keeps a page,
  * an API answer or an image link: personal data and location answers always come from the
