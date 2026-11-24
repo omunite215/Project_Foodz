@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cityAndZip,
   courierLineWords,
+  courierTimelineWords,
   courierVehicle,
   customerLine,
   offerWords,
@@ -110,6 +111,55 @@ describe('the staff courier line (A34.1)', () => {
     expect(shortName('Grace Okafor')).toBe('Grace O.');
     expect(shortName('Riley')).toBe('Riley');
     expect(courierVehicle('BICYCLE', null)).toBe('Bicycle');
+  });
+});
+
+describe('the staff timeline milestones (design 2.5)', () => {
+  const morgan = { name: 'Morgan Diaz', role: 'support' };
+  const base = { courierName: 'Luis Moreno', staff: null, reason: null, pickupM: null };
+
+  it.each([
+    [{ event: 'search-started' as const }, 'Looking for a courier · Foodz (automatic)'],
+    [
+      { event: 'assigned' as const, pickupM: 210 },
+      'Luis Moreno accepted · 0.2 km from the kitchen',
+    ],
+    [{ event: 'assigned' as const, pickupM: 40 }, 'Luis Moreno accepted · at the kitchen'],
+    [
+      { event: 'offered-by-staff' as const, staff: morgan, courierName: 'Grace Okafor' },
+      'Morgan Diaz (Support) offered it to Grace Okafor',
+    ],
+    [
+      { event: 'gave-back' as const, reason: 'vehicle' },
+      'Luis Moreno gave it back · Vehicle problem',
+    ],
+    [
+      { event: 'unassigned' as const, staff: morgan, reason: 'not-responding' },
+      "Morgan Diaz (Support) took it off Luis Moreno · Courier isn't responding",
+    ],
+    [{ event: 'escalated' as const }, 'No courier after 5 minutes · Foodz (automatic)'],
+    [
+      { event: 'search-stopped' as const },
+      'Stopped looking for a courier after 60 minutes · Foodz (automatic)',
+    ],
+    [
+      { event: 'search-restarted' as const, staff: { name: 'Foodz Admin', role: 'admin' } },
+      'Foodz Admin (Admin) started looking for a courier again',
+    ],
+  ])('words %j', (change, words) => {
+    expect(courierTimelineWords({ ...base, ...change })).toBe(words);
+  });
+
+  it('never names a masked person', () => {
+    expect(
+      courierTimelineWords({
+        ...base,
+        event: 'unassigned',
+        courierName: null,
+        staff: { name: null, role: 'support' },
+        reason: 'other',
+      }),
+    ).toBe('A staff member (Support) took it off A courier · Other');
   });
 });
 

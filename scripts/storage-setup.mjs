@@ -105,6 +105,8 @@ async function main() {
   // content-length, which the signature covers. Nothing is readable this way.
   const origins = [
     process.env.NEXT_PUBLIC_SITE_URL,
+    // The F7 browser tests' own server (local storage only; this script never runs on AWS).
+    'http://localhost:3463',
     ...(process.env.S3_CORS_ORIGINS ?? '').split(','),
   ]
     .map((value) => value?.trim())

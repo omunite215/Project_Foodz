@@ -10,6 +10,7 @@ import { audit } from '@/server/modules/audit/service';
 import {
   courierHolding,
   courierLines,
+  courierNames,
   courierSection,
   couriersCount,
 } from '@/server/modules/delivery/service';
@@ -367,6 +368,19 @@ export async function getStaffOrderDetail(
   const found = await readOrder(actor, parsed.data.orderId);
   if (!found) return null;
   const fresh = viewer.isDemo ? null : await stepUpFreshUntilFor(actor, now);
+  // F7: the couriers the timeline names, masked for the demo admin.
+  const names = await courierNames(
+    viewer,
+    found.events.flatMap((event) => {
+      const data = event.data;
+      return data &&
+        typeof data === 'object' &&
+        'partnerId' in data &&
+        typeof data.partnerId === 'string'
+        ? [data.partnerId]
+        : [];
+    }),
+  );
   const detail = toDetail(
     viewer,
     found.order,
@@ -375,6 +389,7 @@ export async function getStaffOrderDetail(
     found.soldOut,
     fresh,
     now,
+    names,
   );
   return { ...detail, courierSection: await courierSection(viewer, found.order, now) };
 }

@@ -395,6 +395,13 @@ export interface CustomerDispatchView {
   } | null;
   /** True when the courier changed while this order was assigned before (S4.2). */
   changed: boolean;
+  /**
+   * When the current courier accepted (the timeline's "Luis is on the way to the kitchen"), picked
+   * up and delivered, while a courier is shown. Always sent; optional so fixtures still compile.
+   */
+  assignedAt?: string | null;
+  pickedUpAt?: string | null;
+  deliveredAt?: string | null;
 }
 
 // ------------------------------------------------------------------ refusals

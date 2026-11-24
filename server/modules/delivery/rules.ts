@@ -1,4 +1,5 @@
 import type { DeliveryStatus } from '@/server/db/enums';
+import { isDeployedProduction } from '@/server/deployment';
 import type {
   CourierState,
   CustomerDispatchView,
@@ -50,10 +51,10 @@ const isOn = (value: string | undefined) => value === '1' || value === 'true';
 
 /**
  * W14.1: test timings need the explicit test-only flag `FOODZ_TEST_TIMING=1`, which a production
- * deployment refuses at boot (the same rule as `CLIENT_IP_FROM_HEADER`).
+ * deployment (Vercel or AWS) refuses at boot, the same rule as `CLIENT_IP_FROM_HEADER`.
  */
 export function dispatchOverridesRefused(env: Env): boolean {
-  return isOn(env.FOODZ_TEST_TIMING) && env.VERCEL_ENV === 'production';
+  return isOn(env.FOODZ_TEST_TIMING) && isDeployedProduction(env);
 }
 
 const testTimingOn = (env: Env) => isOn(env.FOODZ_TEST_TIMING) && !dispatchOverridesRefused(env);

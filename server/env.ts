@@ -103,7 +103,7 @@ if (clientIpOptInRefused(process.env)) {
   throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused in production.');
 }
 if (dispatchOverridesRefused(process.env)) {
-  throw new Error('FOODZ_TEST_TIMING is for tests only and is refused on Vercel production.');
+  throw new Error('FOODZ_TEST_TIMING is for tests only and is refused on production deployments.');
 }
 const timingWarning = dispatchTimingWarning(process.env);
 if (timingWarning) console.warn(timingWarning);

@@ -15,6 +15,13 @@ import {
   Truck,
   Undo2,
   CircleDot,
+  CircleSlash,
+  RotateCcw,
+  Search,
+  Send,
+  TriangleAlert,
+  UserRoundCheck,
+  UserRoundX,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { StaffTimelineEntry, StaffTimelineType } from '@/server/modules/board/schema';
@@ -53,6 +60,22 @@ const DISCS: Record<StaffTimelineType, { icon: LucideIcon; className: string }> 
   'dispute-opened': { icon: CircleX, className: 'bg-destructive' },
   'dispute-closed': { icon: CircleDot, className: 'bg-neutral-3' },
   'sold-out': { icon: Ban, className: 'bg-neutral-3' },
+  courier: { icon: Truck, className: 'bg-neutral-3' },
+};
+
+/** F7 design 2.5: the courier milestones' discs. */
+const COURIER_DISCS: Record<
+  Extract<StaffTimelineEntry, { type: 'courier' }>['event'],
+  { icon: LucideIcon; className: string }
+> = {
+  'search-started': { icon: Search, className: 'bg-neutral-4' },
+  assigned: { icon: UserRoundCheck, className: 'bg-brand-strong' },
+  'offered-by-staff': { icon: Send, className: 'bg-neutral-3' },
+  'gave-back': { icon: Undo2, className: 'bg-warning-strong' },
+  unassigned: { icon: UserRoundX, className: 'bg-neutral-3' },
+  escalated: { icon: TriangleAlert, className: 'bg-destructive' },
+  'search-stopped': { icon: CircleSlash, className: 'bg-neutral-4' },
+  'search-restarted': { icon: RotateCcw, className: 'bg-neutral-3' },
 };
 
 /** One timeline row as drawn: a disc, the sentence, any details and text blocks, the time. */
@@ -148,7 +171,7 @@ function Entry({
   timeZone: string;
   fresh: boolean;
 }) {
-  const disc = DISCS[entry.type];
+  const disc = entry.type === 'courier' ? COURIER_DISCS[entry.event] : DISCS[entry.type];
   const text = timelineText(entry);
   const sameDay = eventTimeText(entry.at, now, timeZone).includes(':');
   const clock = seconds ? clockWithSeconds(entry.at, timeZone) : boardClock(entry.at, timeZone);

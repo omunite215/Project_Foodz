@@ -765,6 +765,8 @@ export function timelineText(entry: StaffTimelineEntry): TimelineText {
       return plain('The customer opened a dispute with their bank');
     case 'dispute-closed':
       return plain(entry.outcome ? `Dispute closed: ${entry.outcome}` : 'Dispute closed');
+    case 'courier':
+      return plain(entry.words, null, entry.note);
     case 'sold-out':
     default:
       return plain(

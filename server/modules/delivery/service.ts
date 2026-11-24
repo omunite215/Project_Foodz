@@ -1405,6 +1405,22 @@ export async function courierSection(
   };
 }
 
+/** Full names for the staff timeline (design 2.5), masked for the demo admin (A36.5). */
+export async function courierNames(
+  viewer: { isDemo: boolean },
+  partnerIds: readonly string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(partnerIds)];
+  if (unique.length === 0) return new Map();
+  const partners = await runAsSystem('courier names', (ctx) => repo.listCourierFacts(ctx, unique));
+  return new Map(
+    partners.map((partner) => [
+      partner.partnerId,
+      nameFor(viewer, partner.name, partner.shownToDemo),
+    ]),
+  );
+}
+
 /** F5's "Picked up by the assigned courier" reason: who holds the order, if anyone. */
 export async function courierHolding(orderId: string): Promise<{ shortName: string } | null> {
   return runAsSystem('courier holding', async (ctx) => {
@@ -1442,7 +1458,9 @@ export async function getCustomerDispatch(
       : null,
   });
   const partner = facts.partner;
-  const shown = (state === 'assigned' || state === 'pickedUp') && partner;
+  // The courier stays on the page after delivery ("Delivered by Luis."); never a position.
+  const shown = (state === 'assigned' || state === 'pickedUp' || state === 'delivered') && partner;
+  const delivery = facts.delivery;
   let photo: { url: string; expiresAt: string } | null = null;
   if (shown && partner.photoKey) {
     logger.info({ orderId, partnerId: partner.partnerId }, 'courier photo link');
@@ -1467,7 +1485,10 @@ export async function getCustomerDispatch(
               : null,
         }
       : null,
-    changed: Boolean(shown && facts.delivery?.courierChanged),
+    changed: Boolean(shown && state !== 'delivered' && delivery?.courierChanged),
+    assignedAt: shown ? (delivery?.assignedAt?.toISOString() ?? null) : null,
+    pickedUpAt: shown ? (delivery?.pickedUpAt?.toISOString() ?? null) : null,
+    deliveredAt: shown ? (delivery?.deliveredAt?.toISOString() ?? null) : null,
   };
 }
 
@@ -1481,7 +1502,9 @@ export async function courierPhotoLink(
   if (!own) throw orderNotFound();
   const partner = await runAsSystem('courier photo', async (ctx) => {
     const delivery = await repo.findDeliveryByOrder(ctx, orderId);
-    if (!delivery?.partnerId || !isActive(delivery.status)) return null;
+    if (!delivery?.partnerId || !(isActive(delivery.status) || delivery.status === 'DELIVERED')) {
+      return null;
+    }
     const [found] = await repo.listCourierFacts(ctx, [delivery.partnerId]);
     return found ?? null;
   });

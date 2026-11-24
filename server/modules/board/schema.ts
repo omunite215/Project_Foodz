@@ -3,6 +3,7 @@ import type {
   CouriersCount,
   StaffCourierSection,
 } from '@/server/modules/delivery/schema';
+import type { CourierMilestone } from '@/server/modules/delivery/text';
 import { z } from 'zod';
 import type { Cuisine, DisputeStatus, OrderStatus, PaymentStatus } from '@/server/db/enums';
 import { cleanNote } from '@/server/modules/cart/schema';
@@ -544,7 +545,8 @@ export type StaffTimelineType =
   | 'mismatch'
   | 'dispute-opened'
   | 'dispute-closed'
-  | 'sold-out';
+  | 'sold-out'
+  | 'courier';
 
 interface TimelineBase {
   id: string;
@@ -586,6 +588,18 @@ export type StaffTimelineEntry = TimelineBase &
     | { type: 'dispute-closed'; outcome: string | null }
     /** "Pad Thai marked sold out by Alex Kim (Kitchen)": only when a refusal ticked it. */
     | { type: 'sold-out'; dishes: string[] }
+    /**
+     * F7 (design 2.5): a courier milestone. `words` is the sentence to show; the courier's full
+     * name is masked for the demo admin when a real person; `note` is staff-only.
+     */
+    | {
+        type: 'courier';
+        event: CourierMilestone;
+        courierName: string | null;
+        reason: string | null;
+        note: string | null;
+        words: string;
+      }
   );
 
 /** A7.6: where a refund Foodz started stands. */

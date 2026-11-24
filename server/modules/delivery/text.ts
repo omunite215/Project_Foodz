@@ -182,6 +182,80 @@ export function outcomeWords(
   }
 }
 
+// ------------------------------------------------------------------ the staff timeline (design 2.5)
+
+/** The courier milestones the staff timeline shows (A36.3): never one entry per offer. */
+export const COURIER_MILESTONES = [
+  'search-started',
+  'assigned',
+  'offered-by-staff',
+  'gave-back',
+  'unassigned',
+  'escalated',
+  'search-stopped',
+  'search-restarted',
+] as const;
+export type CourierMilestone = (typeof COURIER_MILESTONES)[number];
+
+const GIVE_BACK_WORDS: Record<string, string> = {
+  vehicle: 'Vehicle problem',
+  emergency: 'Accident or emergency',
+  'too-far': 'Too far for me',
+  other: 'Other',
+};
+
+const TAKE_OFF_WORDS: Record<string, string> = {
+  'courier-asked': 'Courier asked to give it back',
+  'not-responding': "Courier isn't responding",
+  'too-far': 'Courier is too far away',
+  other: 'Other',
+  suspended: 'Courier suspended',
+};
+
+const ROLE_WORDS: Record<string, string> = {
+  support: 'Support',
+  admin: 'Admin',
+  kitchen: 'Kitchen',
+};
+
+/** "Luis Moreno accepted · 0.2 km from the kitchen", one sentence per milestone. */
+export function courierTimelineWords(facts: {
+  event: CourierMilestone;
+  courierName: string | null;
+  staff: { name: string | null; role: string } | null;
+  reason: string | null;
+  pickupM: number | null;
+}): string {
+  const courier = facts.courierName ?? 'A courier';
+  const staff = facts.staff
+    ? `${facts.staff.name ?? 'A staff member'} (${ROLE_WORDS[facts.staff.role] ?? 'Staff'})`
+    : 'Foodz';
+  const reason = (words: Record<string, string>) =>
+    facts.reason && words[facts.reason] ? ` · ${words[facts.reason]}` : '';
+  switch (facts.event) {
+    case 'search-started':
+      return 'Looking for a courier · Foodz (automatic)';
+    case 'assigned': {
+      if (facts.pickupM === null) return `${courier} accepted`;
+      const where =
+        facts.pickupM <= AT_KITCHEN_M ? 'at the kitchen' : `${km(facts.pickupM)} from the kitchen`;
+      return `${courier} accepted · ${where}`;
+    }
+    case 'offered-by-staff':
+      return `${staff} offered it to ${courier}`;
+    case 'gave-back':
+      return `${courier} gave it back${reason(GIVE_BACK_WORDS)}`;
+    case 'unassigned':
+      return `${staff} took it off ${courier}${reason(TAKE_OFF_WORDS)}`;
+    case 'escalated':
+      return 'No courier after 5 minutes · Foodz (automatic)';
+    case 'search-stopped':
+      return 'Stopped looking for a courier after 60 minutes · Foodz (automatic)';
+    default:
+      return `${staff} started looking for a courier again`;
+  }
+}
+
 // ------------------------------------------------------------------ the customer (F7 S1 to S4)
 
 export function customerLine(

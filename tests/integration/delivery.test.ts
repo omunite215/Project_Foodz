@@ -49,6 +49,7 @@ vi.mock('@/server/security/turnstile', async (importOriginal) => ({
 const dispatch = await import('@/server/modules/delivery/service');
 const partners = await import('@/server/modules/partners/service');
 const actions = await import('@/server/modules/delivery/actions');
+const board = await import('@/server/modules/board/service');
 
 let migrator: PrismaClient;
 let morgan: StaffMember;
@@ -567,6 +568,19 @@ describe('order changes (F5 hooks) and what people see', () => {
     });
     expect(JSON.stringify(view)).not.toMatch(/Haddad|\+1617/);
     expect(await dispatch.getCustomerDispatch(maya.actor, order.id)).toBeNull();
+    expect(view?.assignedAt).toBeTruthy();
+
+    // "Delivered by Omar.": the courier stays on the page once the order is delivered.
+    await migrator.order.update({ where: { id: order.id }, data: { status: 'PICKED_UP' } });
+    await dispatch.orderChanged(order.id, 'picked-up-by-courier');
+    await migrator.order.update({ where: { id: order.id }, data: { status: 'DELIVERED' } });
+    await dispatch.orderChanged(order.id, 'delivered');
+    const delivered = await dispatch.getCustomerDispatch(priya.actor, order.id);
+    expect(delivered).toMatchObject({ state: 'delivered', courier: { firstName: 'Omar' } });
+    expect(delivered?.assignedAt).toBe(view?.assignedAt);
+    expect(delivered?.pickedUpAt).toBeTruthy();
+    expect(delivered?.deliveredAt).toBeTruthy();
+    expect(JSON.stringify(delivered)).not.toMatch(/Haddad|\+1617/);
   });
 
   it("words the board's courier line and masks a real partner for the demo admin (A34.1, A36.5)", async () => {
@@ -579,6 +593,44 @@ describe('order changes (F5 hooks) and what people see', () => {
     expect(line).toMatchObject({ state: 'offered', words: 'Offered to Grace O.', tone: 'neutral' });
     const masked = (await dispatch.courierLines({ isDemo: true }, facts)).get(order.id);
     expect(masked?.words).not.toContain('Grace');
+  });
+
+  it('puts the courier milestones on the staff timeline, masked for the demo admin (design 2.5)', async () => {
+    await goOnlineAt(migrator, grace, { km: 1.4 });
+    // A sample customer, so the demo admin may open the order; Grace stays a real person.
+    const sample = await customerAccount(migrator, 'Sam Sample');
+    await migrator.user.update({ where: { id: sample.userId }, data: { isSample: true } });
+    const order = await readyOrder(migrator, sample.userId);
+    const deliveryId = await openSearchFor(order.id);
+    const turn = await dispatch.searchTurn(deliveryId);
+    if (turn.kind !== 'offered') throw new Error('expected an offer');
+    await dispatch.acceptOffer(grace.actor, turn.offerId);
+    const { version } = await deliveryOf(deliveryId);
+    const takeOff = await asBrowser(morgan.browser, () =>
+      actions.takeOffCourierAction({
+        orderId: order.id,
+        expectedVersion: version,
+        reason: 'too-far',
+      }),
+    );
+    expect(takeOff?.serverError).toBeUndefined();
+
+    const words = async (who: StaffMember) => {
+      const detail = await asBrowser(who.browser, () =>
+        board.getStaffOrderDetail(who.actor, order.id),
+      );
+      return (detail?.timeline ?? []).flatMap((entry) =>
+        entry.type === 'courier' ? [entry.words] : [],
+      );
+    };
+    expect(await words(morgan)).toEqual([
+      'Looking for a courier · Foodz (automatic)',
+      'Grace Okafor accepted · 1.4 km from the kitchen',
+      'Morgan Diaz (Support) took it off Grace Okafor · Courier is too far away',
+    ]);
+    const masked = await words(demoAdmin);
+    expect(masked).toHaveLength(3);
+    expect(masked.join(' ')).not.toContain('Grace');
   });
 
   it("never shows a real courier's plate to the demo admin (S1)", async () => {

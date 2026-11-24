@@ -268,6 +268,16 @@ describe('test timings (B13, W14.1)', () => {
     const env = { VERCEL_ENV: 'production', FOODZ_TEST_TIMING: '1', DISPATCH_OFFER_SECONDS: '5' };
     expect(dispatchOverridesRefused(env)).toBe(true);
     expect(dispatchTimings(env).offerSeconds).toBe(30);
+    expect(
+      dispatchOverridesRefused({ FOODZ_TEST_TIMING: '1', FOODZ_DEPLOYMENT: 'production' }),
+    ).toBe(true);
+    expect(
+      dispatchOverridesRefused({
+        FOODZ_TEST_TIMING: '1',
+        ECS_CONTAINER_METADATA_URI_V4: 'http://169.254.170.2/v4/x',
+      }),
+    ).toBe(true);
+    // A local production build (the browser tests run one) may use it.
     expect(dispatchOverridesRefused({ NODE_ENV: 'production', FOODZ_TEST_TIMING: '1' })).toBe(
       false,
     );
