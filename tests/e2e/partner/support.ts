@@ -30,6 +30,16 @@ export const ROUTE = {
 
 export const projectOf = (testInfo: TestInfo) => testInfo.project.name;
 
+/**
+ * axe on a screen taller than the phone: from its end, so no control sits half under the
+ * sticky dock and tab bar at the moment of the check (target size counts only the uncovered
+ * part, which depends on where the page happens to be scrolled).
+ */
+export async function expectNoAxeViolationsAtEnd(page: Page) {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expectNoAxeViolations(page);
+}
+
 /** Signs a partner or applicant in and lands on `path` (P7.3: partners land on /partner). */
 export async function signInTo(page: Page, email: string, path = '/partner', password?: string) {
   await open(page, `/sign-in?callbackUrl=${encodeURIComponent(path)}`);

@@ -8,11 +8,13 @@ import { type BoardAbilities, type BoardCard, LATENESS } from '@/server/modules/
 import { type CardMenuItem, cardActions, PREVIOUS_STEP } from '@/server/modules/board/state';
 import { cardTiming } from '@/server/modules/board/timing';
 import { msUntil } from '@/lib/board/clock';
+import { cardTone } from '@/lib/board/courier-text';
 import { timeBlockText } from '@/lib/board/text';
 import { prefersReducedMotion, useMotion } from '@/lib/motion';
 import { isSitePath } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
-import { type Blocked, CardActions, type MoveProgress } from './card-actions';
+import { type Blocked, CardActions, type CourierMenuItem, type MoveProgress } from './card-actions';
+import { CourierLine } from './courier-parts';
 import {
   type CardReason,
   CardReasonBlock,
@@ -116,10 +118,18 @@ export function OrderCard({
   onMenu,
   onUndo,
   onOpen,
+  courierNow,
+  courierItems,
+  onCourier,
 }: {
   card: BoardCard;
   /** The server's time now (B14), refreshed every 15 seconds. */
   now: Date;
+  /** F7: the server's time for the courier line's seconds, refreshed every 5 s (A34.3). */
+  courierNow?: Date;
+  /** F7 (design 2.6): the card menu's courier items for SUPPORT and ADMIN. */
+  courierItems?: readonly CourierMenuItem[];
+  onCourier?: (card: BoardCard, item: CourierMenuItem) => void;
   /** Server clock minus the device's, for the Undo window. */
   offset: number;
   timeZone: string;
@@ -144,16 +154,19 @@ export function OrderCard({
   const undoOpen = useUndoOpen(card.undo, offset);
   const backTo = PREVIOUS_STEP[card.status];
   const outlined = useHighlight(highlight, cardRef, washRef);
+  // F7 (D18): the card's border takes the worse of the time tone and the courier tone.
+  const courierTone = card.status === 'READY' ? card.courier?.tone : null;
+  const tone = cardTone(time.tone, courierTone);
 
   return (
     <article
       ref={cardRef}
       aria-labelledby={orderHeadingId(card.id)}
-      data-tone={time.tone}
+      data-tone={tone}
       data-order={card.number}
       className={cn(
         'relative rounded-xl border border-l-4 border-neutral-6 bg-white p-3 shadow-card hover:border-y-neutral-5 hover:border-r-neutral-5',
-        TONE_BORDER[time.tone],
+        TONE_BORDER[tone],
         outlined && 'outline-2 outline-offset-2 outline-brand-strong outline-solid',
       )}
     >
@@ -179,6 +192,9 @@ export function OrderCard({
       </div>
       <div className="relative">
         <TimeLine text={time} />
+        {card.courier ? (
+          <CourierLine courier={card.courier} now={courierNow ?? now} orderStatus={card.status} />
+        ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
             {card.firstName}
@@ -201,6 +217,8 @@ export function OrderCard({
         onPrimary={() => onPrimary(card)}
         onMenu={(item) => onMenu(card, item)}
         onUndo={() => onUndo(card)}
+        courierItems={courierItems}
+        onCourier={onCourier ? (item) => onCourier(card, item) : undefined}
       />
       {reason ? <CardReasonBlock reason={reason} /> : null}
     </article>

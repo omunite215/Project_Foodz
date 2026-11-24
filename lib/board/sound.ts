@@ -65,3 +65,35 @@ export function audioContext(): AudioContext | null {
   }
   return shared;
 }
+
+/*
+ * The no-courier chime (F7 design 2.9, A39.1, D25): two sine notes falling, G5 then C5, 220 ms
+ * each, 30 ms apart, peak gain 0.3. A recognizably different "something's wrong" against the
+ * rising new-order chime. Once when an order escalates, then every 2 minutes while any order
+ * has no courier, only when the board's sound is on.
+ */
+export const NO_COURIER_NOTES = [
+  { frequency: 784, start: 0 },
+  { frequency: 523, start: 0.25 },
+] as const;
+export const NO_COURIER_NOTE_SECONDS = 0.22;
+export const NO_COURIER_PEAK_GAIN = 0.3;
+export const NO_COURIER_REPEAT_MS = 120_000;
+
+export function playNoCourierChime(context: ChimeContext): void {
+  for (const note of NO_COURIER_NOTES) {
+    const start = context.currentTime + note.start;
+    const end = start + NO_COURIER_NOTE_SECONDS;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(note.frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(NO_COURIER_PEAK_GAIN, start + CHIME_ATTACK_SECONDS);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(end + 0.02);
+  }
+}

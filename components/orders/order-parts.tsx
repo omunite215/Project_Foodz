@@ -43,6 +43,7 @@ import {
 } from '@/lib/order-text';
 import {
   currentStep,
+  deliveredByLine,
   isCollected,
   type ProgressStep,
   stepHeading,
@@ -112,6 +113,9 @@ export function OrderHero({
             phone={view.store.phone}
           />
         </p>
+        {deliveredByLine(view) ? (
+          <p className="mt-1 text-body-4 text-neutral-3 md:text-body-3">{deliveredByLine(view)}</p>
+        ) : null}
       </div>
     );
   }

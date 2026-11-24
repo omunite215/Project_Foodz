@@ -237,6 +237,36 @@ function writer(client: DbClient, queryClient: QueryClient) {
       return { cards, gone: outcome.data.gone, added };
     },
 
+    /**
+     * F7 (A34.4): a delivery changed. Its order's version didn't move, so the cards are read
+     * again and their courier lines replace the held ones; newer cards replace older ones.
+     * Returns the cards as they were before, for the board's notices.
+     */
+    async refreshCouriers(ids: string[]): Promise<{ before: BoardCard[]; after: BoardCard[] }> {
+      const unique = [...new Set(ids)].slice(0, 50);
+      if (unique.length === 0) return { before: [], after: [] };
+      const outcome = await callAction(() => boardCardsAction({ orderIds: unique }));
+      if (!outcome.ok) {
+        reportFailure(outcome.error);
+        throw new BoardReadError(outcome.error);
+      }
+      const target = collection();
+      const before: BoardCard[] = [];
+      const after: BoardCard[] = [];
+      for (const fresh of outcome.data.cards) {
+        const held = target.get(fresh.id);
+        if (!held) continue;
+        before.push(held);
+        const next =
+          fresh.version >= held.version
+            ? fresh
+            : Object.assign(structuredClone(held), { courier: fresh.courier ?? null });
+        after.push(next);
+      }
+      if (after.length) void target.utils.writeUpsert(after);
+      return { before, after };
+    },
+
     /** A fresh copy now (reconnects, polling, Find), with what it changed (A12.3). */
     async refresh(): Promise<BoardDiff> {
       const target = collection();

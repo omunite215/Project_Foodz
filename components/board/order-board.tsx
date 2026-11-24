@@ -1,9 +1,10 @@
 'use client';
 
-import { Batcher } from '@tanstack/react-pacer';
+import { Batcher, Throttler } from '@tanstack/react-pacer';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { findOrderAction } from '@/server/modules/board/actions';
+import { restartSearchAction } from '@/server/modules/delivery/actions';
 import {
   type BoardCard,
   type BoardColumn as Column,
@@ -22,6 +23,15 @@ import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { serverNow, serverOffset, TIMER_TICK_MS } from '@/lib/board/clock';
 import { connectionBanner, liveChipState } from '@/lib/board/connection';
+import {
+  type CourierMenuItem,
+  courierMenuFor,
+  didNotTakeNotice,
+  HELD,
+  LOOKING_AGAIN,
+  nobodyOnline,
+  noCourierOrders,
+} from '@/lib/board/courier-text';
 import {
   columnFromHash,
   diffCount,
@@ -67,6 +77,8 @@ import {
   WaitingBanner,
 } from './board-banners';
 import { BoardColumn, columnHeadingId } from './board-column';
+import { NobodyOnlineBanner, NoCourierBanner, useNoCourierChime } from './courier-banners';
+import { CouriersChip } from './courier-parts';
 import { BoardEmpty } from './board-empty';
 import {
   BoardFiltersBar,
@@ -138,6 +150,21 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     };
   }, [offset]);
   const serverIso = useCallback(() => serverNow(offset).toISOString(), [offset]);
+  // F7 (A34.3): the courier line's seconds refresh every 5 s while an offer is open.
+  const anyOpenOffer = cards.some(
+    (card) => card.courier?.state === 'offered' || card.courier?.state === 'staffOffered',
+  );
+  const [courierNow, setCourierNow] = useState(() => new Date(initial.asOf));
+  useEffect(() => {
+    if (!anyOpenOffer) return undefined;
+    const tick = () => setCourierNow(serverNow(offset));
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, 5_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [offset, anyOpenOffer]);
 
   // ---------------------------------------------------------------- signed out (A1.7, A12.9)
   const [signedOutByServer, setSignedOutByServer] = useState(false);
@@ -467,6 +494,53 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
   });
   const soldOutSync = useRef<(() => Promise<void>) | null>(null);
 
+  // ---------------------------------------------------------------- couriers (F7 A34.4, A35)
+  // A delivery change names its order: the card's courier line is read again. The couriers
+  // count comes with the board's snapshot, at most every 10 s while deliveries change.
+  const courierChanges = useCallback(
+    async (ids: string[]) => {
+      try {
+        const { before, after } = await writer.refreshCouriers(ids);
+        if (meta.view !== 'full') return;
+        for (const next of after) {
+          const previous = before.find((card) => card.id === next.id)?.courier;
+          const current = next.courier;
+          // A37.4: a staff offer that ended without an accept.
+          if (
+            previous?.state === 'staffOffered' &&
+            previous.shortName &&
+            current &&
+            current.state !== 'staffOffered' &&
+            !HELD.has(current.state)
+          ) {
+            showBoardNotice(didNotTakeNotice(previous.shortName, next.number));
+          }
+        }
+      } catch {
+        // The 60-second refresh covers a failed read.
+      }
+    },
+    [meta.view, writer],
+  );
+  const courierBatcher = useMemo(
+    () => new Batcher<string>((ids) => void courierChanges(ids), { wait: 250, maxSize: 50 }),
+    [courierChanges],
+  );
+  const countThrottler = useMemo(
+    () =>
+      new Throttler(() => void writer.refresh().catch(() => undefined), {
+        wait: 10_000,
+        leading: false,
+        trailing: true,
+      }),
+    [writer],
+  );
+  useChannelEvent(connection.channel, 'delivery.changed', (event) => {
+    setLastUpdate(event.at);
+    if (writer.card(event.orderId)) courierBatcher.addItem(event.orderId);
+    countThrottler.maybeExecute();
+  });
+
   // ---------------------------------------------------------------- find (A11.1)
   const showCard = useCallback(
     (card: BoardCard) => {
@@ -549,6 +623,37 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     [grouped],
   );
 
+  // F7 (design 2.6, 2.10): the courier items. "Find a courier" acts at once, no dialog.
+  const onCourier = (card: BoardCard, item: CourierMenuItem) => {
+    if (meta.can.readOnly) return;
+    if (item === 'findCourier') {
+      void (async () => {
+        const outcome = await callAction(() =>
+          restartSearchAction({
+            orderId: card.id,
+            expectedVersion: card.courier?.deliveryVersion ?? 0,
+          }),
+        );
+        if (outcome.ok) {
+          showBoardNotice(LOOKING_AGAIN);
+          void courierChanges([card.id]);
+          return;
+        }
+        if (outcome.error.code === 'UNAUTHENTICATED') {
+          setSignedOutByServer(true);
+          return;
+        }
+        showBoardNotice(outcome.error.message, { variant: 'error' });
+        void courierChanges([card.id]);
+      })();
+      return;
+    }
+    const trigger = document.querySelector(
+      `[data-card-id="${CSS.escape(card.id)}"] [data-card-menu]`,
+    );
+    setTimeout(() => openDialog(item, card, trigger), 0);
+  };
+
   const onPrimary = (card: BoardCard) => {
     if (card.status === 'READY' && meta.can.handOver) {
       openDialog('pickUp', card);
@@ -595,6 +700,15 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     return () => clearTimeout(timer);
   }, [filterKey]);
 
+  // F7 (A39): orders with no courier after 5 minutes, and nobody online at all.
+  const noCourier = noCourierOrders(cards);
+  const nobody = nobodyOnline(cards);
+  useNoCourierChime(
+    [...noCourier.map((card) => card.id), ...(nobody ? ['nobody'] : [])],
+    sound.state === 'on',
+  );
+  const couriers = meta.couriers ?? null;
+
   const banner = connectionBanner(connection.kind);
   const offline = connection.kind === 'offline';
   const blocked = meta.can.readOnly ? 'demo' : offline ? 'offline' : null;
@@ -616,6 +730,7 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
       status={
         <>
           <StoreChip store={meta.store} className="max-md:hidden" />
+          {couriers ? <CouriersChip count={couriers} className="max-xl:hidden" /> : null}
           <LiveChip state={liveChipState(connection.kind)} />
         </>
       }
@@ -646,6 +761,20 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
               onShow={() => waiting[0] && showCard(waiting[0])}
             />
           ) : null}
+          {nobody ? <NobodyOnlineBanner key="nobody-online" /> : null}
+          {noCourier.length > 0 ? (
+            <NoCourierBanner
+              key="no-courier"
+              orders={noCourier}
+              viewer={meta.view}
+              readOnly={meta.can.readOnly}
+              onAssign={(orderId) => {
+                const card = cards.find((item) => item.id === orderId);
+                if (card) openDialog('assignCourier', card);
+              }}
+              onShowOldest={() => noCourier[0] && showCard(noCourier[0])}
+            />
+          ) : null}
           {hiddenStill.length > 0 ? (
             <HiddenByFiltersBanner
               count={hiddenStill.length}
@@ -664,12 +793,14 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
         phoneRow={
           <>
             <StoreChip store={meta.store} />
+            {couriers ? <CouriersChip count={couriers} /> : null}
             {wakeLock.supported && shell.user.role === 'kitchen' ? (
               <WakeLockSwitch on={wakeLock.on} onChange={wakeLock.change} />
             ) : null}
           </>
         }
       >
+        {couriers ? <CouriersChip count={couriers} className="max-md:hidden xl:hidden" /> : null}
         <FindOrder onFind={onFind} offline={offline} />
         <BoardFiltersBar filters={filters} onChange={setFilters} />
         {canSeeSheet ? (
@@ -744,6 +875,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
                         onPrimary={onPrimary}
                         onMenu={onMenu}
                         onUndo={(undone) => void onUndo(undone)}
+                        courierNow={courierNow}
+                        courierItems={courierMenuFor(card, meta.view)}
+                        onCourier={onCourier}
                       />
                     </li>
                   ))}
@@ -772,6 +906,7 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
         onSignedOut={onSignedOut}
         onClose={() => setDialog(null)}
         focusAfter={focusAfter}
+        onChain={(kind) => setDialog((current) => (current ? { ...current, kind } : current))}
       />
       {canSeeSheet || meta.can.readOnly ? (
         <SoldOutSheet

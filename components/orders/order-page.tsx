@@ -34,7 +34,13 @@ import {
   takeClearCart,
 } from '@/lib/checkout-storage';
 import { useCartActions } from '@/lib/data/cart';
-import { acceptedCancelSentence, currentStep, orderTabTitle } from '@/lib/order-progress';
+import {
+  acceptedCancelSentence,
+  currentStep,
+  isCollected,
+  orderTabTitle,
+  stepLine,
+} from '@/lib/order-progress';
 import { cancelDescription, moneyNotices, orderStateOf, telOf } from '@/lib/order-text';
 import { useMinuteClock } from '@/lib/use-minute-clock';
 import { useOnline } from '@/lib/use-online';
@@ -282,6 +288,18 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
   }, [view]);
 
   const step = currentStep(view);
+  // F7 (design 3.1): a new courier line is read once while the page is open, never on load; a
+  // change of status is read by the live hook with its line.
+  const heroLine =
+    step && (state === 'placed' || state === 'delivered')
+      ? stepLine(view, step, isCollected(view))
+      : null;
+  const shownLine = useRef({ line: heroLine, status: view.status });
+  useEffect(() => {
+    const before = shownLine.current;
+    shownLine.current = { line: heroLine, status: view.status };
+    if (heroLine && heroLine !== before.line && view.status === before.status) announce(heroLine);
+  }, [heroLine, view.status]);
   const storeCancelled = view.progress.cancellation?.by === 'store' && view.status === 'CANCELLED';
   // In the server's HTML it shows at once; only a cancellation that arrives live fades in.
   const [cancelledAtLoad] = useState(storeCancelled);

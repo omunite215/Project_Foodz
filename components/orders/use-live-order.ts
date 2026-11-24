@@ -51,6 +51,8 @@ export function useLiveOrder({
   useChannelEvent(channel, 'order.status-changed', (event) => {
     if (event.version > version.current) void refetch();
   });
+  // F7 S5.1: a change of courier leaves the order's version alone; the view is read again.
+  useChannelEvent(channel, 'delivery.changed', () => void refetch());
 
   // Announce what changed, once: the current status after a catch-up, never the old ones.
   useEffect(() => {

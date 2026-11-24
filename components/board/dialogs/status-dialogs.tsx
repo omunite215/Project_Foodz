@@ -35,9 +35,17 @@ import {
   pickUpTitle,
 } from '@/lib/board/text';
 import { isOrderChangedDetails } from '@/lib/board/model';
+import {
+  assignedCourierReason,
+  deliveredByCourierReason,
+  holdingCourier,
+  moveBackCourierLine,
+  otherWayLine,
+} from '@/lib/board/courier-text';
 import { ActionDialog } from './action-dialog';
 import {
   focusFirstProblem,
+  OutcomeBox,
   ReasonFieldset,
   StaffNoteField,
   TickRow,
@@ -118,6 +126,7 @@ export function MoveBackDialog({
   const reasons = MOVE_BACK_REASONS.filter(
     (reason) => reason !== 'not-picked-up' || card.status === 'PICKED_UP',
   );
+  const courier = holdingCourier(card.courier);
 
   const form = useForm({
     defaultValues: { reason: '', note: '' },
@@ -187,6 +196,9 @@ export function MoveBackDialog({
       {node}
       {alert?.closeOnly ? null : (
         <>
+          {courier && card.status === 'READY' ? (
+            <FormAlert variant="warning">{moveBackCourierLine(courier)}</FormAlert>
+          ) : null}
           {to === 'PLACED' ? (
             <FormAlert variant="warning">The customer will be able to cancel it again.</FormAlert>
           ) : null}
@@ -241,9 +253,27 @@ export function HandoverDialog({
       ? card.payment.totalCents
       : null;
   const schema = deliver ? markDeliveredInput : markPickedUpInput;
+  // F7 (design 2.11, D30): with a courier on the order, "by the assigned courier" comes first and
+  // is chosen already; without one it isn't offered at all.
+  const courier = holdingCourier(card.courier);
+  const reasons = courier
+    ? HANDOVER_REASONS
+    : HANDOVER_REASONS.filter((reason) => reason !== 'assigned-courier');
+  const labels: Record<HandoverReason, string> = courier
+    ? {
+        ...HANDOVER_REASON_LABELS,
+        'assigned-courier': deliver
+          ? deliveredByCourierReason(courier)
+          : assignedCourierReason(courier),
+      }
+    : HANDOVER_REASON_LABELS;
 
   const form = useForm({
-    defaultValues: { reason: '', note: '', cashCollected: false },
+    defaultValues: {
+      reason: courier ? 'assigned-courier' : '',
+      note: '',
+      cashCollected: false,
+    },
     validationLogic: revalidateLogic({ mode: 'submit', modeAfterSubmission: 'change' }),
     validators: {
       onDynamic: ({ value }) => {
@@ -335,8 +365,8 @@ export function HandoverDialog({
             {(field) => (
               <ReasonFieldset<HandoverReason>
                 name="handover-reason"
-                reasons={HANDOVER_REASONS}
-                labels={HANDOVER_REASON_LABELS}
+                reasons={reasons}
+                labels={labels}
                 value={field.state.value}
                 error={errorOf('reason', field.state.meta.errors)}
                 onChange={(next) => field.handleChange(next)}
@@ -354,6 +384,9 @@ export function HandoverDialog({
               />
             )}
           </form.Field>
+          {courier && !deliver && reason && reason !== 'assigned-courier' ? (
+            <OutcomeBox lines={[otherWayLine(courier)]} />
+          ) : null}
           {cashCents !== null ? (
             <form.Field name="cashCollected">
               {(field) => {

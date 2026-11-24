@@ -76,6 +76,7 @@ import {
   suspendReasonLabel,
   withStarter,
 } from '@/lib/partner-review/text';
+import { suspendCourierLine } from '@/lib/board/courier-text';
 import { cn } from '@/lib/utils';
 import { ReadError } from './queries';
 
@@ -519,6 +520,7 @@ export function DecisionDialog({
 
   const version = check.data?.version ?? review.version;
   const online = check.data?.online ?? null;
+  const assignedOrder = check.data?.assignedOrderNumber ?? null;
 
   const form = useForm({
     defaultValues: { text: draft.text, note: draft.note, flagsChecked: false },
@@ -715,7 +717,14 @@ export function DecisionDialog({
     approve: approveOutcome(first),
     sendBack: [sendBackOutcome(first)],
     reject: rejectOutcome(first, reapplyFrom),
-    suspend: online === null ? null : suspendOutcome(first, online),
+    suspend:
+      online === null
+        ? null
+        : [
+            ...suspendOutcome(first, online),
+            // F7 (design 2.11, W7.2): an order the partner holds goes back to dispatch.
+            ...(assignedOrder ? [suspendCourierLine(first, assignedOrder)] : []),
+          ],
     reinstate: [reinstateOutcome(first)],
     reopen: [reopenOutcome(first)],
   };

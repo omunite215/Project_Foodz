@@ -24,16 +24,23 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { releasedByOwnChoice } from '@/lib/partner/dispatch';
 import {
   goOffline,
+  goOfflineGivingBack,
   keepScreenOnSetting,
   setKeepScreenOn,
   wakeLockSupported,
 } from '@/lib/partner/sharing';
+import { PARTNER_COPY } from '@/lib/partner/text';
 import { monthDayYear, type PartnerTheme } from '@/lib/partner/text';
 import { cn } from '@/lib/utils';
+import { LeavingDialog } from './delivery/give-back-sheet';
 import { PinnedConnectionBanner, usePartnerSession } from './home/partner-home';
 import { SuspensionCover } from './home/home-parts';
+import { OfferAlertsSection } from './offers/idle-parts';
+import { OfferLayer, useOfferOpen } from './offers/offer-layer';
+import { DispatchNoticeSlot } from './offers/offer-notices';
 import { usePartnerTheme } from './partner-root';
 import { PartnerFrame, PartnerTabBar, StatusHeader } from './shell';
 
@@ -115,9 +122,11 @@ function KeepScreenOn() {
 }
 
 export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
-  const { sharing, online } = usePartnerSession(state, asOf);
+  const { sharing, online, holding } = usePartnerSession(state, asOf);
+  const offerOpen = useOfferOpen();
   const signOut = useSignOut();
   const [confirming, setConfirming] = useState(false);
+  const [givingBack, setGivingBack] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const signOutRef = useRef<HTMLButtonElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
@@ -131,11 +140,11 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
 
   return (
     <>
-      <div inert={sharing.suspended ? true : undefined}>
+      <div inert={sharing.suspended || offerOpen ? true : undefined}>
         <PartnerFrame
           header={
             <StatusHeader
-              online={online}
+              online={online || Boolean(holding)}
               name={partner.name}
               photoUrl={partner.photo?.url ?? null}
             />
@@ -144,6 +153,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
           tabBar={<PartnerTabBar current="profile" />}
           mainClassName="pt-6 space-y-8"
         >
+          <DispatchNoticeSlot />
           <section className="text-center">
             {partner.photo?.url ? (
               // A 5-minute private link to his own photo.
@@ -162,7 +172,11 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
                 {initial}
               </span>
             )}
-            <h1 className="mt-3 font-heading text-title-1 text-strong [overflow-wrap:anywhere]">
+            <h1
+              data-partner-h1=""
+              tabIndex={-1}
+              className="mt-3 font-heading text-title-1 text-strong outline-none [overflow-wrap:anywhere]"
+            >
               {partner.name}
             </h1>
             <p className="mt-1 text-body-4 text-foreground">{partner.vehicleWords}</p>
@@ -198,6 +212,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
 
           <AppearanceControl />
           <KeepScreenOn />
+          <OfferAlertsSection />
 
           <nav
             aria-label="Account"
@@ -218,7 +233,11 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
               type="button"
               className={rowClass}
               onClick={() => {
-                if (online && !sharing.isDemo) setConfirming(true);
+                // F7 P30.4: before pickup, signing out asks to give the order back first; after
+                // pickup the order stays his (lead decision 5).
+                if (holding?.canGiveBack) setGivingBack(true);
+                else if (holding) signOutNow();
+                else if (online && !sharing.isDemo) setConfirming(true);
                 else signOutNow();
               }}
             >
@@ -287,7 +306,28 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+      {holding ? (
+        <LeavingDialog
+          open={givingBack}
+          how="signOut"
+          orderNumber={holding.orderNumber}
+          onKeep={() => setGivingBack(false)}
+          onConfirm={async () => {
+            const outcome = await goOfflineGivingBack();
+            if (outcome === 'done') {
+              releasedByOwnChoice();
+              setGivingBack(false);
+              signOutNow();
+              return null;
+            }
+            if (outcome === 'offline') return PARTNER_COPY.needConnection;
+            return `You can't give back order ${holding.orderNumber} now. Call Foodz Kitchen.`;
+          }}
+          returnFocus={() => signOutRef.current?.focus()}
+        />
+      ) : null}
       <SignOutDialog state={signOut} onCloseFocus={() => signOutRef.current?.focus()} />
+      <OfferLayer />
       {sharing.suspended ? <SuspensionCover how={sharing.suspended} /> : null}
     </>
   );

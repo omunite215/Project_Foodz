@@ -2,6 +2,7 @@ import path from 'node:path';
 import {
   expect,
   expectNoAxeViolations,
+  expectNoAxeViolationsAtEnd,
   open,
   PARTNERS,
   projectOf,
@@ -231,7 +232,8 @@ test('the demo partner goes online with a pretend location', async ({ page }, te
     timeout: 15_000,
   });
   await expect(page.getByText('Not your real location')).toBeVisible();
-  await expectNoAxeViolations(page);
+  // F7 made the online home taller ("How offers work", the practice card): checked from its end.
+  await expectNoAxeViolationsAtEnd(page);
   await page.getByRole('button', { name: 'Go offline' }).click();
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
 });

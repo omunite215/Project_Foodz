@@ -3,6 +3,7 @@
 import {
   Ban,
   Bike,
+  CirclePause,
   Clock,
   LocateOff,
   type LucideIcon,
@@ -230,7 +231,16 @@ function Steps({ card, phone }: { card: HelpCard; phone: Phone }) {
   );
 }
 
-export function LocationHelpCard({ card, onRetry }: { card: HelpCard; onRetry: () => void }) {
+export function LocationHelpCard({
+  card,
+  onRetry,
+  title,
+}: {
+  card: HelpCard;
+  onRetry: () => void;
+  /** F7 P29.5: "You still have order 1042. Turn location back on…" while he holds an order. */
+  title?: string;
+}) {
   const id = useId();
   const content = CARDS[card];
   const Icon = content.icon;
@@ -242,10 +252,10 @@ export function LocationHelpCard({ card, onRetry }: { card: HelpCard; onRetry: (
       <div className="flex gap-3">
         <Icon className={cn('mt-0.5 size-6 shrink-0', content.tone)} aria-hidden />
         <h3 id={id} className="text-body-3 font-semibold text-strong">
-          {content.title}
+          {title ?? content.title}
         </h3>
       </div>
-      <p className="mt-2 text-body-4 text-foreground">{content.body}</p>
+      {title ? null : <p className="mt-2 text-body-4 text-foreground">{content.body}</p>}
       <Steps card={card} phone={phoneKind()} />
       <Button type="button" variant="outline" size="kitchen" className="mt-4" onClick={onRetry}>
         Try again
@@ -265,7 +275,14 @@ const LINE_ICONS: Record<LocationLineState['kind'], { icon: LucideIcon; tone: st
   demo: { icon: MapPinCheck, tone: 'text-success-mark' },
 };
 
-export function LocationLine({ state }: { state: LocationLineState }) {
+export function LocationLine({
+  state,
+  offersPaused = false,
+}: {
+  state: LocationLineState;
+  /** F7 P26.2: no point accepted for 45 s while online. */
+  offersPaused?: boolean;
+}) {
   const { line, sub } = locationLine(state);
   const { icon: Icon, tone } = LINE_ICONS[state.kind];
   return (
@@ -274,6 +291,12 @@ export function LocationLine({ state }: { state: LocationLineState }) {
       <div className="min-w-0">
         <p className="text-body-4 font-medium text-strong">{line}</p>
         {sub ? <p className="text-body-5 text-muted-foreground">{sub}</p> : null}
+        {offersPaused ? (
+          <p className="mt-0.5 flex items-start gap-1.5 text-body-5 text-foreground">
+            <CirclePause className="mt-0.5 size-3.5 shrink-0 text-warning-mark" aria-hidden />
+            Offers paused until your location is shared again.
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -291,7 +314,7 @@ export function SuspensionCover({ how }: { how: 'event' | 'signedOut' }) {
   return (
     <section
       aria-labelledby="suspension-title"
-      className="fixed inset-y-0 left-1/2 z-50 flex w-full max-w-md -translate-x-1/2 flex-col bg-background motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
+      className="fixed inset-y-0 left-1/2 z-[60] flex w-full max-w-md -translate-x-1/2 flex-col bg-background motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
     >
       <div className="flex-1 px-4 pt-16 text-center">
         <IconDisc icon={Ban} tone="error" />

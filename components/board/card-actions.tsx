@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowLeftRight,
   CircleX,
   Clock,
   EllipsisVertical,
@@ -8,8 +9,11 @@ import {
   type LucideIcon,
   OctagonX,
   PanelRightOpen,
+  RotateCcw,
   Truck,
   Undo2,
+  UserRoundPlus,
+  UserRoundX,
 } from 'lucide-react';
 import { Fragment, useId, useRef } from 'react';
 import type { OrderStatus } from '@/server/db/enums';
@@ -27,6 +31,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { announce } from '@/lib/announce';
 import { msUntil } from '@/lib/board/clock';
+import type { CourierMenuItem } from '@/lib/board/courier-text';
 import {
   MENU_WORDS,
   OFFLINE_CAPTION,
@@ -53,6 +58,17 @@ const MENU_ICONS: Record<CardMenuItem, LucideIcon> = {
   refuse: OctagonX,
   cancel: CircleX,
 };
+
+export type { CourierMenuItem };
+
+const COURIER_ITEMS: Record<CourierMenuItem, { icon: LucideIcon; words: string }> = {
+  assignCourier: { icon: UserRoundPlus, words: 'Assign courier' },
+  takeOffCourier: { icon: UserRoundX, words: 'Take off courier' },
+  chooseAnother: { icon: ArrowLeftRight, words: 'Choose another courier' },
+  findCourier: { icon: RotateCcw, words: 'Find a courier' },
+};
+
+const NO_COURIER_ITEMS: readonly CourierMenuItem[] = [];
 
 const DESTRUCTIVE: ReadonlySet<CardMenuItem> = new Set(['refuse', 'cancel']);
 const OVERRIDES: ReadonlySet<CardMenuItem> = new Set(['moveBack', 'pickUp', 'deliver']);
@@ -161,9 +177,14 @@ export function CardActions({
   onPrimary,
   onMenu,
   onUndo,
+  courierItems = NO_COURIER_ITEMS,
+  onCourier,
 }: {
   number: string;
   actions: Actions;
+  /** F7: "Assign courier", "Take off courier", "Choose another courier", "Find a courier". */
+  courierItems?: readonly CourierMenuItem[];
+  onCourier?: (item: CourierMenuItem) => void;
   /** KITCHEN on a Ready card: no button, "Waiting for pickup" (design 2.7). */
   waitingForPickup: boolean;
   progress: MoveProgress;
@@ -317,6 +338,29 @@ export function CardActions({
                     </DropdownMenuItem>
                   );
                 })}
+                {/* The courier items close the overrides group (after Details). */}
+                {group.includes('details') && courierItems.length ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    {courierItems.map((item) => {
+                      const Icon = COURIER_ITEMS[item].icon;
+                      return (
+                        <DropdownMenuItem
+                          key={item}
+                          disabled={demo}
+                          onSelect={() => onCourier?.(item)}
+                          className={cn('h-12', demo && 'text-neutral-3')}
+                        >
+                          <Icon
+                            className={demo ? 'text-neutral-4' : 'text-neutral-3'}
+                            aria-hidden
+                          />
+                          {COURIER_ITEMS[item].words}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </>
+                ) : null}
               </Fragment>
             ))}
           </DropdownMenuContent>
