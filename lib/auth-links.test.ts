@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   authPageHref,
+  confirmedContinue,
   isAuthPage,
   returnPathFor,
   returnRoute,
@@ -22,6 +23,23 @@ describe('returnPathFor', () => {
     expect(returnPathFor('/sign-in/two-factor', 'callbackUrl=%2Fmenu')).toBe('/menu');
     // An auth page never becomes its own return path.
     expect(returnPathFor('/forgot-password', '')).toBe('/');
+  });
+});
+
+describe('confirmedContinue (S3.2, F6 P1.3)', () => {
+  it('continues where the person was going, such as the partner application', () => {
+    expect(confirmedContinue('/partner/apply')).toEqual({
+      href: '/partner/apply',
+      label: 'Continue',
+    });
+  });
+
+  it('offers the menu when they were going nowhere in particular, or somewhere unsafe', () => {
+    const menu = { href: '/menu', label: 'Continue to the menu' };
+    expect(confirmedContinue('/')).toEqual(menu);
+    expect(confirmedContinue('/menu')).toEqual(menu);
+    expect(confirmedContinue(undefined)).toEqual(menu);
+    expect(confirmedContinue('//evil.example')).toEqual(menu);
   });
 });
 

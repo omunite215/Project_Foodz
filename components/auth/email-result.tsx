@@ -10,11 +10,15 @@ import { SubmitButton } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
+import { confirmedContinue } from '@/lib/auth-links';
 import { cn } from '@/lib/utils';
 
 export type EmailResultCase =
-  /** Signed in by the link. `accountEmail` names the account, so an unexpected link shows. */
-  | { kind: 'confirmed-new-session'; accountEmail?: string }
+  /**
+   * Signed in by the link. `accountEmail` names the account, so an unexpected link shows;
+   * "Continue" goes where the person was going (`continueTo`, F6 P1.3).
+   */
+  | { kind: 'confirmed-new-session'; accountEmail?: string; continueTo?: string }
   /**
    * The link was for another account than the one signed in here (`via=other-account`). That
    * address is confirmed and this browser stays signed in as `accountEmail` (S2 review).
@@ -80,6 +84,15 @@ function SendNewLink() {
   );
 }
 
+function ContinueLink({ to }: { to: string | undefined }) {
+  const next = confirmedContinue(to);
+  return (
+    <Button asChild size="touch" className="mt-8 uppercase">
+      <Link href={next.href}>{next.label}</Link>
+    </Button>
+  );
+}
+
 /** The result of opening a confirm-email link (S3.2, S3.5, design 3.7). The h1 takes focus. */
 export function EmailResult({ result }: { result: EmailResultCase }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -142,9 +155,9 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
         </Button>
       ) : null}
       {result.kind === 'confirmed-new-session' || result.kind === 'confirmed-other-account' ? (
-        <Button asChild size="touch" className="mt-8 uppercase">
-          <Link href="/menu">Continue to the menu</Link>
-        </Button>
+        <ContinueLink
+          to={result.kind === 'confirmed-new-session' ? result.continueTo : undefined}
+        />
       ) : null}
       {result.kind === 'already-confirmed' ? (
         <Button asChild size="touch" className="mt-8 uppercase">

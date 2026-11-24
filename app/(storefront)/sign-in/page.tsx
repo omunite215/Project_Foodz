@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { isStaff } from '@/server/auth/roles';
+import { roleHome } from '@/server/auth/roles';
 import { getActor } from '@/server/auth/session';
 import { getAuthOptions } from '@/server/modules/account/service';
 import { signInReason } from '@/server/modules/auth/schema';
@@ -25,7 +25,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
   const callbackUrl = safeRedirectPath(firstParam(params.callbackUrl));
   const actor = await getActor();
   if (actor.kind === 'user') {
-    redirect(returnRoute(signInLanding(callbackUrl, isStaff(actor.role))));
+    redirect(returnRoute(signInLanding(callbackUrl, roleHome(actor.role))));
   }
 
   const notice = firstParam(params.notice);

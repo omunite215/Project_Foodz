@@ -8,13 +8,13 @@ import {
   verifyEmailLanding,
 } from '@/lib/redirect';
 import { auth, CLIENT_IP_HEADER } from '@/server/auth';
-import { isRole, isStaff } from '@/server/auth/roles';
+import { isRole, roleHome } from '@/server/auth/roles';
 import type { UserActor } from '@/server/auth/session';
 import { AppError, conflict, forbidden, invalidInput, rateLimited } from '@/server/errors';
 import { logger } from '@/server/logger';
 import {
   findEmailForReset,
-  isStaffAccount,
+  accountHome,
   notifyAccountExists,
   passwordChanged,
   prepareEmailChange,
@@ -162,7 +162,7 @@ export async function signIn(input: unknown, request: FlowRequest): Promise<Sign
     const role = result.user?.role;
     return {
       status: 'signed-in',
-      redirectTo: signInLanding(returnPath, isRole(role) && isStaff(role)),
+      redirectTo: signInLanding(returnPath, isRole(role) ? roleHome(role) : null),
     };
   } catch (error) {
     const code = codeOf(error);
@@ -208,9 +208,10 @@ export async function verifyTwoFactor(input: unknown, request: FlowRequest) {
     const user = (result as { user?: { id: string; email: string; name: string } }).user;
     if (user) await recordSignIn(user, 'two-factor');
     const returnPath = safeRedirectPath(callbackUrl);
-    // Staff with nowhere asked for land on their tools (F5 A1.1); only then is the role read.
-    const staff = returnPath === '/' && (await isStaffAccount(user?.id ?? challenge.userId));
-    return { redirectTo: signInLanding(returnPath, staff) };
+    // Nowhere asked for: staff land on their tools, partners on the app (F5 A1.1, F6 P7.3).
+    // Only then is the role read.
+    const home = returnPath === '/' ? await accountHome(user?.id ?? challenge.userId) : null;
+    return { redirectTo: signInLanding(returnPath, home) };
   } catch (error) {
     switch (codeOf(error)) {
       case 'INVALID_CODE':

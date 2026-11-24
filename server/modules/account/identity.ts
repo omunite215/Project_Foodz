@@ -1,5 +1,5 @@
 import 'server-only';
-import { isRole, isStaff } from '@/server/auth/roles';
+import { isRole, roleHome } from '@/server/auth/roles';
 import { type Actor, runAs, runAsSystem } from '@/server/db/context';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
@@ -68,11 +68,11 @@ export async function findUserId(email: string) {
   return row?.id ?? null;
 }
 
-/** Whether an account is staff: where a code sign-in lands when no address was asked for. */
-export async function isStaffAccount(userId: string | null): Promise<boolean> {
-  if (!userId) return false;
+/** The account's role home (`roleHome`): where a code sign-in lands when no address was asked for. */
+export async function accountHome(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
   const row = await runAsSystem('auth lookup', (ctx) => findUserRoleById(ctx, userId));
-  return isRole(row?.role) && isStaff(row.role);
+  return isRole(row?.role) ? roleHome(row.role) : null;
 }
 
 export function findEmailForReset(token: string) {

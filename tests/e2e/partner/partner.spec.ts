@@ -142,9 +142,14 @@ test('Jonas sees the reason and when he can apply again; Victor sees the suspens
   await expect(page.getByRole('link', { name: 'Apply again' })).toHaveCount(0);
   await expectNoAxeViolations(page);
 
+  // A partner who signs in with no address lands on the partner app (P7.3).
   const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
   const victor = await other.newPage();
-  await signInTo(victor, PARTNERS.victor);
+  await open(victor, '/sign-in');
+  await victor.getByLabel('Email').fill(PARTNERS.victor);
+  await victor.getByLabel('Password', { exact: true }).fill(SAMPLE_PASSWORD);
+  await victor.getByRole('button', { name: 'Sign in' }).click();
+  await expect(victor).toHaveURL(/\/partner$/, { timeout: 30_000 });
   await expect(
     victor.getByRole('heading', { level: 1, name: 'Your partner account is suspended' }),
   ).toBeVisible();

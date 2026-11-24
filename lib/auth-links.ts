@@ -19,6 +19,18 @@ export function returnRoute(raw: unknown, fallback = '/'): Route {
   return isSitePath(path) ? path : '/';
 }
 
+/**
+ * "Continue" after a confirm link signed this browser in (S3.2): back to where the person was
+ * going when there is somewhere, like step 1 of the partner application (F6 P1.3); the menu
+ * otherwise. A phone usually opens the link in another browser than the one that signed up.
+ */
+export function confirmedContinue(returnPath: unknown): { href: Route; label: string } {
+  const path = returnRoute(returnPath);
+  return path === '/' || path === '/menu'
+    ? { href: '/menu', label: 'Continue to the menu' }
+    : { href: path, label: 'Continue' };
+}
+
 /** "/sign-in?callbackUrl=%2Fmenu" (or the bare page when the return path is Home). */
 export function authPageHref(
   page: '/sign-in' | '/sign-in/two-factor' | '/sign-up' | '/forgot-password',

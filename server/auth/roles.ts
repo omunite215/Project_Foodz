@@ -21,6 +21,15 @@ export function isStaff(role: Role) {
   return STAFF_ROLES.includes(role);
 }
 
+/**
+ * Where a role's sign-in lands when no address was asked for: staff on their tools (F5 A1.1),
+ * partners on the partner app (F6 P7.3). Customers and applicants: null, so they go back.
+ */
+export function roleHome(role: Role): '/admin' | '/partner' | null {
+  if (isStaff(role)) return '/admin';
+  return role === 'partner' ? '/partner' : null;
+}
+
 /** Everything a signed-in actor can be allowed to do. Deny unless listed. */
 export const statements = {
   ...defaultStatements,
