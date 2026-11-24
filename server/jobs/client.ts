@@ -1,17 +1,18 @@
 import 'server-only';
 import { eventType, Inngest } from 'inngest';
 import { z } from 'zod';
+import { isDeployedProduction } from '@/server/deployment';
 import { logger } from '@/server/logger';
 
 /**
  * Background jobs run on Inngest: the local dev server in Docker, Inngest Cloud in production.
  *
- * Dev mode skips request signing, so it is never allowed on Vercel, even if INNGEST_DEV is set
- * by mistake. Everywhere else, cloud mode needs INNGEST_SIGNING_KEY and rejects any request
+ * Dev mode skips request signing, so it is never allowed on a production deployment (Vercel or
+ * AWS), even if INNGEST_DEV is set by mistake. Everywhere else, cloud mode needs INNGEST_SIGNING_KEY and rejects any request
  * to /api/inngest without a valid signature.
  */
 export function isInngestDevMode(env: Record<string, string | undefined> = process.env) {
-  return env.INNGEST_DEV === '1' && !env.VERCEL;
+  return env.INNGEST_DEV === '1' && !env.VERCEL && !isDeployedProduction(env);
 }
 
 export const inngest = new Inngest({

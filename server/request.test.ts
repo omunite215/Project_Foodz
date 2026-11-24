@@ -99,13 +99,16 @@ describe('the test-only switch (CLIENT_IP_FROM_HEADER)', () => {
     expect(clientIpWarning(tests)).toMatch(/tests only/);
   });
 
-  it('is refused on Vercel production and does nothing there', () => {
+  it('is refused in production (Vercel or AWS) and does nothing there', () => {
     const production = { CLIENT_IP_FROM_HEADER: '1', VERCEL_ENV: 'production' };
     expect(clientIpOptInRefused(production)).toBe(true);
     expect(clientIpSource(production)).toBe('none');
     expect(clientIp(h({ 'x-forwarded-for': '6.6.6.6' }), production)).toBe(UNKNOWN_CLIENT);
     expect(clientIpOptInRefused({ CLIENT_IP_FROM_HEADER: '1', VERCEL_ENV: 'preview' })).toBe(false);
     expect(clientIpOptInRefused({ VERCEL_ENV: 'production' })).toBe(false);
+    expect(
+      clientIpOptInRefused({ CLIENT_IP_FROM_HEADER: '1', FOODZ_DEPLOYMENT: 'production' }),
+    ).toBe(true);
   });
 
   it('loses to a configured proxy', () => {

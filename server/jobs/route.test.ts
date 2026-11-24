@@ -109,6 +109,10 @@ describe('dev mode', () => {
   it('is used only when INNGEST_DEV=1 and never on Vercel', () => {
     expect(isInngestDevMode({ INNGEST_DEV: '1' })).toBe(true);
     expect(isInngestDevMode({ INNGEST_DEV: '1', VERCEL: '1' })).toBe(false);
+    expect(isInngestDevMode({ INNGEST_DEV: '1', FOODZ_DEPLOYMENT: 'production' })).toBe(false);
+    expect(isInngestDevMode({ INNGEST_DEV: '1', ECS_CONTAINER_METADATA_URI_V4: 'http://x' })).toBe(
+      false,
+    );
     expect(isInngestDevMode({ INNGEST_DEV: 'true' })).toBe(false);
     expect(isInngestDevMode({})).toBe(false);
   });
