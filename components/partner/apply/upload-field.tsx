@@ -306,7 +306,7 @@ export function UploadField({
         )}
       >
         {fileInput(capture, ref, primary)}
-        <Icon className="size-5" aria-hidden />
+        <Icon className="size-5 shrink-0" aria-hidden />
         {text}
       </label>
     );

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { Page } from '@playwright/test';
 import {
   expect,
   expectNoAxeViolations,
@@ -16,6 +17,28 @@ import {
  * screens, the application form, going online and offline, the profile and the dark theme.
  * Flows that change shared state (going online, the demo partner) run in one project only.
  */
+
+/** Design 6.8: within 3 km the map frames the kitchen too; its pin sits inside the map's box. */
+async function expectKitchenPinInMap(page: Page) {
+  const map = page.locator('.maplibregl-map');
+  const pin = map.locator('.maplibregl-marker').first();
+  await expect(pin).toBeAttached({ timeout: 20_000 });
+  await expect
+    .poll(
+      async () => {
+        const [box, mark] = await Promise.all([map.boundingBox(), pin.boundingBox()]);
+        if (!box || !mark) return false;
+        return (
+          mark.x >= box.x - 1 &&
+          mark.y >= box.y - 1 &&
+          mark.x + mark.width <= box.x + box.width + 1 &&
+          mark.y + mark.height <= box.y + box.height + 1
+        );
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
 
 test.beforeEach(() => {
   test.skip(!SAMPLE_PASSWORD, 'Needs the sample password (E2E_SEED_OUTPUT).');
@@ -154,7 +177,7 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   page,
   context,
 }, testInfo) => {
-  test.skip(projectOf(testInfo) !== 'partner-375', "One project changes Diego's online state.");
+  test.skip(projectOf(testInfo) !== 'partner-360', "One project changes Diego's online state.");
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ ...ROUTE.R0, accuracy: 15 });
   await signInTo(page, PARTNERS.diego);
@@ -175,6 +198,7 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   // He rides two steps along route R: the distance follows each fix (P10.2).
   await context.setGeolocation({ ...ROUTE.R2, accuracy: 15 });
   await expect(page.getByText('0.5 km')).toBeVisible({ timeout: 15_000 });
+  await expectKitchenPinInMap(page);
   await expect(page.getByText(/^Location shared · /)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Go offline' })).toBeVisible();
   await expectNoAxeViolations(page);
@@ -231,6 +255,7 @@ test('the demo partner goes online with a pretend location', async ({ page }, te
     timeout: 15_000,
   });
   await expect(page.getByText('Not your real location')).toBeVisible();
+  await expectKitchenPinInMap(page);
   await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Go offline' }).click();
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
@@ -246,9 +271,17 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
 
   // Step 1: the photo goes up with real progress, is checked, then shows (design 4.4).
   await page.getByLabel('Choose a photo').setInputFiles(picture);
-  await expect(
-    page.getByRole('group', { name: 'Profile photo' }).getByText('Photo added'),
-  ).toBeVisible({ timeout: 45_000 });
+  const photoField = page.getByRole('group', { name: 'Profile photo' });
+  await expect(photoField.getByText('Photo added')).toBeVisible({ timeout: 45_000 });
+
+  // A reload on step 1 draws the draft's photo again, not an empty field (design review S8).
+  await page.waitForFunction(() =>
+    Object.keys(window.localStorage).some((key) => key.startsWith('foodz.partner-apply:')),
+  );
+  await page.goto('/partner/apply?step=1');
+  await expect(page.getByText('We kept what you entered on this phone.')).toBeVisible();
+  await expect(photoField.getByText('Photo added')).toBeVisible({ timeout: 15_000 });
+  await expect(photoField.getByLabel('Change photo')).toBeAttached();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 2: a scooter needs a plate, shown back in capitals.

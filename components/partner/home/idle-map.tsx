@@ -247,7 +247,8 @@ export default function IdleMap({
 
   return (
     <div aria-hidden className="relative h-44 min-[22.5rem]:h-56">
-      <div ref={containerRef} className={cn('absolute inset-0', state === 'failed' && 'hidden')} />
+      {/* Sized by its box, not by position: MapLibre's own stylesheet makes the map relative. */}
+      <div ref={containerRef} className={cn('h-full w-full', state === 'failed' && 'hidden')} />
       {state === 'loading' ? (
         <div className="absolute inset-0 bg-muted motion-safe:animate-skeleton" />
       ) : null}

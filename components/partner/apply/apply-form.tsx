@@ -162,6 +162,9 @@ export function ApplyForm(props: ApplyFormProps) {
   const [pending, setPending] = useState(false);
   const [challenge, setChallenge] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const restored = draftRestored ? 'restored' : 'fresh';
+  // Whether the draft has been looked for; the address may then name the step shown.
+  const [draftChecked, setDraftChecked] = useState(false);
   const [draftNotice, setDraftNotice] = useState(false);
   const [withdrawnNotice, setWithdrawnNotice] = useState(Boolean(props.withdrawn));
   const [recheckUploads, setRecheckUploads] = useState(false);
@@ -277,7 +280,10 @@ export function ApplyForm(props: ApplyFormProps) {
     }
   });
   useEffect(() => {
-    const timer = setTimeout(restore, 0);
+    const timer = setTimeout(() => {
+      restore();
+      setDraftChecked(true);
+    }, 0);
     return () => clearTimeout(timer);
   }, []);
 
@@ -325,6 +331,15 @@ export function ApplyForm(props: ApplyFormProps) {
   }
 
   // Moving forward focuses the new step's heading (design 4.1); the form fades in.
+  // The address names the step shown (a typed ?step=4 opened at step 3), once the draft has
+  // been looked for, so Back and a second reload agree with the page.
+  useEffect(() => {
+    if (!draftChecked || step === requested) return;
+    window.history.replaceState(null, '', stepHref(step));
+    // stepHref reads the current address; only the steps matter here.
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [draftChecked, step, requested]);
+
   const shownStep = useRef(step);
   useEffect(() => {
     if (shownStep.current === step) return;
@@ -680,6 +695,8 @@ export function ApplyForm(props: ApplyFormProps) {
                 hint={`Customers see your first name, ${firstNameOf(name)}.`}
               />
               <UploadField
+                // A restored draft fills the field after it was drawn: draw it again (S8).
+                key={`photo-${restored}`}
                 kind="photo"
                 documentType={document}
                 value={uploads.photo}
@@ -912,6 +929,7 @@ export function ApplyForm(props: ApplyFormProps) {
                 }}
               </form.Field>
               <UploadField
+                key={`id-${restored}`}
                 kind="id"
                 documentType={document}
                 value={uploads.idPhoto}
