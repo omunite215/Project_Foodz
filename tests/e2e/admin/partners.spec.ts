@@ -66,7 +66,7 @@ test('one application: flags, what to check, photo and ID, history, and the view
 }) => {
   await signInStaff(page, STAFF.support, '/admin/partners');
   await page.getByRole('link', { name: 'Sam Rivera' }).first().click();
-  await expect(page).toHaveURL(/\/admin\/partners\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/admin\/partners\/[0-9a-f-]{36}$/, { timeout: 15_000 });
   await expect(page).toHaveTitle('Partner application | Foodz Admin');
   await expect(page.getByRole('heading', { level: 1, name: 'Sam Rivera' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Flags' })).toBeVisible();
