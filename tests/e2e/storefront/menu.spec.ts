@@ -167,21 +167,33 @@ test.describe('Menu', () => {
   });
 
   test('shows a skeleton with one label while a slow menu loads (S7.3)', async ({ page }) => {
-    // The menu's own data is held back until the skeleton has been checked, then let through:
-    // a slow menu by construction, not by timing. Prefetches pass, so the loading shell is ready
-    // the way it would be for a customer.
+    // The link prefetches the menu's loading shell: the route down to loading.tsx, none of the
+    // dishes. The click waits for it, as a customer who has had the page open a moment has it.
+    // On a busy machine the page can hydrate, and the test click, before the prefetch lands, and
+    // a click to a route the router has not seen yet shows nothing until the server answers.
+    // The menu itself is held back until the skeleton has been checked: a slow menu by
+    // construction, not by timing.
+    const menuUrl = /\/menu(\?|$)/;
+    const shellPrefetched = page.waitForResponse(
+      async (response) =>
+        menuUrl.test(response.url()) &&
+        Boolean(response.request().headers()['next-router-prefetch']) &&
+        (await response.text().catch(() => '')).includes('Loading menu'),
+    );
     let release: (() => void) | undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
     let heldRequests = 0;
-    await page.route(/\/menu(\?|$)/, async (route) => {
+    await page.route(menuUrl, async (route) => {
       if (route.request().headers()['next-router-prefetch']) return route.continue();
       heldRequests += 1;
       await held;
       return route.continue();
     });
     await open(page, '/');
+    // Only the skeleton is prefetched, so a customer with a warm cache still sees it.
+    expect(await (await shellPrefetched).text()).not.toContain('Bulgogi');
     await page
       .locator('#hero-title')
       .locator('..')
