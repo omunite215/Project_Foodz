@@ -254,11 +254,25 @@ export function linkIn(text: string, path: string) {
  * The seeded admin's authenticator secret, from the seed's one-time output. CI saves that output
  * to a file and names it in E2E_SEED_OUTPUT; locally, point it at your own copy.
  */
+export const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@foodz.example';
+
+/**
+ * The admin's own authenticator line: the seed also prints the sample staff's authenticators
+ * (F5), so the admin's is found by its email, never by being the last one in the file. The
+ * admin's is printed only by the first seed of a database; without it this returns null.
+ */
 export function adminTotpSecret(): string | null {
-  return fromSeedOutput(/otpauth:\/\/totp\/[^\s]*[?&]secret=([A-Z2-7]+)/gi);
+  const file = process.env.E2E_SEED_OUTPUT;
+  if (!file || !existsSync(file)) return null;
+  const email = ADMIN_EMAIL.toLowerCase();
+  const uris = readFileSync(file, 'utf8').match(/otpauth:\/\/totp\/\S+/gi) ?? [];
+  const admin = uris.findLast((uri) => {
+    const lower = uri.toLowerCase();
+    return lower.includes(encodeURIComponent(email)) || lower.includes(email);
+  });
+  return admin ? new URL(admin).searchParams.get('secret') : null;
 }
 
-export const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@foodz.example';
 export const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? '';
 
 function base32(secret: string): Buffer {

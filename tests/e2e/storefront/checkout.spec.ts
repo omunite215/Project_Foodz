@@ -205,7 +205,7 @@ test.describe('Checkout', () => {
 
     await payButton(page).click();
     await expect(page).toHaveURL(ORDER_URL, { timeout: 30_000 });
-    await expect(page).toHaveTitle(/^Order \d+ \| Foodz$/);
+    await expect(page).toHaveTitle(/^Placed · Order \d+ \| Foodz$/);
     const heading = page.getByRole('heading', { level: 1, name: 'Order placed' });
     await expect(heading).toBeFocused();
     await expect(liveRegion(page)).toHaveText(/^Order placed, order \d+$/);
@@ -214,7 +214,7 @@ test.describe('Checkout', () => {
     await expect(receipt.getByText('Tip for your courier')).toBeVisible();
     await expect(receipt.getByText(total, { exact: true })).toBeVisible();
     await expect(receipt.getByText(`Cash on delivery · ${total} to pay`)).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Order timeline' })).toContainText(
+    await expect(page.getByRole('list', { name: 'Timeline' })).toContainText(
       'Placed · Cash on delivery',
     );
     // The cart is emptied once the order is placed (B16).
@@ -244,9 +244,7 @@ test.describe('Checkout', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Order cancelled' })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole('list', { name: 'Order timeline' })).toContainText(
-      'Cancelled by you',
-    );
+    await expect(page.getByRole('list', { name: 'Timeline' })).toContainText('Cancelled by you');
     await expect(page.getByRole('button', { name: 'Cancel order' })).toHaveCount(0);
     // No script errors on the way: no hydration mismatch, nothing the CSP refused.
     expect(problems).toEqual([]);
