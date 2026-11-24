@@ -168,11 +168,11 @@ test.describe('Menu', () => {
 
   test('shows a skeleton with one label while a slow menu loads (S7.3)', async ({ page }) => {
     await open(page, '/');
-    // A slow connection: every request for the menu, its prefetch included, takes 1.5 s. On a
+    // A slow connection: every request for the menu, its prefetch included, takes 3 s. On a
     // fast machine the link would otherwise have prefetched the whole menu before the click, and
     // a menu that is already there needs no skeleton.
     await page.route(/\/menu(\?|$)/, async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       return route.continue();
     });
     await page

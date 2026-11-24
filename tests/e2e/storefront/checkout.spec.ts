@@ -1,7 +1,9 @@
 import type { Page } from '@playwright/test';
 import {
   expect,
+  expectHeard,
   expectNoSidewaysScroll,
+  listenToLiveRegion,
   liveRegion,
   newPassword,
   open,
@@ -621,6 +623,7 @@ test.describe('Checkout', () => {
     await page.getByLabel('Name').fill('Maya Lopez');
     await page.getByLabel('Email').fill(uniqueEmail('maya'));
     await page.getByLabel('Password', { exact: true }).fill(newPassword());
+    await listenToLiveRegion(page);
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/checkout$/, { timeout: 30_000 });
 
@@ -628,11 +631,9 @@ test.describe('Checkout', () => {
     const dialog = page.getByRole('dialog', { name: 'Add an address' });
     await expect(dialog).toBeVisible({ timeout: 20_000 });
     await expect(dialog.getByRole('heading', { name: 'Add an address' })).toBeFocused();
-    // One announcement: what to do, then the delivery check, so neither cuts the other off.
-    await expect(liveRegion(page)).toHaveText(
-      /^Add the apartment and instructions, then save\. We deliver here/,
-      { timeout: 20_000 },
-    );
+    // One announcement: what to do, then the delivery check, so neither cuts the other off. (It
+    // may already have been cleared by the time a slow machine looks, so check what was said.)
+    await expectHeard(page, 'Add the apartment and instructions, then save. We deliver here');
     await expect(dialog.getByRole('combobox', { name: 'Address' })).toHaveValue(/Faneuil Hall/);
     await expect(dialog.locator('#delivery-result')).toHaveText(/^We deliver here/, {
       timeout: 20_000,
