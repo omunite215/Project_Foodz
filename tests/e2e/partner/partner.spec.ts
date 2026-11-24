@@ -172,7 +172,10 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   });
   await expect(page.getByRole('banner').getByText(/^Online/)).toBeVisible();
   await expect(page.getByText('At the kitchen')).toBeVisible();
-  await expect(page.getByText(/^Location shared · /)).toBeVisible();
+  // He rides two steps along route R: the distance follows each fix (P10.2).
+  await context.setGeolocation({ ...ROUTE.R2, accuracy: 15 });
+  await expect(page.getByText('0.5 km')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/^Location shared · /)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Go offline' })).toBeVisible();
   await expectNoAxeViolations(page);
 
@@ -217,6 +220,12 @@ test('the demo partner goes online with a pretend location', async ({ page }, te
   await signInTo(page, PARTNERS.riley);
   await open(page, '/partner');
   await expect(page.getByText(/^Demo partner: we use a pretend location/)).toBeVisible();
+  // The demo partner's state is shared by every visitor: start from offline.
+  const offline = page.getByRole('button', { name: 'Go offline' });
+  if (await offline.isVisible()) {
+    await offline.click();
+    await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
+  }
   await page.getByRole('button', { name: /^Go online/ }).click();
   await expect(page.getByText('Pretend location near the kitchen', { exact: true })).toBeVisible({
     timeout: 15_000,
@@ -237,7 +246,9 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
 
   // Step 1: the photo goes up with real progress, is checked, then shows (design 4.4).
   await page.getByLabel('Choose a photo').setInputFiles(picture);
-  await expect(page.getByText('Photo added')).toBeVisible({ timeout: 45_000 });
+  await expect(
+    page.getByRole('group', { name: 'Profile photo' }).getByText('Photo added'),
+  ).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 2: a scooter needs a plate, shown back in capitals.
@@ -252,7 +263,11 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
   await page.getByLabel('License number').fill('S4820 4821');
   await page.getByLabel('Expiry date').fill('2029-03-03');
   await page.getByLabel('Choose a photo').setInputFiles(picture);
-  await expect(page.getByText('Photo added')).toBeVisible({ timeout: 45_000 });
+  await expect(
+    page
+      .getByRole('group', { name: 'Photo of the front of your license' })
+      .getByText('Photo added'),
+  ).toBeVisible({ timeout: 45_000 });
   await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -280,7 +295,9 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
     .getByRole('button', { name: 'Withdraw', exact: true })
     .click();
   await expect(
-    page.getByText("Application withdrawn. We've deleted your photos and ID details."),
+    page
+      .getByRole('main')
+      .getByText("Application withdrawn. We've deleted your photos and ID details."),
   ).toBeVisible({
     timeout: 15_000,
   });
