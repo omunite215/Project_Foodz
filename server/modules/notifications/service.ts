@@ -19,12 +19,12 @@ export async function notify(input: NotifyInput): Promise<{ id: string }> {
   // Saved by the platform: a staff member's action often notifies someone else.
   const saved = await runAsSystem('notification', (ctx) => insertNotification(ctx, data));
 
-  await publish(channels.user(saved.userId), 'notification.created', {
-    id: saved.id,
-    title: saved.title,
-    body: saved.body,
-    link: saved.link,
-  });
+  const base = { id: saved.id, title: saved.title, body: saved.body, link: saved.link };
+  await publish(
+    channels.user(saved.userId),
+    'notification.created',
+    data.order ? { ...base, kind: 'order', ...data.order } : { ...base, kind: 'general' },
+  );
 
   if (data.email) {
     try {

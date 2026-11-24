@@ -59,21 +59,24 @@ model User {
   blogPosts       BlogPost[]
   uploads         Upload[]
   contentVersions ContentVersion[]
+  soldOutDishes   MenuItem[]         @relation("MenuItemSoldOutBy")
 
   @@map("users")
 }
 
 model Session {
-  id             String   @id @db.Uuid
-  expiresAt      DateTime @map("expires_at")
-  token          String   @unique
-  ipAddress      String?  @map("ip_address")
-  userAgent      String?  @map("user_agent")
-  impersonatedBy String?  @map("impersonated_by")
-  userId         String   @map("user_id") @db.Uuid
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String    @id @db.Uuid
+  expiresAt      DateTime  @map("expires_at")
+  token          String    @unique
+  ipAddress      String?   @map("ip_address")
+  userAgent      String?   @map("user_agent")
+  impersonatedBy String?   @map("impersonated_by")
+  /// The last step-up code this session passed (F5 A7.10); server-only, never sent to the browser.
+  stepUpAt       DateTime? @map("step_up_at")
+  userId         String    @map("user_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("sessions")
@@ -177,22 +180,25 @@ enum Cuisine {
 }
 
 model MenuItem {
-  id          String   @id @default(uuid(7)) @db.Uuid
-  slug        String   @unique
+  id          String    @id @default(uuid(7)) @db.Uuid
+  slug        String    @unique
   title       String
   description String
-  priceCents  Int      @map("price_cents")
+  priceCents  Int       @map("price_cents")
   cuisine     Cuisine
   images      String[]
   flavors     String[]
-  prepMinutes Int      @default(20) @map("prep_minutes")
-  isSpecial   Boolean  @default(false) @map("is_special")
-  isAvailable Boolean  @default(true) @map("is_available")
-  ratingAvg   Float    @default(0) @map("rating_avg")
-  ratingCount Int      @default(0) @map("rating_count")
-  soldCount   Int      @default(0) @map("sold_count")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  prepMinutes Int       @default(20) @map("prep_minutes")
+  isSpecial   Boolean   @default(false) @map("is_special")
+  isAvailable Boolean   @default(true) @map("is_available")
+  /// "86 it" (F5): when and by whom the dish was marked sold out; null while it is on the menu.
+  soldOutAt   DateTime? @map("sold_out_at")
+  soldOutById String?   @map("sold_out_by") @db.Uuid
+  ratingAvg   Float     @default(0) @map("rating_avg")
+  ratingCount Int       @default(0) @map("rating_count")
+  soldCount   Int       @default(0) @map("sold_count")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   /// Search document (title, cuisine name, description), a column the database generates (F3
   /// migration f3_menu_search). The default below is that generation expression exactly as
@@ -200,6 +206,7 @@ model MenuItem {
   /// The trigram index on the accent-free title is an expression index Prisma can't describe.
   searchVector Unsupported("tsvector")? @default(dbgenerated("((setweight(to_tsvector('foodz_search'::regconfig, title), 'A'::\"char\") || setweight(to_tsvector('foodz_search'::regconfig,\nCASE cuisine\n    WHEN 'KOREAN'::\"Cuisine\" THEN 'Korean'::text\n    WHEN 'THAI'::\"Cuisine\" THEN 'Thai'::text\n    WHEN 'VIETNAMESE'::\"Cuisine\" THEN 'Vietnamese'::text\n    ELSE ''::text\nEND), 'B'::\"char\")) || setweight(to_tsvector('foodz_search'::regconfig, description), 'C'::\"char\"))")) @map("search_vector")
 
+  soldOutBy  User?       @relation("MenuItemSoldOutBy", fields: [soldOutById], references: [id], onDelete: SetNull)
   favorites  Favorite[]
   orderItems OrderItem[]
   reviews    Review[]
@@ -304,15 +311,30 @@ model Order {
   /// Arrival window in minutes after placing (S3.1): "35–45 min".
   arrivalFromMinutes    Int?                                   @map("arrival_from_minutes")
   arrivalToMinutes      Int?                                   @map("arrival_to_minutes")
-  /// Why Foodz itself refunded the card: customer-cancel | late-payment | mismatch.
+  /// Why Foodz itself refunded the card: customer-cancel | late-payment | mismatch | staff-cancel.
   autoRefundReason      String?                                @map("auto_refund_reason")
   expiresAt             DateTime?                              @map("expires_at")
   placedAt              DateTime?                              @map("placed_at")
+  /// The kitchen's steps (F5); cleared again when a step is undone or moved back.
+  acceptedAt            DateTime?                              @map("accepted_at")
+  preparingAt           DateTime?                              @map("preparing_at")
+  readyAt               DateTime?                              @map("ready_at")
+  pickedUpAt            DateTime?                              @map("picked_up_at")
   deliveredAt           DateTime?                              @map("delivered_at")
   cancelledAt           DateTime?                              @map("cancelled_at")
-  /// customer | payment-expired | account-deleted
+  /// customer | payment-expired | account-deleted | staff | kitchen-refused
   cancelReason          String?                                @map("cancel_reason")
+  /// Why staff cancelled (one of the board's seven reasons); never shown to the customer.
+  cancelCode            String?                                @map("cancel_code")
+  /// The lines a "dish is unavailable" cancellation ticked.
+  cancelLineIds         String[]                               @default([]) @map("cancel_line_ids") @db.Uuid
+  /// The longest prep of the dishes as ordered, for ready-by (set by a trigger on order_items).
+  prepMinutes           Int?                                   @map("prep_minutes")
+  /// Customer notices already sent (accepted, ready, picked-up, delivered, cancelled): each once.
+  notifiedSteps         String[]                               @default([]) @map("notified_steps")
   version               Int                                    @default(0)
+  /// The version at which the status last changed (trigger orders_track_status).
+  statusChangedVersion  Int                                    @default(0) @map("status_changed_version")
   createdAt             DateTime                               @default(now()) @map("created_at")
   updatedAt             DateTime                               @updatedAt @map("updated_at")
 

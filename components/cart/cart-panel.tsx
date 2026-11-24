@@ -48,6 +48,7 @@ import {
   CartNotices,
   noticeText,
 } from './cart-notices';
+import { clearReorderLeftOut, useReorderLeftOut } from '@/lib/reorder-notice';
 import { useUnpaidOrder } from './use-unpaid-order';
 import { CheckoutBar } from './checkout-bar';
 import { deliveryTarget, setCheckedAddress, useCheckedAddress } from '@/lib/data/checked-address';
@@ -295,6 +296,10 @@ export function CartPanel({
   }
   const titleOf = (line: CartLine) => views.get(line.key)?.title ?? 'This dish';
 
+  // F5: what "Order again" left out stays until dismissed or the cart closes (design 8).
+  const reorderLeftOut = useReorderLeftOut();
+  useEffect(() => clearReorderLeftOut, []);
+
   // ---------------------------------------------------------------- notices
   const fullLimit =
     itemCount >= MAX_CART_ITEMS || view.status === 'tooBig'
@@ -303,6 +308,7 @@ export function CartPanel({
         ? 'lines'
         : null;
   const candidates: (CartNotice | null)[] = [
+    reorderLeftOut.length > 0 ? { kind: 'leftOut', lines: reorderLeftOut } : null,
     unpaidOrder ? { kind: 'unpaid', ...unpaidOrder } : null,
     meta.placed && isReady && lines.length === 0 ? { kind: 'placed', ...meta.placed } : null,
     known && !known.store.isOpen
@@ -484,6 +490,11 @@ export function CartPanel({
           onDismiss={(kind) => {
             if (kind === 'priceChanged') dishActions.acknowledgePrices(shownPrices);
             if (kind === 'placed') cart.setPlaced(null);
+            // A later "Order again" brings its own notice, so this one is cleared, not hidden.
+            if (kind === 'leftOut') {
+              clearReorderLeftOut();
+              return;
+            }
             setDismissed((current) => new Set([...current, kind]));
           }}
           onRemoveSoldOut={removeSoldOut}

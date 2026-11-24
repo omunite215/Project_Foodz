@@ -88,3 +88,24 @@ export const OrderPlaced: Story = {
     await expect(canvas.getByRole('button', { name: 'Dismiss' })).toBeVisible();
   },
 };
+
+/** F5 design 8: what "Order again" left out, first, one sentence per item. */
+export const OrderAgainLeftOut: Story = {
+  args: {
+    notices: [
+      {
+        kind: 'leftOut',
+        lines: [
+          'Naengmyeon is sold out, so we left it out.',
+          'Gochujang is no longer offered on Gimbap, so we left it off.',
+          'The kitchen ran out of Pad Thai today, so we left it out.',
+        ],
+      },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('listitem')).toHaveLength(3);
+    await expect(canvas.getByRole('button', { name: 'Dismiss' })).toBeVisible();
+  },
+};

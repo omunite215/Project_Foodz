@@ -5,6 +5,7 @@ import type { Actor } from '@/server/db/context';
 import { demoReadOnly, forbidden, twoFactorRequired, unauthenticated } from '@/server/errors';
 import { auth } from './index';
 import { can, isRole, isStaff, type Permission } from './roles';
+import { staffSessionOver } from './staff-session';
 
 export const getSession = cache(async () => auth.api.getSession({ headers: await headers() }));
 
@@ -14,12 +15,10 @@ export type UserActor = Extract<Actor, { kind: 'user' }>;
 export const getActor = cache(async (): Promise<Actor> => {
   const session = await getSession();
   if (!session || session.user.banned) return { kind: 'anonymous' };
-  return {
-    kind: 'user',
-    userId: session.user.id,
-    role: isRole(session.user.role) ? session.user.role : 'customer',
-    isDemo: Boolean(session.user.isDemo),
-  };
+  const role = isRole(session.user.role) ? session.user.role : 'customer';
+  // A staff session ends 12 hours after sign-in (F5 U11), even if its row says later.
+  if (staffSessionOver(role, session.session.createdAt)) return { kind: 'anonymous' };
+  return { kind: 'user', userId: session.user.id, role, isDemo: Boolean(session.user.isDemo) };
 });
 
 export async function requireUser(): Promise<UserActor> {
@@ -32,12 +31,15 @@ export async function requireUser(): Promise<UserActor> {
  * Checks a permission for a signed-in user. Demo accounts may only read. Other staff accounts
  * must have two-factor enabled; the shared demo admin is exempt because it can never write.
  */
-export async function requirePermission(permission: Permission, options: { write?: boolean } = {}) {
+export async function requirePermission(
+  permission: Permission,
+  options: { write?: boolean; demoMessage?: string } = {},
+) {
   const actor = await requireUser();
   if (!can(actor.role, permission)) throw forbidden();
 
   if (actor.isDemo) {
-    if (options.write !== false) throw demoReadOnly();
+    if (options.write !== false) throw demoReadOnly(options.demoMessage);
   } else if (isStaff(actor.role)) {
     const session = await getSession();
     if (!session?.user.twoFactorEnabled) throw twoFactorRequired();

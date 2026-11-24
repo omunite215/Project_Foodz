@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { arrivalText, orderNotice, renderOrderEmail } from './emails';
+import type { CancellationNotice } from './progress-schema';
 import type { OrderView } from './schema';
 
 const SITE = 'http://localhost:3456';
@@ -77,7 +78,47 @@ function order(extra: Partial<OrderView> = {}): OrderView {
     timeline: [],
     flags: { revivedAfterLatePayment: false, lateRefund: false, mismatchRefund: false },
     store: { phone: '(617) 555-0142', timeZone: 'America/New_York' },
+    progress: {
+      asOf: '2026-11-20T00:02:00.000Z',
+      version: 1,
+      steps: null,
+      arrival: null,
+      placedWaiting: 'none',
+      deliveredAt: null,
+      cashCollected: false,
+      cancellation: null,
+      live: true,
+      refreshAt: null,
+    },
     ...extra,
+  };
+}
+
+/** A cancellation by the store, as the progress builder words it (F5 S5). */
+function cancelledByStore(notice: Partial<CancellationNotice>): Partial<OrderView> {
+  const base = order();
+  return {
+    status: 'CANCELLED',
+    cancelReason: 'store',
+    progress: {
+      ...base.progress,
+      live: false,
+      cancellation: {
+        by: 'store',
+        opener: 'sorry',
+        reasonLine: 'ranOut',
+        dishes: ['Pad Thai'],
+        moneyLine: 'refunding',
+        amountCents: 5582,
+        cardLabel: 'Visa •••• 4242',
+        refundedAt: null,
+        tipIncluded: true,
+        codeReleased: null,
+        refundSlow: false,
+        at: '2026-11-20T00:10:00.000Z',
+        ...notice,
+      },
+    },
   };
 }
 
@@ -281,5 +322,85 @@ describe('the arrival window as clock times', () => {
     expect(arrivalText('2026-11-20T16:55:00Z', '2026-11-20T17:05:00Z', 'America/New_York')).toBe(
       '11:55 am–12:05 pm',
     );
+  });
+});
+
+describe('a cancellation by the store (F5 S5.5, S5.7, B24)', () => {
+  it('opens with the apology, gives the reason line, the refund and the code', () => {
+    const email = renderOrderEmail(
+      'cancelled',
+      order(cancelledByStore({ codeReleased: 'KBBQ5' })),
+      options,
+    );
+    expect(email.subject).toBe('Order 1042 is cancelled');
+    expect(email.text).toContain('Sorry, we had to cancel order 1042.');
+    expect(email.text).toContain(
+      "The kitchen ran out of Pad Thai, so we couldn't make your order.",
+    );
+    expect(email.text).toContain(
+      "We're refunding $55.82 to Visa •••• 4242, tip included. It can take 5 to 10 business days to appear.",
+    );
+    expect(email.text).toContain('Your code KBBQ5 is free to use again.');
+    expect(email.text).toContain(`Browse the menu: ${SITE}/menu`);
+    expect(email.text).toContain(`View your order: ${SITE}/orders/${ID}`);
+    expect(email.text).not.toMatch(/You cancelled|refused|staff|kitchen-refused/i);
+  });
+
+  it('says it plainly for her own request, and nothing charged for cash', () => {
+    const email = renderOrderEmail(
+      'cancelled',
+      order(
+        cancelledByStore({
+          opener: 'plain',
+          reasonLine: 'atYourRequest',
+          dishes: [],
+          moneyLine: 'nothing',
+          amountCents: null,
+          tipIncluded: false,
+        }),
+      ),
+      options,
+    );
+    expect(email.text).toContain(
+      'Order 1042 is cancelled. Cancelled at your request. Nothing was charged.',
+    );
+    expect(email.text).not.toContain('Sorry');
+  });
+
+  it('never says refunding for a sample order', () => {
+    const email = renderOrderEmail(
+      'cancelled',
+      order(cancelledByStore({ moneyLine: 'sample', amountCents: null, reasonLine: 'tooBusy' })),
+      options,
+    );
+    expect(email.text).toContain(
+      "This sample order had no real card payment, so there's nothing to refund.",
+    );
+    expect(email.text).not.toContain('refunding');
+  });
+
+  it('joins several dishes in words, and gives the phone for the lines that need it', () => {
+    const several = renderOrderEmail(
+      'cancelled',
+      order(cancelledByStore({ dishes: ['Gimbap', 'Pad Thai', 'Bulgogi'] })),
+      options,
+    );
+    expect(several.text).toContain('The kitchen ran out of Gimbap, Pad Thai and Bulgogi');
+    const fraud = renderOrderEmail(
+      'cancelled',
+      order(cancelledByStore({ reasonLine: 'couldNotAccept', dishes: [] })),
+      options,
+    );
+    expect(fraud.text).toContain(
+      "We couldn't accept this order. Call us on (617) 555-0142 if you think this is a mistake.",
+    );
+  });
+
+  it('writes the in-app notice with the reason and money lines, never "You cancelled"', () => {
+    const notice = orderNotice('cancelled', order(cancelledByStore({ reasonLine: 'tooBusy' })));
+    expect(notice).toEqual({
+      title: 'Order 1042 is cancelled',
+      body: "Our kitchen is too busy to make your order in good time. We're refunding $55.82 to Visa •••• 4242, tip included. It can take 5 to 10 business days to appear.",
+    });
   });
 });

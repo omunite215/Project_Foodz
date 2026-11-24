@@ -62,6 +62,65 @@ export default defineConfig({
       timeout: 90_000,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
+    // The staff tools and the live order (F5). They need the seeded staff and the board's
+    // fixtures (`npm run seed:board` first), so they run only with E2E_ADMIN=1.
+    ...(process.env.E2E_ADMIN === '1'
+      ? [
+          {
+            name: 'admin-375',
+            testMatch: /admin\/.*\.spec\.ts/,
+            timeout: 90_000,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 375, height: 812 },
+              isMobile: true,
+              hasTouch: true,
+            },
+          },
+          {
+            name: 'admin-1024',
+            testMatch: /admin\/.*\.spec\.ts/,
+            timeout: 90_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 } },
+          },
+          {
+            name: 'admin-1440',
+            testMatch: /admin\/.*\.spec\.ts/,
+            timeout: 90_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
+          // Flows that change the fixtures for good (a refusal, then "Order again"): after the
+          // projects above, one viewport at a time; each resets the fixtures first.
+          {
+            name: 'admin-flows-1440',
+            testMatch: /admin-flows\/.*\.spec\.ts/,
+            dependencies: ['admin-375', 'admin-1024', 'admin-1440'],
+            timeout: 120_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
+          {
+            name: 'admin-flows-375',
+            testMatch: /admin-flows\/.*\.spec\.ts/,
+            dependencies: ['admin-flows-1440'],
+            timeout: 120_000,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 375, height: 812 },
+              isMobile: true,
+              hasTouch: true,
+            },
+          },
+          // Timers on the board (repeat chime, undo window, hidden-tab count) and "86 it" on the
+          // menu: they change fixtures and dishes, so they run last, on their own.
+          {
+            name: 'admin-timing-1440',
+            testMatch: /admin-timing\/.*\.spec\.ts/,
+            dependencies: ['admin-flows-375'],
+            timeout: 180_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
+        ]
+      : []),
   ],
   // Tests run against a production build, the same thing users get.
   webServer: process.env.E2E_BASE_URL

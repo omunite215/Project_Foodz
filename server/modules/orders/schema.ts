@@ -13,6 +13,7 @@ import {
 } from '@/server/modules/cart/schema';
 import type { StoreMoment } from '@/server/modules/menu/schema';
 import type { SavedCardDto, StripeConfigDto } from '@/server/modules/payments/schema';
+import type { CustomerTimelineEntry, OrderProgress, OrderSummaryProgress } from './progress-schema';
 
 /*
  * Checkout and orders (F4). Money is integer cents, instants ISO 8601 in UTC, and every input
@@ -220,10 +221,28 @@ export interface CancelResult {
 
 // ------------------------------------------------------------------ the order page
 
-export const CANCEL_REASONS = ['customer', 'payment-expired', 'account-deleted'] as const;
-export type CancelReason = (typeof CANCEL_REASONS)[number];
+/** Stored on the order. `staff` and `kitchen-refused` come from the staff order board (F5). */
+export const CANCEL_REASONS = [
+  'customer',
+  'payment-expired',
+  'account-deleted',
+  'staff',
+  'kitchen-refused',
+] as const;
+export type StoredCancelReason = (typeof CANCEL_REASONS)[number];
 
-export const AUTO_REFUND_REASONS = ['customer-cancel', 'late-payment', 'mismatch'] as const;
+/**
+ * What the customer's screens read. A staff cancellation and a kitchen refusal are both
+ * `store`: the internal reason never reaches the customer (F5 S5.6).
+ */
+export type CancelReason = 'customer' | 'payment-expired' | 'account-deleted' | 'store';
+
+export const AUTO_REFUND_REASONS = [
+  'customer-cancel',
+  'late-payment',
+  'mismatch',
+  'staff-cancel',
+] as const;
 export type AutoRefundReason = (typeof AUTO_REFUND_REASONS)[number];
 
 /** The bank's answer, for "Your card was declined for insufficient funds" (S6.8). */
@@ -239,7 +258,13 @@ export type TimelineKind =
   | 'expired'
   | 'refunded'
   | 'disputeOpened'
-  | 'disputeClosed';
+  | 'disputeClosed'
+  // The kitchen's steps and the hand-over (F5 S6.7). Undone and moved-back steps are left out.
+  | 'accepted'
+  | 'preparing'
+  | 'ready'
+  | 'pickedUp'
+  | 'delivered';
 
 export interface OrderView {
   id: string;
@@ -303,7 +328,8 @@ export interface OrderView {
     from: string | null;
     to: string | null;
   } | null;
-  timeline: { kind: TimelineKind; at: string; amountCents: number | null }[];
+  /** Customer-safe events only, oldest first (F5 S6.7): never a staff name, role or note. */
+  timeline: CustomerTimelineEntry[];
   flags: {
     /** "Your payment arrived just after the deadline, and we've placed order 1042." (S9.5) */
     revivedAfterLatePayment: boolean;
@@ -313,6 +339,8 @@ export interface OrderView {
     mismatchRefund: boolean;
   };
   store: { phone: string; timeZone: string };
+  /** The live order (F5): stepper, arrival, cancellation card and when to refresh. */
+  progress: OrderProgress;
 }
 
 /** The status words used everywhere (design 4.3). */
@@ -327,7 +355,8 @@ export type OrderStatusWord =
   | 'cancelled'
   | 'expired';
 
-export interface OrderSummary {
+/** A row of the orders list; F5 adds the arrival, "Order again" and "Collected" (S7.1, S7.5). */
+export interface OrderSummary extends OrderSummaryProgress {
   id: string;
   number: string;
   createdAt: string;

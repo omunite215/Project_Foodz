@@ -162,7 +162,7 @@ export function SavedCards({ page }: { page: SavedCardsPage }) {
             No saved cards
           </h2>
           <p className="mt-1 text-body-5 text-neutral-3">
-            Tick &lsquo;Save this card for next time&rsquo; at checkout to pay faster.
+            Check &lsquo;Save this card for next time&rsquo; at checkout to pay faster.
           </p>
         </div>
       ) : (

@@ -35,6 +35,9 @@
   --color-tag-5-bg: #f6eefd;
   --color-tag-6: #da9f0a;
   --color-tag-6-bg: #fcf6d8;
+  /* Amber dark enough for meaningful marks and text on white (4.69:1); tag-6 is 2.35:1. For
+     the board's amber border and amber icons (F5 design 0). Never a fill. */
+  --color-warning-strong: #9a6b00;
   --color-tag-7: #26aca0;
   --color-tag-7-bg: #edfcfb;
   --color-tag-8: #3304b9;

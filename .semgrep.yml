@@ -61,3 +61,30 @@ rules:
           - pattern: redirect($REQ.nextUrl.searchParams.get(...))
           - pattern: redirect($PARAMS.get(...))
           - pattern: NextResponse.redirect(new URL($REQ.nextUrl.searchParams.get(...), ...))
+
+  - id: no-parallel-queries-in-transaction
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      A transaction runs on one connection, one query at a time. Await its queries one after
+      another instead of starting them together.
+    patterns:
+      - pattern-either:
+          - pattern-inside: runAs(...)
+          - pattern-inside: runAsSystem(...)
+          - pattern-inside: readCatalog(...)
+          - pattern-inside: $DB.$transaction(...)
+          - pattern-inside: |
+              function $FN(..., $CTX: DbContext, ...) { ... }
+          - pattern-inside: |
+              async function $FN(..., $CTX: DbContext, ...) { ... }
+          - pattern-inside: |
+              function $FN(..., $TX: Tx, ...) { ... }
+          - pattern-inside: |
+              async function $FN(..., $TX: Tx, ...) { ... }
+      - pattern: Promise.$ALL(...)
+      - metavariable-regex:
+          metavariable: $ALL
+          regex: ^(all|allSettled|any|race)$
+    paths:
+      exclude: ['tests/**', '**/*.test.ts']

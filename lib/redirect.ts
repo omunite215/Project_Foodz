@@ -66,6 +66,13 @@ function withReturnPath(page: string, returnPath: unknown) {
 }
 
 /** Where a confirm-email link lands: send it as `callbackURL` on sign-up, resend and change. */
+/**
+ * Where a sign-in lands. Staff who asked for nowhere in particular (no `callbackUrl`, so Home)
+ * go to their tools, which send them on to their screen (F5 A1.1); everyone else goes back.
+ */
+export const signInLanding = (returnPath: string, staff: boolean): string =>
+  staff && returnPath === '/' ? '/admin' : returnPath;
+
 export const verifyEmailLanding = (returnPath: unknown) =>
   withReturnPath('/verify-email', returnPath);
 

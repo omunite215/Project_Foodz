@@ -75,3 +75,36 @@ describe('requirePermission', () => {
     await expect(requirePermission(readOrders)).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
   });
 });
+
+const HOUR = 60 * 60 * 1000;
+const signedInAgo = (role: string, ms: number, isDemo = false) =>
+  getSession.mockResolvedValue({
+    user: {
+      id: '0196a1b2-0000-7000-8000-00000000000a',
+      isDemo,
+      banned: false,
+      role,
+      twoFactorEnabled: true,
+    },
+    session: { createdAt: new Date(Date.now() - ms) },
+  });
+
+describe('the 12-hour staff session (F5 U11)', () => {
+  it('signs staff out 12 hours after sign-in, the demo admin included', async () => {
+    signedInAgo('kitchen', 11 * HOUR);
+    await expect(requirePermission(readOrders)).resolves.toMatchObject({ role: 'kitchen' });
+    signedInAgo('kitchen', 12 * HOUR + 1000);
+    await expect(requirePermission(readOrders)).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    signedInAgo('admin', 12 * HOUR + 1000, true);
+    await expect(requirePermission(readOrders, { write: false })).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+    });
+  });
+
+  it('keeps a customer signed in for days', async () => {
+    signedInAgo('customer', 3 * 24 * HOUR);
+    await expect(requirePermission({ order: ['create'] })).resolves.toMatchObject({
+      role: 'customer',
+    });
+  });
+});

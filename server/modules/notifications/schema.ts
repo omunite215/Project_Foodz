@@ -19,6 +19,18 @@ export const notifyInput = z
     link: internalPath.optional(),
     /** Also send it by email (from a background job, with retries). */
     email: z.boolean().default(false),
+    /**
+     * An order notice (F5 S6.1): which order and step it is about, so the browser can keep it
+     * off that order's page and the orders list.
+     */
+    order: z
+      .object({
+        orderId: z.uuid(),
+        orderNumber: z.string().min(1).max(20),
+        status: z.enum(['accepted', 'ready', 'pickedUp', 'delivered', 'cancelled']),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

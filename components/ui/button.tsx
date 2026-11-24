@@ -37,6 +37,11 @@ const buttonVariants = cva(
           'size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg',
         'icon-lg': 'size-9',
         'icon-touch': 'size-11',
+        // 48 px: the order board and its dialogs, used with wet hands at arm's length (F5 A4.1,
+        // A16.1). Sentence case, never uppercase.
+        kitchen:
+          'h-12 min-w-12 gap-2 px-5 text-button-1 has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4',
+        'icon-kitchen': 'size-12',
       },
     },
     defaultVariants: {

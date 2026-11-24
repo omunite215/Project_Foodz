@@ -24,8 +24,21 @@ export function isStaff(role: Role) {
 /** Everything a signed-in actor can be allowed to do. Deny unless listed. */
 export const statements = {
   ...defaultStatements,
-  order: ['create', 'read-own', 'read-any', 'update-status', 'cancel', 'refund'],
-  menu: ['create', 'update', 'delete'],
+  // F5: `refuse` turns down a New order (the kitchen has no `cancel`, U2); `move-back` and
+  // `hand-over` are ADMIN's overrides (A8.3, A9).
+  order: [
+    'create',
+    'read-own',
+    'read-any',
+    'update-status',
+    'refuse',
+    'move-back',
+    'hand-over',
+    'cancel',
+    'refund',
+  ],
+  // `update-availability` is "86 it" from the board: sold out or back on, nothing else.
+  menu: ['create', 'update', 'delete', 'update-availability'],
   coupon: ['create', 'update', 'delete'],
   campaign: ['create', 'update', 'delete'],
   blog: ['create', 'update', 'publish', 'delete'],
@@ -79,7 +92,8 @@ const partner = ac.newRole({
 
 const kitchen = ac.newRole({
   ...selfService,
-  order: ['read-any', 'update-status'],
+  order: ['read-any', 'update-status', 'refuse'],
+  menu: ['update-availability'],
 });
 
 const support = ac.newRole({
@@ -105,8 +119,9 @@ const admin = ac.newRole({
   ...selfService,
   user: ['create', 'list', 'set-role', 'ban', 'delete', 'set-password', 'get', 'update'],
   session: ['list', 'revoke', 'delete'],
-  order: ['read-any', 'update-status', 'cancel', 'refund'],
-  menu: ['create', 'update', 'delete'],
+  // No `refuse`: ADMIN cancels New orders as a staff cancellation (design D14).
+  order: ['read-any', 'update-status', 'move-back', 'hand-over', 'cancel', 'refund'],
+  menu: ['create', 'update', 'delete', 'update-availability'],
   coupon: ['create', 'update', 'delete'],
   campaign: ['create', 'update', 'delete'],
   blog: ['create', 'update', 'publish', 'delete'],

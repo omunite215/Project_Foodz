@@ -106,13 +106,37 @@ export const STATUS_WORDS: Record<OrderStatusWord, string> = {
   waitingForPayment: 'Waiting for payment',
   placed: 'Placed',
   accepted: 'Accepted',
-  preparing: 'Preparing',
+  preparing: 'Cooking',
   ready: 'Ready',
   pickedUp: 'On its way',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
   expired: 'Expired, not paid',
 };
+
+/** The chip's word, "Collected" included (U23). */
+export const chipWord = (order: Pick<OrderSummary, 'statusWord' | 'collected'>) =>
+  order.statusWord === 'pickedUp' && order.collected ? 'Collected' : STATUS_WORDS[order.statusWord];
+
+/**
+ * Fresh rows for the open list (F5 S7.2 to S7.4): each row held takes its fresh copy in place,
+ * so nothing moves while she reads; a new chip is read out once, politely ("Order 1042:
+ * Cooking."). Rows the fresh copy doesn't have stay as they were.
+ */
+export function freshenRows(
+  held: readonly OrderSummary[],
+  fresh: readonly OrderSummary[],
+): { rows: OrderSummary[]; spoken: string[] } {
+  const byId = new Map(fresh.map((order) => [order.id, order]));
+  const spoken: string[] = [];
+  const rows = held.map((order) => {
+    const next = byId.get(order.id);
+    if (!next) return order;
+    if (chipWord(next) !== chipWord(order)) spoken.push(`Order ${next.number}: ${chipWord(next)}.`);
+    return next;
+  });
+  return { rows, spoken };
+}
 
 export const MONEY_FLAG_WORDS: Record<NonNullable<OrderSummary['moneyFlag']>, string> = {
   refunded: 'Refunded',
@@ -169,7 +193,7 @@ export function orderStateOf(
 export const ORDER_HEADINGS: Record<OrderState, string> = {
   confirming: 'Confirming your payment…',
   placed: 'Order placed',
-  delivered: 'Order delivered',
+  delivered: 'Delivered',
   waiting: 'Waiting for payment',
   failed: "Your payment didn't go through",
   expired: 'Order expired',
@@ -191,7 +215,7 @@ const paidByCard = (view: OrderView) =>
 export function orderLine(view: OrderView, state: OrderState): string | null {
   switch (state) {
     case 'placed':
-      return "We'll let you know when the kitchen starts cooking.";
+      return 'Waiting for the kitchen to accept it. You can cancel until they do.';
     case 'delivered':
       return 'Enjoy your meal.';
     case 'waiting':
@@ -203,6 +227,8 @@ export function orderLine(view: OrderView, state: OrderState): string | null {
     case 'expired':
       return "This order expired because it wasn't paid within 15 minutes. Nothing was charged. Your cart is still here.";
     case 'cancelled':
+      // A store cancellation's card says it all (F5 design 6.3).
+      if (view.cancelReason === 'store') return null;
       return paidByCard(view) ? null : 'Nothing was charged.';
     default:
       return null;
@@ -347,6 +373,10 @@ export function timelineLabel(
 /** The receipt's last line: "Paid · Visa •••• 4242", "Cash on delivery · $53.97 to pay". */
 export function paymentLine(view: OrderView, state: OrderState) {
   if (view.payment.method === 'cash') {
+    if (view.progress.cashCollected) {
+      const text = `Paid in cash · ${formatPrice(view.breakdown.totalCents)}`;
+      return { text, spoken: text };
+    }
     const nothing = state === 'cancelled' || state === 'expired';
     const text = nothing
       ? 'Cash on delivery · nothing to pay'

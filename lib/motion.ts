@@ -1,8 +1,13 @@
 import { useGSAP } from '@gsap/react';
 import { gsap } from 'gsap';
+import { Flip } from 'gsap/Flip';
 import type { RefObject } from 'react';
 
-gsap.registerPlugin(useGSAP);
+// Flip moves board cards between columns (F5 motion table). Flip calls check `reduced`
+// themselves: `withoutMovement` covers tweens, not Flip.
+gsap.registerPlugin(useGSAP, Flip);
+
+export { Flip };
 
 export const MOTION_QUERIES = {
   full: '(prefers-reduced-motion: no-preference)',
@@ -124,4 +129,13 @@ export function prefersReducedMotion(): boolean {
 export function pop(target: Element | null): void {
   if (!target || prefersReducedMotion()) return;
   gsap.fromTo(target, { scale: 1.25 }, { scale: 1, duration: 0.3, ease: 'back.out(2)' });
+}
+
+/**
+ * Plays a Flip from a state captured before the DOM changed (F5: a card moving between
+ * columns, 400 ms). Under reduced motion nothing travels: the layout simply changes.
+ */
+export function flipFrom(state: Flip.FlipState | null, vars: Flip.FromToVars = {}): void {
+  if (!state || prefersReducedMotion()) return;
+  Flip.from(state, { duration: 0.4, ease: 'power2.inOut', absolute: true, ...vars });
 }

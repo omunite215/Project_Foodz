@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
-import { ArrowRight, ShoppingBag } from 'lucide-react';
+import { ArrowRight, EllipsisVertical, ShoppingBag } from 'lucide-react';
 import { expect, fn, within } from 'storybook/test';
 import { Button } from './button';
 
@@ -26,6 +26,8 @@ const meta = {
         'icon',
         'icon-lg',
         'icon-touch',
+        'kitchen',
+        'icon-kitchen',
       ],
     },
   },
@@ -127,4 +129,18 @@ export const Disabled: Story = {
 
 export const AsLink: Story = {
   args: { asChild: true, variant: 'outline', children: <a href="#menu">See the menu</a> },
+};
+
+/** The order board's 48 px buttons (F5 design 0): a primary step and its "More actions". */
+export const Kitchen: Story = {
+  render: (args) => (
+    <div className="flex w-60 items-stretch gap-2">
+      <Button {...args} size="kitchen" className="flex-1 font-semibold">
+        Start cooking
+      </Button>
+      <Button {...args} variant="outline" size="icon-kitchen" aria-label="More actions">
+        <EllipsisVertical className="size-5" aria-hidden />
+      </Button>
+    </div>
+  ),
 };

@@ -1,24 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { announcementQueue, subscribeToAnnouncements } from '@/lib/announce';
+import { createAnnouncementQueue, subscribeToAnnouncements } from '@/lib/announce';
 
-/** The site's one polite live region. Use `announce()` from lib/announce to speak through it. */
+/**
+ * The site's two live regions: one polite, and an assertive twin used only where the design
+ * asks for it. Use `announce()` from lib/announce to speak through them.
+ */
 export function LiveAnnouncer() {
-  const [message, setMessage] = useState('');
+  const [polite, setPolite] = useState('');
+  const [assertive, setAssertive] = useState('');
 
   useEffect(() => {
-    const queue = announcementQueue(setMessage);
-    const unsubscribe = subscribeToAnnouncements((next) => queue.push(next));
+    const politeQueue = createAnnouncementQueue(setPolite);
+    const assertiveQueue = createAnnouncementQueue(setAssertive);
+    const unsubscribe = subscribeToAnnouncements((message, options) => {
+      (options.assertive ? assertiveQueue : politeQueue).push(message);
+    });
     return () => {
-      queue.dispose();
+      politeQueue.stop();
+      assertiveQueue.stop();
       unsubscribe();
     };
   }, []);
 
   return (
-    <output aria-live="polite" aria-atomic="true" className="sr-only">
-      {message}
-    </output>
+    <>
+      <output aria-live="polite" aria-atomic="true" className="sr-only">
+        {polite}
+      </output>
+      <output aria-live="assertive" aria-atomic="true" className="sr-only">
+        {assertive}
+      </output>
+    </>
   );
 }

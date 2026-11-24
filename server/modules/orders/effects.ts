@@ -13,7 +13,10 @@ import { sendEmail } from '@/server/notifications/email';
 import { paymentGateway } from '@/server/payments/stripe';
 import { redis, waitUntilReady } from '@/server/redis';
 import { takeAttempts } from '@/server/security/rate-limit';
+import type { OrderStatus } from '@/server/db/enums';
 import { type OrderEmailKind, orderNotice, renderOrderEmail } from './emails';
+import { publishOrderChange } from './live';
+import { claimOrderNotice, orderNoticeMeta, sendOrderNotice } from './notices';
 import { findOrderEmailRecipient } from './repo';
 import { loadOrderViewAsSystem } from './views';
 
@@ -39,7 +42,11 @@ export type OrderEffect =
   | { kind: 'cancelIntent'; paymentIntentId: string }
   | { kind: 'keepCard'; customerId: string; paymentMethodId: string; fingerprint: string | null }
   | { kind: 'decline'; userId: string; paymentIntentId: string }
-  | { kind: 'expiry'; orderId: string; expiresAt: string };
+  | { kind: 'expiry'; orderId: string; expiresAt: string }
+  /** Realtime: the order's status or payment changed (F5 contract 5). */
+  | { kind: 'publish'; orderId: string; at: string; fromStatus?: OrderStatus | null }
+  /** The customer's On its way or Delivered notice (F5 S6.1), once per order. */
+  | { kind: 'notice'; orderId: string; step: 'picked-up' | 'delivered' };
 
 const networkKey = (paymentIntentId: string) => `payment:network:${paymentIntentId}`;
 
@@ -66,7 +73,9 @@ async function runEffect(effect: OrderEffect) {
   switch (effect.kind) {
     case 'email': {
       const loaded = await loadOrderViewAsSystem(effect.orderId);
-      if (loaded) {
+      const cancelled = effect.email === 'cancelled';
+      // A cancellation notifies once per order, however many times its effect runs.
+      if (loaded && (!cancelled || (await claimOrderNotice(effect.orderId, 'cancelled')))) {
         const notice = orderNotice(effect.email, loaded.view, effect.refundCents);
         await notify({
           userId: loaded.userId,
@@ -74,6 +83,7 @@ async function runEffect(effect: OrderEffect) {
           title: notice.title,
           body: notice.body,
           link: `/orders/${effect.orderId}`,
+          ...(cancelled && { order: orderNoticeMeta(loaded.view, 'cancelled') }),
         });
       }
       await inngest.send(
@@ -123,6 +133,12 @@ async function runEffect(effect: OrderEffect) {
         ),
       );
       return;
+    case 'publish':
+      await publishOrderChange(effect);
+      return;
+    case 'notice':
+      await sendOrderNotice(effect.orderId, effect.step);
+      return;
     default:
       return;
   }
@@ -158,10 +174,11 @@ export async function deliverOrderEmail(input: {
   refundCents?: number;
   at?: string;
 }): Promise<'sent' | 'skipped'> {
-  const [loaded, recipient] = await Promise.all([
-    loadOrderViewAsSystem(input.orderId),
-    runAsSystem('order email', (ctx) => findOrderEmailRecipient(ctx, input.orderId)),
-  ]);
+  // In turn: the view alone reads in two transactions at once.
+  const loaded = await loadOrderViewAsSystem(input.orderId);
+  const recipient = await runAsSystem('order email', (ctx) =>
+    findOrderEmailRecipient(ctx, input.orderId),
+  );
   const user = recipient?.user;
   if (!loaded || !user || user.deletedAt || user.banned) return 'skipped';
   await sendEmail(

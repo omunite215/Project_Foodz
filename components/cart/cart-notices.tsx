@@ -33,7 +33,9 @@ import { orderHref } from '@/lib/order-text';
  */
 
 export type CartNotice =
-  /** F4 S7.6: a card order is waiting for its payment. Shown first. */
+  /** F5 design 8: what "Order again" left out, one sentence each. Shown first. */
+  | { kind: 'leftOut'; lines: readonly string[] }
+  /** F4 S7.6: a card order is waiting for its payment. */
   | { kind: 'unpaid'; orderId: string; number: string }
   /** F4 B16: an order just emptied the cart. */
   | { kind: 'placed'; orderId: string; number: string }
@@ -52,6 +54,8 @@ export const OFFLINE_NOTICE = "You're offline. Your total will update when you'r
 /** The notice's words, as announced once when it first appears. */
 export function noticeText(notice: CartNotice): string {
   switch (notice.kind) {
+    case 'leftOut':
+      return notice.lines.join(' ');
     case 'unpaid':
       return `You have an unpaid order ${notice.number}.`;
     case 'placed':
@@ -78,6 +82,7 @@ const LOOKS: Record<
   CartNoticeKind,
   { variant: 'warning' | 'error' | 'info'; icon: LucideIcon; dismissible: boolean }
 > = {
+  leftOut: { variant: 'info', icon: Info, dismissible: true },
   unpaid: { variant: 'warning', icon: CreditCard, dismissible: false },
   placed: { variant: 'info', icon: CircleCheck, dismissible: true },
   closed: { variant: 'warning', icon: Clock, dismissible: false },
@@ -138,6 +143,15 @@ export function CartNotices({
         const look = LOOKS[notice.kind];
         let body: ReactNode = noticeText(notice);
         if (notice.kind === 'full') body = <FullText notice={notice} />;
+        if (notice.kind === 'leftOut' && notice.lines.length > 1) {
+          body = (
+            <ul className="list-disc space-y-1 pl-5">
+              {notice.lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          );
+        }
         if (notice.kind === 'unpaid' || notice.kind === 'placed') {
           body = (
             <>

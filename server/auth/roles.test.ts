@@ -7,6 +7,12 @@ const MATRIX: [Permission, Role[]][] = [
   [{ order: ['read-any'] }, ['kitchen', 'support', 'admin']],
   [{ order: ['update-status'] }, ['kitchen', 'admin']],
   [{ order: ['refund'] }, ['support', 'admin']],
+  [{ order: ['cancel'] }, ['customer', 'partner', 'support', 'admin']],
+  [{ order: ['refuse'] }, ['kitchen']],
+  [{ order: ['move-back'] }, ['admin']],
+  [{ order: ['hand-over'] }, ['admin']],
+  [{ menu: ['update-availability'] }, ['kitchen', 'admin']],
+  [{ menu: ['update'] }, ['content_editor', 'admin']],
   [{ menu: ['create'] }, ['content_editor', 'admin']],
   [{ menu: ['delete'] }, ['admin']],
   [{ coupon: ['create'] }, ['admin']],
@@ -54,9 +60,16 @@ describe('permission matrix', () => {
     }
   }
 
-  it('never lets kitchen staff refund or manage content', () => {
+  it('never lets kitchen staff refund, cancel or manage content', () => {
     expect(can('kitchen', { order: ['refund'] })).toBe(false);
+    expect(can('kitchen', { order: ['cancel'] })).toBe(false);
     expect(can('kitchen', { content: ['update'] })).toBe(false);
+  });
+
+  it('gives the kitchen nothing on the menu beyond sold out and back on', () => {
+    expect(can('kitchen', { menu: ['update'] })).toBe(false);
+    expect(can('kitchen', { menu: ['create'] })).toBe(false);
+    expect(can('kitchen', { menu: ['delete'] })).toBe(false);
   });
 
   it('does not let support staff publish site content', () => {
