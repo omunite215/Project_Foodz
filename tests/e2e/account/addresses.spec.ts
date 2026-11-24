@@ -2,7 +2,9 @@ import type { Locator, Page } from '@playwright/test';
 import {
   expect,
   expectAccessible,
+  expectHeard,
   expectNoSidewaysScroll,
+  listenToLiveRegion,
   liveRegion,
   open,
   savedDrafts,
@@ -120,12 +122,13 @@ test.describe('Address book (S4)', () => {
 
     await page.getByLabel('Apt, suite or floor (optional)').fill('Apt 3');
     await page.getByLabel('Instructions for the courier (optional)').fill('<b>Buzzer 3</b>');
+    await listenToLiveRegion(page);
     await page.getByRole('button', { name: 'Save address' }).click();
 
     // Back on the list: saved, announced, and that card has focus (S4.8).
     await expect(page).toHaveURL(/\/account\/addresses$/, { timeout: 20_000 });
     await expect(page.getByRole('main').getByText('Address saved')).toBeVisible();
-    await expect(liveRegion(page)).toHaveText('Address saved');
+    await expectHeard(page, 'Address saved');
     const home = page.getByRole('article', { name: 'Home' });
     await expect(home).toBeFocused();
     await expect(home.getByText('Default', { exact: true })).toBeVisible();

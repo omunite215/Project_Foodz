@@ -167,21 +167,43 @@ test.describe('Menu', () => {
   });
 
   test('shows a skeleton with one label while a slow menu loads (S7.3)', async ({ page }) => {
-    await open(page, '/');
-    // Hold back the menu's data (not its prefetch) so the skeleton has time to show.
-    await page.route(/\/menu(\?|$)/, async (route) => {
+    // The link prefetches the menu's loading shell: the route down to loading.tsx, none of the
+    // dishes. The click waits for it, as a customer who has had the page open a moment has it.
+    // On a busy machine the page can hydrate, and the test click, before the prefetch lands, and
+    // a click to a route the router has not seen yet shows nothing until the server answers.
+    // The menu itself is held back until the skeleton has been checked: a slow menu by
+    // construction, not by timing.
+    const menuUrl = /\/menu(\?|$)/;
+    const shellPrefetched = page.waitForResponse(
+      async (response) =>
+        menuUrl.test(response.url()) &&
+        Boolean(response.request().headers()['next-router-prefetch']) &&
+        (await response.text().catch(() => '')).includes('Loading menu'),
+    );
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let heldRequests = 0;
+    await page.route(menuUrl, async (route) => {
       if (route.request().headers()['next-router-prefetch']) return route.continue();
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      heldRequests += 1;
+      await held;
       return route.continue();
     });
+    await open(page, '/');
+    // Only the skeleton is prefetched, so a customer with a warm cache still sees it.
+    expect(await (await shellPrefetched).text()).not.toContain('Bulgogi');
     await page
       .locator('#hero-title')
       .locator('..')
       .getByRole('link', { name: 'Order now' })
       .click();
+    await expect.poll(() => heldRequests).toBeGreaterThan(0);
     const busy = page.locator('main [aria-busy="true"]');
     await expect(busy).toBeVisible();
     await expect(busy.locator('output')).toHaveText('Loading menu');
+    release?.();
     await expect(page.getByRole('heading', { level: 1, name: 'Our menu' })).toBeVisible({
       timeout: 10_000,
     });

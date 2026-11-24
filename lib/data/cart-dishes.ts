@@ -9,6 +9,7 @@ import {
   useLiveQuery,
 } from '@tanstack/react-db';
 import { z } from 'zod';
+import { useHydrated } from '@/lib/use-hydrated';
 
 /*
  * What the cart shows for a dish before the server has answered (F3 S2.10, B8, design D7): its
@@ -169,9 +170,11 @@ export function cartDishActions(client: DbClient) {
 
 export type CartDishActions = ReturnType<typeof cartDishActions>;
 
+/** Empty while the page hydrates, as on the server (see `useCart`). */
 export function useCartDishes(): ReadonlyMap<string, CartDish> {
+  const hydrated = useHydrated();
   const { data } = useLiveQuery({ query: (q) => q.from({ dish: cartDishesCollection }) });
-  return new Map((data ?? []).map((dish) => [dish.id, dish]));
+  return new Map((hydrated ? (data ?? []) : []).map((dish) => [dish.id, dish]));
 }
 
 export function useCartDishActions(): CartDishActions {

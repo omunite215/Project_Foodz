@@ -1,7 +1,9 @@
 import type { Page } from '@playwright/test';
 import {
   expect,
+  expectHeard,
   expectNoSidewaysScroll,
+  listenToLiveRegion,
   liveRegion,
   newPassword,
   open,
@@ -271,7 +273,7 @@ test.describe('Checkout', () => {
     page,
     context,
   }, testInfo) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -351,7 +353,7 @@ test.describe('Checkout', () => {
   });
 
   test('3-D Secure: the bank screen opens and Complete pays (S6.6)', async ({ page }) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -375,7 +377,7 @@ test.describe('Checkout', () => {
   test('a declined card says why, clears the card and keeps every other choice (S6.8, U2)', async ({
     page,
   }) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -525,7 +527,7 @@ test.describe('Checkout', () => {
     page,
     context,
   }) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     const account = await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -619,6 +621,7 @@ test.describe('Checkout', () => {
     await page.getByLabel('Name').fill('Maya Lopez');
     await page.getByLabel('Email').fill(uniqueEmail('maya'));
     await page.getByLabel('Password', { exact: true }).fill(newPassword());
+    await listenToLiveRegion(page);
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/checkout$/, { timeout: 30_000 });
 
@@ -626,11 +629,9 @@ test.describe('Checkout', () => {
     const dialog = page.getByRole('dialog', { name: 'Add an address' });
     await expect(dialog).toBeVisible({ timeout: 20_000 });
     await expect(dialog.getByRole('heading', { name: 'Add an address' })).toBeFocused();
-    // One announcement: what to do, then the delivery check, so neither cuts the other off.
-    await expect(liveRegion(page)).toHaveText(
-      /^Add the apartment and instructions, then save\. We deliver here/,
-      { timeout: 20_000 },
-    );
+    // One announcement: what to do, then the delivery check, so neither cuts the other off. (It
+    // may already have been cleared by the time a slow machine looks, so check what was said.)
+    await expectHeard(page, 'Add the apartment and instructions, then save. We deliver here');
     await expect(dialog.getByRole('combobox', { name: 'Address' })).toHaveValue(/Faneuil Hall/);
     await expect(dialog.locator('#delivery-result')).toHaveText(/^We deliver here/, {
       timeout: 20_000,

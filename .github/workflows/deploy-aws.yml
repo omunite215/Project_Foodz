@@ -1,0 +1,57 @@
+name: Deploy to AWS
+
+# Manual only: nothing deploys on a push or a pull request. The job does nothing until the
+# repository variable AWS_DEPLOY_ROLE_ARN names an IAM role that trusts this repository's
+# GitHub OIDC identity (see "Deploying to AWS" in the README). No long-lived AWS keys are used.
+on:
+  workflow_dispatch:
+    inputs:
+      first_deploy:
+        description: Create the infrastructure and migrate before starting any web task
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Deploy
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          IMAGE_TAG: ${{ github.sha }}
+          FIRST_DEPLOY: ${{ inputs.first_deploy }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          PUSHER_KEY: ${{ vars.PUSHER_KEY }}
+          PUSHER_APP_ID: ${{ vars.PUSHER_APP_ID }}
+          PUSHER_CLUSTER: ${{ vars.PUSHER_CLUSTER }}
+          REALTIME: ${{ vars.REALTIME }}
+          JOBS: ${{ vars.JOBS }}
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          CERTIFICATE_ARN: ${{ vars.CERTIFICATE_ARN }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          STRIPE: ${{ vars.STRIPE }}
+          STRIPE_PUBLISHABLE_KEY: ${{ vars.STRIPE_PUBLISHABLE_KEY }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: bash infra/deploy.sh
