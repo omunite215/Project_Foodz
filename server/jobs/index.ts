@@ -1,6 +1,12 @@
 import 'server-only';
 import type { InngestFunction } from 'inngest';
 import { accountEmail } from './functions/account-email';
+import {
+  dispatchOrder,
+  dispatchWake,
+  expireOfferJob,
+  withdrawOnOffline,
+} from './functions/dispatch';
 import { notificationEmail } from './functions/notification-email';
 import { orderEmail } from './functions/order-email';
 import { orderExpiry } from './functions/order-expiry';
@@ -29,4 +35,8 @@ export const functions: InngestFunction.Any[] = [
   partnerAutoOffline,
   partnerFilesCleanup,
   partnerSessionEndedJob,
+  dispatchOrder,
+  expireOfferJob,
+  dispatchWake,
+  withdrawOnOffline,
 ];

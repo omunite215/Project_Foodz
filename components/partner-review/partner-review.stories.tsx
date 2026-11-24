@@ -127,6 +127,7 @@ function WithVersion({ review, children }: { review: PartnerReview; children: Re
     status: review.status,
     online: review.online?.state.kind === 'online',
     lastChange: null,
+    assignedOrderNumber: null,
   };
   for (const action of ['approve', 'sendBack', 'reject', 'suspend', 'reinstate', 'reopen']) {
     client.setQueryData(['partners', 'version', review.partnerId, action], version);

@@ -336,6 +336,8 @@ export interface PartnerVersion {
   status: PartnerStatus;
   online: boolean;
   lastChange: ApplicationChange | null;
+  /** F7: the order a suspension would take off this partner, for the dialog's line. */
+  assignedOrderNumber: string | null;
 }
 
 export interface ApplicationChange {

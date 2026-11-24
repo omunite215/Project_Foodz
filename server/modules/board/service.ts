@@ -7,6 +7,12 @@ import type { OrderStatus } from '@/server/db/enums';
 import { AppError, forbidden, invalidInput, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
+import {
+  courierHolding,
+  courierLines,
+  courierSection,
+  couriersCount,
+} from '@/server/modules/delivery/service';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import type { OrderEffect } from '@/server/modules/orders/effects';
 import { readyLateMinutes } from '@/server/modules/orders/progress';
@@ -264,11 +270,19 @@ export async function getBoard(actor: UserActor, now = new Date()): Promise<Boar
   return runAs(actor, async (ctx) => {
     const orders = await listOrdersInStatuses(ctx, statuses);
     const { lines, events, soldOut } = await readCards(ctx, viewer, orders, now);
+    const [couriers, count] = await Promise.all([
+      courierLines(viewer, orders, now),
+      couriersCount(),
+    ]);
     const cards = orders.map((order) =>
-      toCard(viewer, order, linesFor(lines, order.id), eventsFor(events, order.id), soldOut, now),
+      Object.assign(
+        toCard(viewer, order, linesFor(lines, order.id), eventsFor(events, order.id), soldOut, now),
+        { courier: couriers.get(order.id) ?? null },
+      ),
     );
     const dishes = await listSoldOutDishes(ctx);
     return {
+      couriers: count,
       asOf: now.toISOString(),
       view: isKitchenView(viewer.role) ? 'kitchen' : 'full',
       columns: statuses.map((status) => COLUMN_OF[status]),
@@ -304,12 +318,16 @@ export async function getBoardCards(
   return runAs(actor, async (ctx) => {
     const orders = await listOrdersByIds(ctx, orderIds);
     const { lines, events, soldOut } = await readCards(ctx, viewer, orders, now);
+    const couriers = await courierLines(viewer, orders, now);
     const cards: BoardCard[] = [];
     const gone: BoardCardsResult['gone'] = [];
     for (const order of orders) {
       const own = eventsFor(events, order.id);
       if (isOnBoardFor(viewer.role, order.status)) {
-        cards.push(toCard(viewer, order, linesFor(lines, order.id), own, soldOut, now));
+        cards.push({
+          ...toCard(viewer, order, linesFor(lines, order.id), own, soldOut, now),
+          courier: couriers.get(order.id) ?? null,
+        });
       } else {
         const left = goneOf(viewer, order, own);
         if (left) gone.push(left);
@@ -344,7 +362,16 @@ export async function getStaffOrderDetail(
   const found = await readOrder(actor, parsed.data.orderId);
   if (!found) return null;
   const fresh = viewer.isDemo ? null : await stepUpFreshUntilFor(actor, now);
-  return toDetail(viewer, found.order, found.lines, found.events, found.soldOut, fresh, now);
+  const detail = toDetail(
+    viewer,
+    found.order,
+    found.lines,
+    found.events,
+    found.soldOut,
+    fresh,
+    now,
+  );
+  return { ...detail, courierSection: await courierSection(viewer, found.order, now) };
 }
 
 /** The refuse and cancel dialogs' opening data, shaped by role (design 3.2, 3.3). */
@@ -976,6 +1003,10 @@ async function handOver(
   const { orderId, expectedVersion, reason, note } = input;
   const from: OrderStatus = mode === 'pickUp' ? 'READY' : 'PICKED_UP';
   const to: OrderStatus = mode === 'pickUp' ? 'PICKED_UP' : 'DELIVERED';
+  // F7: "Picked up by the assigned courier" only when a courier holds the order.
+  if (mode === 'pickUp' && reason === 'assigned-courier' && !(await courierHolding(orderId))) {
+    throw invalidInput(BOARD_FIELD_ERRORS.noCourier, { reason: [BOARD_FIELD_ERRORS.noCourier] });
+  }
 
   const outcome = await runAs(actor, async (ctx) => {
     const { order, events } = await loadLocked(ctx, orderId);
@@ -1017,7 +1048,19 @@ async function handOver(
           ? { number: order.number, reason }
           : { number: order.number, reason, cashCollectedCents },
     });
-    const effects: BoardEffect[] = [{ kind: 'order', effect: published(orderId, now, from) }];
+    const effects: BoardEffect[] = [
+      { kind: 'order', effect: published(orderId, now, from) },
+      {
+        kind: 'dispatch',
+        orderId,
+        change:
+          mode === 'deliver'
+            ? 'delivered'
+            : reason === 'assigned-courier'
+              ? 'picked-up-by-courier'
+              : 'handed-over',
+      },
+    ];
     // U23: no "On its way" notice when the customer collected it herself.
     if (mode === 'deliver' || reason !== 'customer-collected') {
       effects.push({

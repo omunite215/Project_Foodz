@@ -1,4 +1,12 @@
-import type { DeliveryPool, DispatchTimings, OfferEnding, OfferKind } from './schema';
+import type { DeliveryStatus } from '@/server/db/enums';
+import type {
+  CourierState,
+  CustomerDispatchView,
+  DeliveryPool,
+  DispatchTimings,
+  OfferEnding,
+  OfferKind,
+} from './schema';
 import {
   DISPATCH_DEFAULTS,
   MISS_LIMIT,
@@ -288,4 +296,79 @@ export function countersAfter(
     warn: missedInRow === MISS_WARNING_AT,
     takeOffline: missedInRow >= MISS_LIMIT,
   };
+}
+
+// ------------------------------------------------------------------ what people see (A34.1, S1 to S4)
+
+/** P30.6, A34.1: an assigned courier's line turns amber after this long without a point. */
+export const STALE_ASSIGNED_MINUTES = 10;
+
+export interface CourierLineInput {
+  orderStatus: string;
+  readyAt: string | null;
+  delivery: {
+    status: DeliveryStatus;
+    searchStartedAt: string | null;
+    escalatedAt: string | null;
+    searchStoppedAt: string | null;
+  } | null;
+  openOfferKind: OfferKind | null;
+  anyoneOnline: boolean;
+  /** The holder's last point, for an assigned order. */
+  lastPointAt: string | null;
+}
+
+const minutesSince = (iso: string | null, now: Date) =>
+  iso === null ? Number.POSITIVE_INFINITY : (now.getTime() - Date.parse(iso)) / 60_000;
+
+/**
+ * A34.1's nine states for a Ready card, and the carrying courier on an Out-for-delivery card.
+ * Null where there is no courier line. "Starting" covers the run's start delay after Mark ready.
+ */
+export function courierStateOf(
+  facts: CourierLineInput,
+  now: Date,
+  startDelaySeconds: number = DISPATCH_DEFAULTS.startDelaySeconds,
+): CourierState | null {
+  const held = (): CourierState =>
+    minutesSince(facts.lastPointAt, now) >= STALE_ASSIGNED_MINUTES ? 'assignedStale' : 'assigned';
+  const delivery = facts.delivery;
+  if (facts.orderStatus === 'PICKED_UP') return delivery?.status === 'PICKED_UP' ? held() : null;
+  if (facts.orderStatus !== 'READY') return null;
+  const justReady =
+    facts.readyAt !== null &&
+    now.getTime() - Date.parse(facts.readyAt) < (startDelaySeconds + 10) * 1000;
+  if (!delivery || delivery.status === 'CANCELLED' || delivery.status === 'DELIVERED') {
+    return justReady ? 'starting' : 'notLooking';
+  }
+  if (delivery.status !== 'SEARCHING') return held();
+  if (delivery.searchStoppedAt) return 'notLooking';
+  if (facts.openOfferKind === 'staff') return 'staffOffered';
+  if (facts.openOfferKind === 'auto') return 'offered';
+  if (delivery.escalatedAt) return facts.anyoneOnline ? 'escalated' : 'nobodyOnline';
+  if (!delivery.searchStartedAt) return justReady ? 'starting' : 'notLooking';
+  return 'between';
+}
+
+/** F7 S1 to S4: the customer's state; never who was asked or what staff did (S5.4). */
+export function customerStateOf(facts: {
+  orderStatus: string;
+  delivery: {
+    status: DeliveryStatus;
+    escalatedAt: string | null;
+    searchStoppedAt: string | null;
+  } | null;
+}): CustomerDispatchView['state'] {
+  const status = facts.delivery?.status ?? null;
+  switch (facts.orderStatus) {
+    case 'READY':
+      if (status === 'ASSIGNED' || status === 'AT_RESTAURANT') return 'assigned';
+      return facts.delivery?.escalatedAt || facts.delivery?.searchStoppedAt ? 'slow' : 'searching';
+    case 'PICKED_UP':
+      return status === 'PICKED_UP' ? 'pickedUp' : 'none';
+    case 'DELIVERED':
+      return status === 'DELIVERED' ? 'delivered' : 'none';
+    default:
+      return 'none';
+  }
 }

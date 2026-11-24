@@ -2,6 +2,7 @@ import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 import { clientIpOptInRefused, clientIpWarning } from './client-ip';
 import { hashKeyDistinct } from './security/key-checks';
+import { dispatchOverridesRefused } from './modules/delivery/rules';
 
 const bool = z
   .enum(['true', 'false', '1', '0'])
@@ -100,6 +101,9 @@ if (!hashKeyDistinct(process.env)) {
 }
 if (clientIpOptInRefused(process.env)) {
   throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused on Vercel production.');
+}
+if (dispatchOverridesRefused(process.env)) {
+  throw new Error('DISPATCH_* timing overrides are for local runs and CI only.');
 }
 const ipWarning = clientIpWarning(process.env);
 if (ipWarning) console.warn(ipWarning);

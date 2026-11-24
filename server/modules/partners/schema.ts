@@ -1,3 +1,4 @@
+import type { PartnerDispatchState } from '@/server/modules/delivery/schema';
 import { z } from 'zod';
 import { DEFAULT_PHONE_COUNTRY, parsePhone } from '@/lib/phone';
 import type { VehicleType } from '@/server/db/enums';
@@ -353,6 +354,8 @@ export type PartnerState =
       kitchen: PartnerKitchen;
       /** The demo partner's pretend position (B12); null for everyone else. */
       demoPoint: { lat: number; lng: number } | null;
+      /** F7: offers, the order held and a missed release notice (design "[BE] needs"). */
+      dispatch: PartnerDispatchState;
     }
   /** P14.3: no data beyond the date and the reason. */
   | { screen: 'suspended'; since: string; reason: string | null };

@@ -28,7 +28,8 @@ export const KITCHEN_CLOSED_OFFLINE_AFTER_MS = 60 * 60_000;
 /** B7, P15.2: the Redis point expires on its own after this many seconds. */
 export const LOCATION_TTL_SECONDS = 600;
 /** B7: `last_location` and `last_seen_at` are written at most this often. */
-export const LAST_LOCATION_WRITE_MS = 60_000;
+/** F7 B12: dispatch ranks from PostGIS, so the point is written often enough for 45 s freshness. */
+export const LAST_LOCATION_WRITE_MS = 15_000;
 /** P10.1: "At the kitchen" within this distance. */
 export const AT_KITCHEN_M = 100;
 /** B12: where the demo partner is placed; real points from demo accounts are refused. */

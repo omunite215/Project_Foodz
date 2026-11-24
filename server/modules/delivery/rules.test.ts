@@ -5,6 +5,9 @@ import {
   type CandidateFacts,
   compareCandidates,
   countersAfter,
+  type CourierLineInput,
+  courierStateOf,
+  customerStateOf,
   dispatchOverridesRefused,
   dispatchTimings,
   notOfferable,
@@ -253,5 +256,72 @@ describe('test timings (B13, W14.1)', () => {
     expect(
       dispatchOverridesRefused({ NODE_ENV: 'production', CI: 'true', DISPATCH_OFFER_SECONDS: '5' }),
     ).toBe(false);
+  });
+});
+
+describe('the staff courier line state (A34.1)', () => {
+  const searching = {
+    status: 'SEARCHING' as const,
+    searchStartedAt: ago(60),
+    escalatedAt: null,
+    searchStoppedAt: null,
+  };
+  const base: CourierLineInput = {
+    orderStatus: 'READY',
+    readyAt: ago(72),
+    delivery: searching,
+    openOfferKind: null,
+    anyoneOnline: true,
+    lastPointAt: ago(20),
+  };
+
+  it.each([
+    [{ delivery: null, readyAt: ago(5) }, 'starting'],
+    [{ delivery: null }, 'notLooking'],
+    [{ openOfferKind: 'auto' as const }, 'offered'],
+    [{ openOfferKind: 'staff' as const }, 'staffOffered'],
+    [{}, 'between'],
+    [{ delivery: { ...searching, escalatedAt: ago(1) } }, 'escalated'],
+    [{ delivery: { ...searching, escalatedAt: ago(1) }, anyoneOnline: false }, 'nobodyOnline'],
+    [{ delivery: { ...searching, searchStoppedAt: ago(1) } }, 'notLooking'],
+    [{ delivery: { ...searching, status: 'ASSIGNED' as const } }, 'assigned'],
+    [
+      { delivery: { ...searching, status: 'ASSIGNED' as const }, lastPointAt: ago(601) },
+      'assignedStale',
+    ],
+  ])('reads %j as %s', (change, state) => {
+    expect(courierStateOf({ ...base, ...change }, now)).toBe(state);
+  });
+
+  it('shows the carrying courier out for delivery, and nothing on other columns', () => {
+    const out = {
+      ...base,
+      orderStatus: 'PICKED_UP',
+      delivery: { ...searching, status: 'PICKED_UP' as const },
+    };
+    expect(courierStateOf(out, now)).toBe('assigned');
+    expect(courierStateOf({ ...out, delivery: null }, now)).toBeNull();
+    expect(courierStateOf({ ...base, orderStatus: 'PREPARING' }, now)).toBeNull();
+  });
+});
+
+describe("the customer's courier state (S1 to S4)", () => {
+  const delivery = { status: 'SEARCHING' as const, escalatedAt: null, searchStoppedAt: null };
+  it('says searching, then slow after escalation, then who is coming', () => {
+    expect(customerStateOf({ orderStatus: 'READY', delivery: null })).toBe('searching');
+    expect(customerStateOf({ orderStatus: 'READY', delivery })).toBe('searching');
+    expect(
+      customerStateOf({ orderStatus: 'READY', delivery: { ...delivery, escalatedAt: ago(1) } }),
+    ).toBe('slow');
+    expect(
+      customerStateOf({ orderStatus: 'READY', delivery: { ...delivery, status: 'ASSIGNED' } }),
+    ).toBe('assigned');
+    expect(
+      customerStateOf({ orderStatus: 'PICKED_UP', delivery: { ...delivery, status: 'PICKED_UP' } }),
+    ).toBe('pickedUp');
+    expect(
+      customerStateOf({ orderStatus: 'PICKED_UP', delivery: { ...delivery, status: 'CANCELLED' } }),
+    ).toBe('none');
+    expect(customerStateOf({ orderStatus: 'PREPARING', delivery })).toBe('none');
   });
 });

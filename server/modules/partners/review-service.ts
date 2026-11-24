@@ -9,6 +9,7 @@ import type { PartnerStatus } from '@/server/db/enums';
 import { AppError, forbidden } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
+import { activeDeliveryOf, partnerLeaving } from '@/server/modules/delivery/service';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import { passStepUp, stepUpFreshUntilFor, stepUpRequired } from '@/server/modules/staff/service';
 import { objectSize, presignDownload } from '@/server/storage/s3';
@@ -610,6 +611,7 @@ export async function getPartnerVersion(actor: UserActor, input: unknown): Promi
     status: found.row.status,
     online: found.row.isOnline,
     lastChange: lastChangeOf(found.history, 0),
+    assignedOrderNumber: (await activeDeliveryOf(partnerId))?.orderNumber ?? null,
   };
 }
 
@@ -1001,6 +1003,8 @@ async function decide(
   await runPartnerEffects(
     effectsOf(decision, outcome.row, outcome.eventId, outcome.wasOnline, now),
   );
+  // A25 (F7): an open offer is withdrawn and an order held before pickup goes back to dispatch.
+  if (decision === 'suspend') await partnerLeaving(outcome.row.id, 'suspended');
   await alerts(decision, actor);
   return {
     partnerId: outcome.row.id,

@@ -21,6 +21,22 @@ export interface RouteContext {
   /** The caller's session: the one that goes online owns the location (B9). */
   sessionId: string | null;
   body: unknown;
+  /** The dynamic segments of the route (`[offerId]`), checked by the handler's own schema. */
+  params: Record<string, string>;
+}
+
+/** What Next passes a route handler as its second argument (params is a promise in Next 16). */
+interface HandlerContext {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+}
+
+async function readParams(context: HandlerContext | undefined): Promise<Record<string, string>> {
+  const raw = (await context?.params) ?? {};
+  return Object.fromEntries(
+    Object.entries(raw).flatMap(([key, value]) =>
+      typeof value === 'string' ? [[key, value]] : [],
+    ),
+  );
 }
 
 const NO_STORE = { 'cache-control': 'no-store' } as const;
@@ -78,7 +94,7 @@ export function partnerRoute<T>(options: {
   rateLimit: RateLimitPolicy;
   handler: (context: RouteContext) => Promise<T>;
 }) {
-  return async function handle(request: Request): Promise<Response> {
+  return async function handle(request: Request, context?: HandlerContext): Promise<Response> {
     const started = performance.now();
     try {
       if (request.method !== 'GET' && !isSameOrigin(request)) throw forbidden();
@@ -92,6 +108,7 @@ export function partnerRoute<T>(options: {
         actor,
         sessionId: session && session.user.id === actor.userId ? session.session.id : null,
         body,
+        params: await readParams(context),
       });
       return Response.json(result, { headers: NO_STORE });
     } catch (error) {

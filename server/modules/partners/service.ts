@@ -10,6 +10,12 @@ import { AppError, forbidden, invalidInput, notFound } from '@/server/errors';
 import { logger } from '@/server/logger';
 import type { PartnerExport } from '@/server/modules/account/schema';
 import { audit } from '@/server/modules/audit/service';
+import {
+  activeDeliveryOf,
+  giveBackCurrent,
+  partnerDispatchState,
+  partnerLeaving,
+} from '@/server/modules/delivery/service';
 import { lastClosing } from '@/server/modules/menu/hours';
 import type { OpeningHours } from '@/server/modules/menu/schema';
 import { getStoreStatus } from '@/server/modules/menu/service';
@@ -355,6 +361,7 @@ export async function getMyPartnerState(
     lastOffline,
     kitchen,
     demoPoint: actor.isDemo ? DEMO_POINT : null,
+    dispatch: await partnerDispatchState(row.id, now),
   };
 }
 
@@ -771,6 +778,20 @@ export async function setAvailability(
   const changeId = uuidv7();
 
   if (!body.online) {
+    // P30.4, U15: going offline while holding an order needs "Give back and go offline"; the
+    // page-close request never sends it, so a reload never gives an order away (P29.5).
+    const held = row.isDemo ? null : await activeDeliveryOf(row.id);
+    if (held) {
+      if (!body.giveBack || held.status === 'PICKED_UP') {
+        throw refuse(
+          'PARTNER_BUSY',
+          `You're on order ${held.orderNumber}. Give it back or finish it before going offline.`,
+          409,
+          { orderNumber: held.orderNumber },
+        );
+      }
+      await giveBackCurrent(actor, row.id);
+    }
     await takePartnerOffline(row.id, row.isDemo ? 'demo-other-visitor' : 'self', { now, changeId });
     return {
       availability: {
@@ -969,6 +990,8 @@ export async function takePartnerOffline(
   options: { now?: Date; changeId?: string } = {},
 ): Promise<{ changed: boolean; at: string }> {
   const now = options.now ?? new Date();
+  // W7.1: an open offer goes first, so the run asks the next partner at once.
+  await partnerLeaving(partnerId, 'offline');
   const changed = await runAsSystem('partner offline', (ctx) =>
     goOffline(ctx, partnerId, reason, now),
   );
@@ -1011,6 +1034,9 @@ export async function sweepIdlePartners(
   const closedAt = closed?.at ?? null;
 
   const sweepOne = async (partner: (typeof online)[number]) => {
+    // W7.3: a partner holding an order is never taken offline automatically; the staff line
+    // turns amber after 10 minutes without a point instead.
+    if (partner.holdsOrder) return null;
     let lastPointAt = points.get(partner.id)?.acceptedAt ?? null;
     if (partner.isDemo) {
       // The demo partner's pretend point never goes stale (B12).
@@ -1045,6 +1071,24 @@ export async function sweepIdlePartners(
     noLocation: reasons.filter((reason) => reason === 'no-location').length,
     kitchenClosed: reasons.filter((reason) => reason === 'kitchen-closed').length,
   };
+}
+
+/** P25: the third missed offer in a row takes the partner offline, with a notice (no email). */
+export async function takeOfflineForMissedOffers(partnerId: string, now = new Date()) {
+  const { changed } = await takePartnerOffline(partnerId, 'missed-offers', { now });
+  if (!changed) return { changed };
+  const row = await runAsSystem('missed offers', (ctx) => findPartnerById(ctx, partnerId));
+  const { timeZone } = await storeFacts(now);
+  if (row) {
+    await runPartnerEffects([
+      {
+        kind: 'notify',
+        userId: row.userId,
+        notice: offlineNoticeText('missed-offers', clockAt(now, timeZone)),
+      },
+    ]);
+  }
+  return { changed };
 }
 
 /** P7.8, P15.6: the daily job (rejected after the reapply date; unsent uploads after 24 h). */
@@ -1088,6 +1132,12 @@ export async function deleteExpiredPartnerFiles(
 export async function assertPartnerErasable(actor: UserActor) {
   const row = await runAs(actor, (ctx) => findOnlineState(ctx, actor.userId));
   if (row?.isOnline) throw refuse('PARTNER_ONLINE', 'Go offline first.', 409);
+  const held = row ? await activeDeliveryOf(row.id) : null;
+  if (held) {
+    throw refuse('PARTNER_BUSY', 'Finish or give back your order first.', 409, {
+      orderNumber: held.orderNumber,
+    });
+  }
 }
 
 /** After an account deletion: the partner's files go (objects and rows). */

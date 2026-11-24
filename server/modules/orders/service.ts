@@ -12,6 +12,7 @@ import {
   unavailable,
 } from '@/server/errors';
 import { logger } from '@/server/logger';
+import { getCustomerDispatch } from '@/server/modules/delivery/service';
 import { getAddress, getAddressBook } from '@/server/modules/addresses/service';
 import { ADDRESS_LIMIT } from '@/server/modules/addresses/schema';
 import { PHONE_ERROR } from '@/server/modules/account/schema';
@@ -739,7 +740,10 @@ export async function getOrderView(
     runAs(actor, (ctx) => findOrderView(ctx, parsed.data.orderId, actor.userId)),
     storeFacts(),
   ]);
-  return row ? toOrderView(row, store, now) : null;
+  if (!row) return null;
+  const view = toOrderView(row, store, now);
+  const dispatch = await getCustomerDispatch(actor, parsed.data.orderId);
+  return dispatch ? { ...view, progress: { ...view.progress, dispatch } } : view;
 }
 
 async function requireOwnView(actor: UserActor, orderId: string, now: Date) {

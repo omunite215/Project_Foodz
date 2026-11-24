@@ -52,22 +52,32 @@ export const PARTNER_NOTICES = {
   },
 } as const satisfies Record<string, NoticeText>;
 
-/** B8: the automatic offline notices (no email). `time` is "6:42 pm" in store time. */
+/** B8 and F7 P25: the automatic offline notices (no email). `time` is "6:42 pm" in store time. */
 export const offlineNoticeText = (
-  reason: 'no-location' | 'kitchen-closed',
+  reason: 'no-location' | 'kitchen-closed' | 'missed-offers',
   time: string,
-): NoticeText =>
-  reason === 'no-location'
-    ? {
+): NoticeText => {
+  switch (reason) {
+    case 'no-location':
+      return {
         type: 'partner.offline-no-location',
         title: 'You went offline',
         body: `We took you offline at ${time} because we hadn't had your location for 10 minutes.`,
-      }
-    : {
+      };
+    case 'missed-offers':
+      return {
+        type: 'partner.offline-missed-offers',
+        title: 'You went offline',
+        body: "We took you offline because you missed 3 offers in a row. Go online when you're ready for orders.",
+      };
+    default:
+      return {
         type: 'partner.offline-kitchen-closed',
         title: 'You went offline',
         body: `Foodz Kitchen closed at ${time}, so we took you offline.`,
       };
+  }
+};
 
 // ------------------------------------------------------------------ emails
 

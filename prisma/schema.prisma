@@ -456,6 +456,15 @@ model DeliveryPartner {
   partnerTermsAcceptedAt DateTime?                              @map("partner_terms_accepted_at")
   adultConfirmedAt       DateTime?                              @map("adult_confirmed_at")
   welcomedAt             DateTime?                              @map("welcomed_at")
+  /// F7: the dispatch line (W3) and its counters (P25, W7.4), kept by the database.
+  waitingSince           DateTime?                              @map("waiting_since")
+  lastPointAt            DateTime?                              @map("last_point_at")
+  missedInRow            Int                                    @default(0) @map("missed_in_row")
+  unseenInRow            Int                                    @default(0) @map("unseen_in_row")
+  /// P31: the last order taken from this partner by someone else, for a notice he missed.
+  releasedKind           String?                                @map("released_kind")
+  releasedOrderNumber    String?                                @map("released_order_number")
+  releasedAt             DateTime?                              @map("released_at")
   version                Int                                    @default(0)
   plateKey               String?                                @default(dbgenerated("upper(regexp_replace(vehicle_plate, '[[:space:]-]'::text, ''::text, 'g'::text))")) @map("plate_key")
   createdAt              DateTime                               @default(now()) @map("created_at")
@@ -506,28 +515,43 @@ enum DeliveryStatus {
 }
 
 model Delivery {
-  id               String             @id @default(uuid(7)) @db.Uuid
-  orderId          String             @unique @map("order_id") @db.Uuid
-  partnerId        String?            @map("partner_id") @db.Uuid
-  status           DeliveryStatus     @default(SEARCHING)
-  otpHash          String             @map("otp_hash")
-  otpAttempts      Int                @default(0) @map("otp_attempts")
-  routeGeoJson     Json?              @map("route_geojson")
-  routeDistanceM   Int?               @map("route_distance_m")
-  routeDurationSec Int?               @map("route_duration_sec")
-  etaAt            DateTime?          @map("eta_at")
-  partnerFeeCents  Int                @default(0) @map("partner_fee_cents")
-  assignedAt       DateTime?          @map("assigned_at")
-  pickedUpAt       DateTime?          @map("picked_up_at")
-  deliveredAt      DateTime?          @map("delivered_at")
-  version          Int                @default(0)
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
-  order            Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  partner          DeliveryPartner?   @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-  offers           DeliveryOffer[]
-  locations        DeliveryLocation[]
-  earnings         PartnerEarning[]
+  id                     String             @id @default(uuid(7)) @db.Uuid
+  orderId                String             @unique @map("order_id") @db.Uuid
+  partnerId              String?            @map("partner_id") @db.Uuid
+  status                 DeliveryStatus     @default(SEARCHING)
+  otpHash                String?            @map("otp_hash")
+  otpAttempts            Int                @default(0) @map("otp_attempts")
+  routeGeoJson           Json?              @map("route_geojson")
+  routeDistanceM         Int?               @map("route_distance_m")
+  routeDurationSec       Int?               @map("route_duration_sec")
+  etaAt                  DateTime?          @map("eta_at")
+  partnerFeeCents        Int                @default(0) @map("partner_fee_cents")
+  assignedAt             DateTime?          @map("assigned_at")
+  pickedUpAt             DateTime?          @map("picked_up_at")
+  deliveredAt            DateTime?          @map("delivered_at")
+  /// F7 (B2): the search for a courier. Partial unique indexes and the guard trigger live in
+  /// the migration.
+  readyAt                DateTime?          @map("ready_at")
+  readyEventId           String?            @map("ready_event_id") @db.Uuid
+  searchStartedAt        DateTime?          @map("search_started_at")
+  searchRestartedAt      DateTime?          @map("search_restarted_at")
+  escalatedAt            DateTime?          @map("escalated_at")
+  searchStoppedAt        DateTime?          @map("search_stopped_at")
+  searchStopReason       String?            @map("search_stop_reason")
+  pool                   String             @default("REAL")
+  tipCents               Int                @default(0) @map("tip_cents")
+  excludedPartnerIds     String[]           @default([]) @map("excluded_partner_ids") @db.Uuid
+  partnerWaitingSince    DateTime?          @map("partner_waiting_since")
+  readyToAssignedSeconds Int?               @map("ready_to_assigned_seconds")
+  courierChanged         Boolean            @default(false) @map("courier_changed")
+  version                Int                @default(0)
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+  order                  Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  partner                DeliveryPartner?   @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  offers                 DeliveryOffer[]
+  locations              DeliveryLocation[]
+  earnings               PartnerEarning[]
 
   @@index([partnerId, status])
   @@map("deliveries")
@@ -538,6 +562,7 @@ enum OfferStatus {
   ACCEPTED
   DECLINED
   EXPIRED
+  WITHDRAWN
 }
 
 model DeliveryOffer {
@@ -547,12 +572,23 @@ model DeliveryOffer {
   status      OfferStatus     @default(PENDING)
   expiresAt   DateTime        @map("expires_at")
   respondedAt DateTime?       @map("responded_at")
+  /// F7: auto (the run) or staff (`offeredBy`); pay frozen when made (U12).
+  kind        String          @default("auto")
+  offeredBy   String?         @map("offered_by") @db.Uuid
+  round       Int             @default(1)
+  reachKm     Int?            @map("reach_km")
+  pickupM     Int             @default(0) @map("pickup_m")
+  payCents    Int             @default(0) @map("pay_cents")
+  tipCents    Int             @default(0) @map("tip_cents")
+  seenAt      DateTime?       @map("seen_at")
+  pressedAt   DateTime?       @map("pressed_at")
+  endedReason String?         @map("ended_reason")
   createdAt   DateTime        @default(now()) @map("created_at")
   delivery    Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
   partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
-  @@unique([deliveryId, partnerId])
   @@index([partnerId, status])
+  @@index([deliveryId, createdAt])
   @@map("delivery_offers")
 }
 

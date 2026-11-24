@@ -182,9 +182,9 @@ describe('the idle screen and storage pacing (P10.1, B7)', () => {
     expect(kitchenDistance(R2, KITCHEN).km).toBe(0.5);
   });
 
-  it('writes last_location at most once a minute', () => {
+  it('writes last_location at most every 15 seconds, so dispatch sees a fresh point (F7 B12)', () => {
     expect(lastLocationWriteDue(null, now(0))).toBe(true);
-    expect(lastLocationWriteDue(at(0), now(59))).toBe(false);
-    expect(lastLocationWriteDue(at(0), now(60))).toBe(true);
+    expect(lastLocationWriteDue(at(0), now(14))).toBe(false);
+    expect(lastLocationWriteDue(at(0), now(15))).toBe(true);
   });
 });
