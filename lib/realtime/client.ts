@@ -28,8 +28,10 @@ function getClient() {
     ...(host
       ? { wsHost: host, wsPort: port, wssPort: port, forceTLS: useTLS }
       : { forceTLS: true }),
-    // WebSockets only: no fallback transports or stats calls to hosts the CSP does not allow.
-    enabledTransports: ['ws', 'wss'],
+    // WebSockets only, on the one scheme the CSP allows: a plain local Soketi never falls back
+    // to wss:// (which the browser would refuse), and TLS never falls back to ws://. No stats
+    // calls either.
+    enabledTransports: host && !useTLS ? ['ws'] : ['wss'],
     disableStats: true,
     channelAuthorization: { endpoint: '/api/realtime/auth', transport: 'ajax' },
   });

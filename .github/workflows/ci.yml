@@ -117,3 +117,26 @@ jobs:
           rules_file_name: .zap/rules.tsv
       - if: always()
         run: docker compose --profile app logs app --tail 200
+
+  infra:
+    name: Infrastructure (CDK synth and cdk-nag)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      # No AWS credentials and no account lookups. cdk-nag (AwsSolutions) runs during synth, and
+      # a finding that is not acknowledged with a written reason fails the step.
+      - name: Synthesize with cdk-nag
+        run: npx cdk synth --quiet -c pusherKey=ci -c turnstileSiteKey=ci
+      - run: npm audit --omit=dev --audit-level=high

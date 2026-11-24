@@ -7,8 +7,10 @@ import {
   carryEmail,
   endSessionElsewhere,
   expect,
+  expectHeard,
   expectNoSidewaysScroll,
   isPhone,
+  listenToLiveRegion,
   liveRegion,
   newPassword,
   open,
@@ -216,13 +218,14 @@ test.describe('A session that ends while a form is open (S2.12, S5.8)', () => {
 
     await page.getByLabel('Email').fill(account.email);
     await page.getByLabel('Password', { exact: true }).fill(account.password);
+    await listenToLiveRegion(page);
     await page.getByRole('button', { name: 'Sign in' }).click();
 
     // Back on the form, with what was typed.
     await expect(page).toHaveURL(/\/account$/, { timeout: 30_000 });
     await expect(profile.getByLabel('Name')).toHaveValue('Maya Draft Name');
     await expect(phone).toHaveValue('(617) 555-0142');
-    await expect(liveRegion(page)).toHaveText(DRAFT_RESTORED);
+    await expectHeard(page, DRAFT_RESTORED);
     // Given back once, then gone.
     expect(await savedDrafts(page)).toEqual([]);
     await profile.getByRole('button', { name: 'Save changes' }).click();

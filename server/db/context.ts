@@ -35,7 +35,10 @@ export async function runAs<T>(
       bind(ctx, tx);
       return work(ctx);
     },
-    { isolationLevel: options.isolationLevel, timeout: options.timeoutMs ?? 10_000 },
+    {
+      isolationLevel: options.isolationLevel,
+      timeout: options.timeoutMs ?? 10_000,
+    },
   );
 }
 

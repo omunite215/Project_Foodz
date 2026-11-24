@@ -13,12 +13,17 @@ export const env = createEnv({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
     DATABASE_URL: z.url(),
-    REDIS_URL: z.url(),
+    // Connections each server process may hold. Size it so tasks × this stays under the database's
+    // max_connections (RDS sets that from the instance size).
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    // redis:// locally, rediss:// (TLS) for ElastiCache.
+    REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 
-    S3_ENDPOINT: z.url(),
+    // Local RustFS sets the endpoint and keys; on AWS leave all three unset (task role, AWS endpoint).
+    S3_ENDPOINT: z.url().optional(),
     S3_REGION: z.string().default('auto'),
-    S3_ACCESS_KEY_ID: z.string().min(1),
-    S3_SECRET_ACCESS_KEY: z.string().min(1),
+    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+    S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     S3_PUBLIC_BUCKET: z.string().min(1),
     S3_PRIVATE_BUCKET: z.string().min(1),
     S3_PUBLIC_URL: z.url(),

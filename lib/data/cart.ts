@@ -13,6 +13,7 @@ import { useEffect, useRef } from 'react';
 import { z } from 'zod';
 import { forgetCheckout } from '@/lib/checkout-storage';
 import { clearPendingFavorite, clearPendingPromo } from '@/lib/sign-in-reason';
+import { useHydrated } from '@/lib/use-hydrated';
 import { type CartDishActions, useCartDishActions } from './cart-dishes';
 import { setCheckedAddress } from './checked-address';
 
@@ -388,20 +389,30 @@ export type CartActions = ReturnType<typeof cartActions>;
 export const sortLines = (lines: readonly CartLine[]) =>
   lines.toSorted((a, b) => a.addedAt - b.addedAt || a.id.localeCompare(b.id));
 
+/*
+ * The server draws the page without the browser's cart, so while the page hydrates these hooks
+ * give what the server had (no lines, not ready, no code) even when the saved cart has already
+ * loaded, as it has when hydration is retried. React keeps the server's attributes where a
+ * hydrating render differs, so the header would go on saying "Cart" with no count. Once
+ * hydrated, the cart shows; on later pages it shows on the first render.
+ */
+
 export function useCart() {
+  const hydrated = useHydrated();
   const { data, isReady } = useLiveQuery({ query: (q) => q.from({ line: cartCollection }) });
-  const lines: CartLine[] = sortLines(data ?? []);
+  const lines: CartLine[] = hydrated ? sortLines(data ?? []) : [];
   return {
     lines,
     itemCount: itemsIn(lines),
-    isReady,
+    isReady: hydrated && isReady,
   };
 }
 
 /** The cart's code and chosen address. */
 export function useCartMeta(): Omit<CartMeta, 'id'> {
+  const hydrated = useHydrated();
   const { data } = useLiveQuery({ query: (q) => q.from({ meta: cartMetaCollection }) });
-  const row = data?.[0];
+  const row = hydrated ? data?.[0] : undefined;
   return row ? { code: row.code, addressId: row.addressId, placed: row.placed ?? null } : NO_META;
 }
 

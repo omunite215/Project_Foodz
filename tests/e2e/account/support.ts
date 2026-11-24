@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { AxeBuilder } from '@axe-core/playwright';
 import { type Browser, test as base, expect, type Page, type TestInfo } from '@playwright/test';
 import { config } from 'dotenv';
+import { settleAnimations } from '../settle';
 
 // The local stack's settings (.env): demo password, seeded admin, Mailpit.
 config({ quiet: true });
@@ -162,6 +163,7 @@ export const SESSION_ENDED = "You've been signed out. Sign in again to save your
 
 /** WCAG 2.2 A/AA checks on the whole page. */
 export async function expectAccessible(page: Page) {
+  await settleAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
@@ -183,6 +185,39 @@ export async function expectNoSidewaysScroll(page: Page) {
 /** The site's one polite live region. */
 export const liveRegion = (page: Page) =>
   page.locator('output[aria-live="polite"][aria-atomic="true"]');
+
+/**
+ * Starts writing down what the live region says, from now until the next full page load (client
+ * navigations keep it). The announcer clears itself 7 s after speaking, so on a slow machine a
+ * check made after a navigation can miss words that were said; `expectHeard` can't.
+ */
+export async function listenToLiveRegion(page: Page) {
+  await page.evaluate(() => {
+    const heard: string[] = [];
+    Object.assign(window, { foodzHeard: heard });
+    new MutationObserver(() => {
+      const text = document
+        .querySelector('output[aria-live="polite"][aria-atomic="true"]')
+        ?.textContent?.trim();
+      if (text && heard.at(-1) !== text) heard.push(text);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+}
+
+/**
+ * Passes once the live region has said `text` since `listenToLiveRegion`. The announcer gathers
+ * messages that arrive close together into one, so `text` may be part of a longer announcement.
+ */
+export async function expectHeard(page: Page, text: string) {
+  await expect
+    .poll(async () => {
+      const heard = await page.evaluate(
+        () => (window as { foodzHeard?: string[] }).foodzHeard ?? [],
+      );
+      return heard.some((said) => said.includes(text));
+    })
+    .toBe(true);
+}
 
 /** Collects console errors (CSP refusals included) while the test runs. */
 export function watchConsole(page: Page) {
@@ -254,11 +289,25 @@ export function linkIn(text: string, path: string) {
  * The seeded admin's authenticator secret, from the seed's one-time output. CI saves that output
  * to a file and names it in E2E_SEED_OUTPUT; locally, point it at your own copy.
  */
+export const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@foodz.example';
+
+/**
+ * The admin's own authenticator line: the seed also prints the sample staff's authenticators
+ * (F5), so the admin's is found by its email, never by being the last one in the file. The
+ * admin's is printed only by the first seed of a database; without it this returns null.
+ */
 export function adminTotpSecret(): string | null {
-  return fromSeedOutput(/otpauth:\/\/totp\/[^\s]*[?&]secret=([A-Z2-7]+)/gi);
+  const file = process.env.E2E_SEED_OUTPUT;
+  if (!file || !existsSync(file)) return null;
+  const email = ADMIN_EMAIL.toLowerCase();
+  const uris = readFileSync(file, 'utf8').match(/otpauth:\/\/totp\/\S+/gi) ?? [];
+  const admin = uris.findLast((uri) => {
+    const lower = uri.toLowerCase();
+    return lower.includes(encodeURIComponent(email)) || lower.includes(email);
+  });
+  return admin ? new URL(admin).searchParams.get('secret') : null;
 }
 
-export const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@foodz.example';
 export const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? '';
 
 function base32(secret: string): Buffer {

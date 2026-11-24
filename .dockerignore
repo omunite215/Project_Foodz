@@ -9,6 +9,7 @@ storybook-static
 server/db/generated
 docs
 design
+infra
 tests
 # Unit tests sit next to the code they test; the image needs neither them nor their helpers.
 **/*.test.ts

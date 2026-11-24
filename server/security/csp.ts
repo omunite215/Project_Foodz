@@ -11,16 +11,13 @@ export interface CspOptions {
   isHttps?: boolean;
   /** Public bucket URL for uploaded images (R2 in production, RustFS locally). */
   imageOrigins?: string[];
+  /**
+   * Where the browser talks to object storage directly: signed uploads (fetch PUT) and signed
+   * downloads (images). See `storageOrigins`.
+   */
+  storageOrigins?: string[];
   /** Realtime (Pusher/Soketi) socket origins. */
   socketOrigins?: string[];
-  /**
-   * The private bucket's origin (F6 contract 11.6): the partner app PUTs uploads to presigned
-   * URLs there, and staff and partners load 5-minute image links from it. On every page: a
-   * policy belongs to the document, and the partner app is often reached by a client-side
-   * navigation (after signing in) that keeps the previous page's document. Every request still
-   * needs a presigned URL.
-   */
-  privateBucketOrigins?: string[];
   reportUri?: string;
 }
 
@@ -38,13 +35,8 @@ const MAP_TILES = 'https://tiles.openfreemap.org';
 const SENTRY = 'https://*.ingest.sentry.io';
 
 export function buildCsp(options: CspOptions): string {
-  const {
-    nonce,
-    isDev,
-    imageOrigins = [],
-    socketOrigins = [],
-    privateBucketOrigins = [],
-  } = options;
+  const { nonce, isDev, imageOrigins = [], socketOrigins = [] } = options;
+  const storage = options.storageOrigins ?? [];
 
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
@@ -57,7 +49,7 @@ export function buildCsp(options: CspOptions): string {
     ],
     // Components set inline style attributes (positioning, animation); scripts stay nonce-only.
     'style-src': ["'self'", "'unsafe-inline'"],
-    'img-src': ["'self'", 'data:', 'blob:', MAP_TILES, ...imageOrigins, ...privateBucketOrigins],
+    'img-src': ["'self'", 'data:', 'blob:', MAP_TILES, ...imageOrigins, ...storage],
     'font-src': ["'self'"],
     'connect-src': [
       "'self'",
@@ -65,8 +57,8 @@ export function buildCsp(options: CspOptions): string {
       MAP_TILES,
       TURNSTILE,
       SENTRY,
+      ...storage,
       ...socketOrigins,
-      ...privateBucketOrigins,
       ...(isDev ? ['ws:'] : []),
     ],
     'frame-src': [...STRIPE_FRAMES, TURNSTILE],
@@ -105,4 +97,19 @@ export function originOf(url: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The origins the browser uses for signed uploads and downloads. With `S3_ENDPOINT` set (RustFS
+ * locally, any S3-compatible store) that is the endpoint's origin; on AWS there is no endpoint
+ * and signed links point at each bucket's regional virtual-hosted address.
+ */
+export function storageOrigins(env: Record<string, string | undefined>): string[] {
+  const endpoint = originOf(env.S3_ENDPOINT);
+  if (endpoint) return [endpoint];
+  const region = env.S3_REGION;
+  if (!region || region === 'auto') return [];
+  return [env.S3_PRIVATE_BUCKET, env.S3_PUBLIC_BUCKET]
+    .filter((bucket): bucket is string => Boolean(bucket))
+    .map((bucket) => `https://${bucket}.s3.${region}.amazonaws.com`);
 }

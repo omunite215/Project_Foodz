@@ -8,9 +8,10 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { s3ClientConfig } from './s3-config';
 
 /**
- * Object storage through the S3 API: RustFS locally, Cloudflare R2 in production.
+ * Object storage through the S3 API: RustFS locally (access keys), Amazon S3 on AWS (the task role).
  *
  * PUBLIC holds images anyone may see (menu, banners, blog covers) and is served straight from
  * the bucket. PRIVATE holds everything personal (ID documents, refund photos, avatars) plus
@@ -21,13 +22,7 @@ export type BucketKind = 'PUBLIC' | 'PRIVATE';
 
 function createClient() {
   return new S3Client({
-    endpoint: process.env.S3_ENDPOINT,
-    region: process.env.S3_REGION ?? 'auto',
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
-    },
+    ...s3ClientConfig(process.env),
     // Default checksums add query parameters that browsers, R2 and RustFS do not handle.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
