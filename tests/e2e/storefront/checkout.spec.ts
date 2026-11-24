@@ -273,7 +273,7 @@ test.describe('Checkout', () => {
     page,
     context,
   }, testInfo) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -353,7 +353,7 @@ test.describe('Checkout', () => {
   });
 
   test('3-D Secure: the bank screen opens and Complete pays (S6.6)', async ({ page }) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -377,7 +377,7 @@ test.describe('Checkout', () => {
   test('a declined card says why, clears the card and keeps every other choice (S6.8, U2)', async ({
     page,
   }) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');
@@ -527,7 +527,7 @@ test.describe('Checkout', () => {
     page,
     context,
   }) => {
-    test.skip(!(await stripeReachable()), 'Stripe test mode is not reachable from this machine.');
+    test.skip(!(await stripeReachable()), 'Stripe test mode is not set up or not reachable here.');
     const account = await readyToPay(page);
     if (!(await storeOpen(page))) {
       test.skip(true, 'The store is closed right now; nothing can be placed (S3.4).');

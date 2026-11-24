@@ -136,8 +136,14 @@ export async function answerBankCheck(page: Page, answer: 'Complete' | 'Fail') {
   }
 }
 
-/** True when Stripe's script can be fetched from this machine. */
+/**
+ * True when Stripe test mode is set up here (both keys in the environment, as in a local .env)
+ * and Stripe's script can be fetched. CI has no Stripe keys, so the card tests skip there; the
+ * card paths are covered by the integration tests against a fake Stripe.
+ */
 export async function stripeReachable(): Promise<boolean> {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+    return false;
   try {
     const response = await fetch('https://js.stripe.com/endive/stripe.js', {
       signal: AbortSignal.timeout(10_000),
