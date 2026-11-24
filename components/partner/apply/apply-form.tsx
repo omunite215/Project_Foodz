@@ -192,7 +192,20 @@ export function ApplyForm(props: ApplyFormProps) {
     },
   };
   const requested = clampStep(Number(search.get('step') ?? (editing ? 4 : 1)));
-  const step = firstIncompleteStep(requested, values, uploadState, mode, today);
+  // A typed later step opens the first incomplete one (design 4.1). Decided when the person
+  // navigates (the address, a restored draft, Continue or Back), never while typing, so finishing
+  // a field never swaps the step under the person's fingers.
+  const [moves, setMoves] = useState(0);
+  const navigation = `${requested}|${draftRestored}|${moves}`;
+  const [stepView, setStepView] = useState(() => ({
+    navigation,
+    step: firstIncompleteStep(requested, values, uploadState, mode, today),
+  }));
+  let step = stepView.step;
+  if (stepView.navigation !== navigation) {
+    step = firstIncompleteStep(requested, values, uploadState, mode, today);
+    setStepView({ navigation, step });
+  }
   const document = documentWordsOf(values);
   const checking = uploads.photo?.status === 'checking' || uploads.idPhoto?.status === 'checking';
   const uploadsChanged =
@@ -297,6 +310,7 @@ export function ApplyForm(props: ApplyFormProps) {
   // ---------------------------------------------------------------- steps
 
   function goTo(next: ApplyStep) {
+    setMoves((count) => count + 1);
     focusHeading.current = true;
     fadeNext.current = true;
     if (next > step) {
