@@ -167,22 +167,31 @@ test.describe('Menu', () => {
   });
 
   test('shows a skeleton with one label while a slow menu loads (S7.3)', async ({ page }) => {
-    await open(page, '/');
-    // A slow connection: every request for the menu, its prefetch included, takes 3 s. On a
-    // fast machine the link would otherwise have prefetched the whole menu before the click, and
-    // a menu that is already there needs no skeleton.
+    // The menu's own data is held back until the skeleton has been checked, then let through:
+    // a slow menu by construction, not by timing. Prefetches pass, so the loading shell is ready
+    // the way it would be for a customer.
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let heldRequests = 0;
     await page.route(/\/menu(\?|$)/, async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (route.request().headers()['next-router-prefetch']) return route.continue();
+      heldRequests += 1;
+      await held;
       return route.continue();
     });
+    await open(page, '/');
     await page
       .locator('#hero-title')
       .locator('..')
       .getByRole('link', { name: 'Order now' })
       .click();
+    await expect.poll(() => heldRequests).toBeGreaterThan(0);
     const busy = page.locator('main [aria-busy="true"]');
     await expect(busy).toBeVisible();
     await expect(busy.locator('output')).toHaveText('Loading menu');
+    release?.();
     await expect(page.getByRole('heading', { level: 1, name: 'Our menu' })).toBeVisible({
       timeout: 10_000,
     });
