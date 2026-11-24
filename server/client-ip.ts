@@ -1,3 +1,5 @@
+import { isDeployedProduction } from './deployment';
+
 /*
  * The client address used for rate limits and the audit log. A value the client can choose
  * freely would let it reset its own limits, so request headers are read only when something in
@@ -43,7 +45,7 @@ export function trustedProxyHops(env: Env): number {
 
 /** The test-only switch was set where it must never apply. */
 export function clientIpOptInRefused(env: Env): boolean {
-  return isOn(env.CLIENT_IP_FROM_HEADER) && env.VERCEL_ENV === 'production';
+  return isOn(env.CLIENT_IP_FROM_HEADER) && isDeployedProduction(env);
 }
 
 /** Where this deployment takes the client address from. */
