@@ -15,9 +15,23 @@ RUN npm ci --no-audit --no-fund
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# NEXT_PUBLIC_* values are compiled into the browser bundle, so they are build arguments (the
+# deploy workflow passes them; local builds leave them empty and use the runtime values).
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_PUSHER_KEY
+ARG NEXT_PUBLIC_PUSHER_HOST
+ARG NEXT_PUBLIC_PUSHER_PORT
+ARG NEXT_PUBLIC_PUSHER_USE_TLS
+ARG NEXT_PUBLIC_PUSHER_CLUSTER
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_SENTRY_DSN
 # Secrets are not available at build time; they are validated when the server starts.
 ENV SKIP_ENV_VALIDATION=1
-RUN npx prisma generate && npx next build
+# Only arguments that were given reach the build: an empty one would be compiled in as "" and
+# the app would refuse to start; left out, the server reads the runtime value instead.
+RUN for name in $(env | sed -n 's/^\(NEXT_PUBLIC_[A-Z_]*\)=$/\1/p'); do unset "$name"; done; \
+    npx prisma generate && npx next build
 
 # ---------------------------------------------------------------- migrations (one-shot job)
 FROM base AS migrate
@@ -28,9 +42,13 @@ COPY prisma ./prisma
 # The seed builds the menu from the original constants.
 COPY constants ./constants
 COPY scripts/storage-setup.mjs ./scripts/
+# Amazon RDS CA bundle: database URLs on AWS use sslmode=verify-full against it.
+COPY docker/rds/global-bundle.pem /etc/ssl/rds/global-bundle.pem
 USER node
-# Apply migrations, seed (idempotent: existing rows are left alone), prepare storage buckets.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node node_modules/tsx/dist/cli.mjs prisma/seed.ts && node scripts/storage-setup.mjs"]
+# Prepare the roles when an admin URL is given (RDS), apply migrations, seed (idempotent:
+# existing rows are left alone), prepare storage buckets (skipped without S3_ENDPOINT, as on AWS
+# where the infrastructure creates the buckets).
+CMD ["sh", "-c", "node node_modules/tsx/dist/cli.mjs prisma/bootstrap.ts && node node_modules/prisma/build/index.js migrate deploy && node node_modules/tsx/dist/cli.mjs prisma/seed.ts && node scripts/storage-setup.mjs"]
 
 # ---------------------------------------------------------------- runtime
 FROM base AS runner
@@ -48,6 +66,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Amazon RDS CA bundle: database URLs on AWS use sslmode=verify-full against it.
+COPY docker/rds/global-bundle.pem /etc/ssl/rds/global-bundle.pem
 
 USER nextjs
 EXPOSE 3000

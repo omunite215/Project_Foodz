@@ -1,5 +1,6 @@
 import 'server-only';
 import Redis from 'ioredis';
+import { redisOptions } from './redis-options';
 
 declare global {
   var foodzRedis: Redis | undefined;
@@ -7,12 +8,7 @@ declare global {
 
 export const redis =
   globalThis.foodzRedis ??
-  new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6380', {
-    maxRetriesPerRequest: 2,
-    // Commands fail fast during an outage instead of piling up.
-    enableOfflineQueue: false,
-    lazyConnect: false,
-  });
+  new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6380', redisOptions());
 
 if (process.env.NODE_ENV !== 'production') globalThis.foodzRedis = redis;
 

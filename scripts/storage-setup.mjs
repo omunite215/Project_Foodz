@@ -18,6 +18,12 @@ const env = (name) => {
   return value;
 };
 
+if (!process.env.S3_ENDPOINT) {
+  // On AWS the infrastructure code creates the buckets, their policies and lifecycle rules.
+  console.warn('S3_ENDPOINT is not set; leaving the buckets to the infrastructure.');
+  process.exit(0);
+}
+
 const s3 = new S3Client({
   endpoint: env('S3_ENDPOINT'),
   region: process.env.S3_REGION ?? 'auto',

@@ -18,6 +18,8 @@
 # misc
 .DS_Store
 *.pem
+# Amazon RDS public CA bundle (public certificates; README "Deploying to AWS" gives its source and checksum)
+!docker/rds/global-bundle.pem
 
 # debug
 npm-debug.log*
