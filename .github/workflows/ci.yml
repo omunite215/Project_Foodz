@@ -53,9 +53,10 @@ jobs:
       # the email path (the Inngest dev server hands jobs to the app, which sends to Mailpit),
       # and two values the seed prints: the seeded admin's authenticator secret and the sample
       # accounts' password. The output goes to a file in the runner's temp folder, never the log.
+      # Signed-in pages listen for live order notices, so the realtime server runs too.
       - name: Start the stack and seed it
         run: |
-          docker compose up -d --wait db redis mail jobs
+          docker compose up -d --wait db redis mail jobs realtime
           npx prisma migrate deploy
           npx tsx prisma/seed.ts > "$RUNNER_TEMP/seed-output.txt"
       - name: Browser tests
