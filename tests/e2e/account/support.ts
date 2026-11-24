@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { AxeBuilder } from '@axe-core/playwright';
 import { type Browser, test as base, expect, type Page, type TestInfo } from '@playwright/test';
 import { config } from 'dotenv';
+import { settleAnimations } from '../settle';
 
 // The local stack's settings (.env): demo password, seeded admin, Mailpit.
 config({ quiet: true });
@@ -162,6 +163,7 @@ export const SESSION_ENDED = "You've been signed out. Sign in again to save your
 
 /** WCAG 2.2 A/AA checks on the whole page. */
 export async function expectAccessible(page: Page) {
+  await settleAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();

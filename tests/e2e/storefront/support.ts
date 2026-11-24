@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { settleAnimations } from '../settle';
 
 /** The 375 px project; the other storefront project is 1440 px. */
 export const isPhone = (testInfo: TestInfo) => testInfo.project.name === 'storefront-375';
@@ -15,6 +16,7 @@ export async function open(page: Page, path: string) {
 
 /** WCAG 2.2 A/AA checks on the whole page. */
 export async function expectAccessible(page: Page) {
+  await settleAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();

@@ -2,6 +2,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { open, signUp } from './account/support';
+import { settleAnimations } from './settle';
 
 /*
  * Helpers for the F4 checkout, order and saved-card specs. Each test orders as a fresh customer,
@@ -161,15 +162,8 @@ export async function stripeReachable(): Promise<boolean> {
  */
 export async function expectAccessiblePage(page: Page) {
   // Colour transitions that are still running would be measured half-way (buttons turning from
-  // blocked to ready); wait for every finite animation to end. Pulses and spinners never end.
-  await page.evaluate(() =>
-    Promise.all(
-      document
-        .getAnimations()
-        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
-        .map((animation) => animation.finished.catch(() => undefined)),
-    ),
-  );
+  // blocked to ready).
+  await settleAnimations(page);
   // Figures dim to 75 % while a new total is on its way (F3 2.18); a quote refreshed on the
   // minute or on focus can land mid-check, so measure them settled.
   await expect(page.locator('#main .opacity-75')).toHaveCount(0, { timeout: 15_000 });
