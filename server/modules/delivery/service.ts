@@ -506,11 +506,9 @@ export async function getCurrentDelivery(actor: UserActor): Promise<PartnerDeliv
   return runAsSystem('partner delivery', async (ctx) => {
     const active = await repo.findActiveDeliveryOfPartner(ctx, me.id);
     if (!active) return null;
-    const [delivery, order, kitchen] = await Promise.all([
-      repo.findDelivery(ctx, active.deliveryId),
-      repo.findOrderForDispatch(ctx, active.orderId),
-      repo.findKitchen(ctx),
-    ]);
+    const delivery = await repo.findDelivery(ctx, active.deliveryId);
+    const order = await repo.findOrderForDispatch(ctx, active.orderId);
+    const kitchen = await repo.findKitchen(ctx);
     if (!delivery || !order || !kitchen) return null;
     const words = offerWords({
       kind: 'auto',
@@ -648,12 +646,10 @@ export async function partnerDispatchState(
   now = new Date(),
 ): Promise<PartnerDispatchState> {
   const t = timings();
-  const [partner, active] = await runAsSystem('partner dispatch state', (ctx) =>
-    Promise.all([
-      repo.findPartnerForDispatch(ctx, partnerId),
-      repo.findActiveDeliveryOfPartner(ctx, partnerId),
-    ]),
-  );
+  const { partner, active } = await runAsSystem('partner dispatch state', async (ctx) => ({
+    partner: await repo.findPartnerForDispatch(ctx, partnerId),
+    active: await repo.findActiveDeliveryOfPartner(ctx, partnerId),
+  }));
   const staleAt =
     partner?.isOnline && !partner.isDemo && partner.lastPointAt
       ? new Date(partner.lastPointAt.getTime() + t.freshPointSeconds * 1000)
@@ -753,9 +749,7 @@ async function deliveryChanged(
   let partnerName: string | null = null;
   if (data?.by) by = { kind: 'staff', name: data.by.name, role: data.by.role };
   else if (data?.partnerId) {
-    const [partner] = await runAsSystem('changed partner', (system) =>
-      repo.listCourierFacts(system, [data.partnerId ?? '']),
-    );
+    const [partner] = await repo.listCourierFacts(ctx, [data.partnerId]);
     partnerName = partner ? shortName(partner.name) : null;
     by = { kind: 'partner', shortName: partnerName };
   }
@@ -791,15 +785,11 @@ export async function listAssignableCouriers(
     const order = await repo.findOrderForDispatch(ctx, orderId);
     if (!order) throw orderNotFound();
     const pool = order.customerIsDemo ? 'DEMO' : 'REAL';
-    const [delivery, kitchen] = await Promise.all([
-      repo.findDeliveryByOrder(ctx, orderId),
-      repo.findKitchen(ctx),
-    ]);
-    const [rows, offline, offers] = await Promise.all([
-      repo.listOnlineForAssign(ctx, pool),
-      repo.countApprovedOffline(ctx, pool),
-      delivery ? repo.listOffersOfDelivery(ctx, delivery.id) : Promise.resolve([]),
-    ]);
+    const delivery = await repo.findDeliveryByOrder(ctx, orderId);
+    const kitchen = await repo.findKitchen(ctx);
+    const rows = await repo.listOnlineForAssign(ctx, pool);
+    const offline = await repo.countApprovedOffline(ctx, pool);
+    const offers = delivery ? await repo.listOffersOfDelivery(ctx, delivery.id) : [];
     const gaveBack = new Set(delivery?.excludedPartnerIds ?? []);
     const radiusM = (kitchen?.deliveryRadiusKm ?? REACHES_KM.at(-1) ?? 8) * 1000;
     return {
@@ -1171,11 +1161,9 @@ async function lineContext(ctx: DbContext, orderIds: readonly string[]): Promise
   for (const delivery of deliveries) if (delivery.partnerId) partnerIds.add(delivery.partnerId);
   for (const offer of offers) partnerIds.add(offer.partnerId);
   const staffIds = offers.flatMap((offer) => (offer.offeredBy ? [offer.offeredBy] : []));
-  const [partners, staff, online] = await Promise.all([
-    repo.listCourierFacts(ctx, [...partnerIds]),
-    repo.listStaffNames(ctx, staffIds),
-    repo.countOnline(ctx, 'REAL'),
-  ]);
+  const partners = await repo.listCourierFacts(ctx, [...partnerIds]);
+  const staff = await repo.listStaffNames(ctx, staffIds);
+  const online = await repo.countOnline(ctx, 'REAL');
   return {
     deliveries: new Map(deliveries.map((delivery) => [delivery.orderId, delivery])),
     offers: new Map(offers.map((offer) => [offer.deliveryId, offer])),
@@ -1303,10 +1291,8 @@ export async function courierSection(
     const offers = delivery ? await repo.listOffersOfDelivery(ctx, delivery.id) : [];
     const partnerIds = [...new Set(offers.map((offer) => offer.partnerId))];
     const staffIds = offers.flatMap((offer) => (offer.offeredBy ? [offer.offeredBy] : []));
-    const [partners, staff] = await Promise.all([
-      repo.listCourierFacts(ctx, partnerIds),
-      repo.listStaffNames(ctx, staffIds),
-    ]);
+    const partners = await repo.listCourierFacts(ctx, partnerIds);
+    const staff = await repo.listStaffNames(ctx, staffIds);
     return { context, delivery, offers, partners, staff };
   });
   const courier =
@@ -1604,20 +1590,21 @@ async function nextCandidate(
       limit: 50,
     });
   const older = await repo.listOlderSearching(ctx, delivery.id, delivery.readyAt ?? since);
-  const [first, second, olderLists] = await Promise.all([
-    search(delivery, false),
-    sweep ? search(delivery, true) : Promise.resolve([]),
-    Promise.all(
-      older.map(async (other) => {
-        const found = await search(other, Boolean(other.escalatedAt));
-        const nearest =
-          [0, 1, 2]
-            .map((index) => found.filter((row) => row.distanceM <= reachMeters(index, radiusKm)))
-            .find((rows) => rows.length > 0) ?? [];
-        return { deliveryId: other.id, candidates: nearest.map((row) => row.partnerId) };
-      }),
-    ),
-  ]);
+  // One query at a time on the transaction's connection.
+  const first = await search(delivery, false);
+  const second = sweep ? await search(delivery, true) : [];
+  const olderLists = await older.reduce<Promise<{ deliveryId: string; candidates: string[] }[]>>(
+    async (previous, other) => {
+      const lists = await previous;
+      const found = await search(other, Boolean(other.escalatedAt));
+      const nearest =
+        [0, 1, 2]
+          .map((index) => found.filter((row) => row.distanceM <= reachMeters(index, radiusKm)))
+          .find((rows) => rows.length > 0) ?? [];
+      return [...lists, { deliveryId: other.id, candidates: nearest.map((row) => row.partnerId) }];
+    },
+    Promise.resolve([]),
+  );
   const tryWith = (candidates: repo.CandidateRow[]): Pick | null => {
     for (const index of reaches) {
       const reachM = reachMeters(index, radiusKm);
