@@ -671,6 +671,48 @@ describe('going online and sharing a location (P9, P10, P16)', () => {
     ).rejects.toMatchObject({ code: 'NOT_ONLINE', details: { reason: 'self' } });
   });
 
+  it('lets unchanged coordinates keep a partner fresh for 2 minutes after he moved, no longer (S7)', async () => {
+    const { member, partnerId } = await approvedPartner('Sam Still');
+    const sessionId = await sessionOf(member.userId);
+    const start = Date.now();
+    const at = (seconds: number) => new Date(start + seconds * 1000);
+    const send = (lat: number, lng: number, seconds: number) =>
+      service.recordLocations(
+        member.actor,
+        sessionId,
+        { points: [{ lat, lng, accuracy: 15, recordedAt: at(seconds).toISOString() }] },
+        at(seconds),
+      );
+    await service.setAvailability(
+      member.actor,
+      sessionId,
+      { online: true, point: point(42.3505, -71.045) },
+      at(0),
+    );
+    expect((await send(42.3521, -71.0469, 15)).lastPointAt).toBe(at(15).toISOString());
+
+    // A phone that lost its GPS keeps sending the same fix every 15 s for 5 minutes.
+    let last = '';
+    for (let seconds = 30; seconds <= 300; seconds += 15) {
+      last = (await send(42.3521, -71.0469, seconds)).lastPointAt ?? '';
+    }
+    expect(last).toBe(at(135).toISOString());
+    const held = JSON.parse((await redis.get(`partner:loc:${partnerId}`)) ?? '{}') as {
+      acceptedAt: string;
+      recordedAt: string;
+    };
+    expect(held).toMatchObject({
+      acceptedAt: at(135).toISOString(),
+      recordedAt: at(300).toISOString(),
+    });
+    const { freshnessOf } = await import('@/server/modules/partners/location');
+    expect(freshnessOf({ isOnline: true, lastPointAt: held.acceptedAt }, at(300))).toBe('stale');
+
+    // A real move makes him fresh again at once.
+    expect((await send(42.3537, -71.0487, 315)).lastPointAt).toBe(at(315).toISOString());
+    await service.setAvailability(member.actor, sessionId, { online: false }, at(316));
+  });
+
   it('refuses applicants and real points from the demo partner, which shares one online state', async () => {
     const applicantResult = service.setAvailability(luis.actor, null, {
       online: true,

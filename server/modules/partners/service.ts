@@ -26,6 +26,7 @@ import {
   DEMO_POINT,
   freshnessOf,
   judgeBatch,
+  pointClocks,
   lastLocationWriteDue,
   type LocationPoint,
   pointRefusal,
@@ -947,6 +948,7 @@ export async function recordLocations(
   let lastPointAt = stored?.acceptedAt ?? null;
   if (newest) {
     const write = lastLocationWriteDue(stored?.writtenAt ?? null, now);
+    const clocks = pointClocks(stored, newest, now);
     await writePoint(row.id, {
       lat: newest.lat,
       lng: newest.lng,
@@ -954,11 +956,11 @@ export async function recordLocations(
       heading: newest.heading,
       speed: newest.speed,
       recordedAt: new Date(newest.recordedAt).toISOString(),
-      acceptedAt: now.toISOString(),
+      ...clocks,
       writtenAt: write ? now.toISOString() : (stored?.writtenAt ?? null),
     });
     if (write) await runAs(actor, (ctx) => writeLastLocation(ctx, row.id, newest, now));
-    lastPointAt = now.toISOString();
+    lastPointAt = clocks.acceptedAt;
   }
   if (verdict.jumps > 0) {
     const total = await countJumps(row.id, verdict.jumps);

@@ -154,6 +154,33 @@ export function judgeBatch(
   return { results: results.toSorted((a, b) => a.index - b.index), last: current, jumps };
 }
 
+/**
+ * Security gate S7: a point at exactly the coordinates already held counts as fresh for at most
+ * this long after the partner last moved. A phone that has lost its GPS but keeps sending its
+ * last fix then goes stale, so dispatch stops offering him orders, and offline 10 minutes later.
+ */
+export const SAME_PLACE_FRESH_MS = STALE_AFTER_MS;
+
+/**
+ * The stored point's two clocks after an accepted point (B7, S7): `acceptedAt` is what freshness
+ * reads ("last point"), `movedAt` when the coordinates last changed. Unchanged coordinates move
+ * `acceptedAt` no further than `movedAt` + 2 minutes, and never back.
+ */
+export function pointClocks(
+  previous: { lat: number; lng: number; acceptedAt: string; movedAt?: string | null } | null,
+  point: Point,
+  now: Date,
+): { acceptedAt: string; movedAt: string } {
+  const at = now.toISOString();
+  if (!previous || previous.lat !== point.lat || previous.lng !== point.lng) {
+    return { acceptedAt: at, movedAt: at };
+  }
+  const movedAt = previous.movedAt ?? previous.acceptedAt;
+  const cap = Date.parse(movedAt) + SAME_PLACE_FRESH_MS;
+  const acceptedAt = Math.max(Date.parse(previous.acceptedAt), Math.min(now.getTime(), cap));
+  return { acceptedAt: new Date(acceptedAt).toISOString(), movedAt };
+}
+
 // ------------------------------------------------------------------ availability
 
 /** B22: what dispatch (F7) and the staff page read. */

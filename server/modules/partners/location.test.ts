@@ -8,6 +8,7 @@ import {
   kitchenDistance,
   lastLocationWriteDue,
   type LocationPoint,
+  pointClocks,
   pointRefusal,
 } from './location';
 
@@ -169,6 +170,30 @@ describe('freshness and automatic offline (B8, B22, P10.6, P10.8)', () => {
         now(0),
       ),
     ).toBeNull();
+  });
+});
+
+describe('the same coordinates again (security gate S7)', () => {
+  it('starts both clocks when he goes online or moves', () => {
+    expect(pointClocks(null, KITCHEN, now(0))).toEqual({ acceptedAt: at(0), movedAt: at(0) });
+    const held = { ...KITCHEN, acceptedAt: at(0), movedAt: at(0) };
+    expect(pointClocks(held, R2, now(15))).toEqual({ acceptedAt: at(15), movedAt: at(15) });
+  });
+
+  it('keeps him fresh with unchanged coordinates for 2 minutes after he last moved, no longer', () => {
+    let held = { ...R2, acceptedAt: at(15), movedAt: at(15) };
+    for (let seconds = 30; seconds <= 300; seconds += 15) {
+      held = { ...R2, ...pointClocks(held, R2, now(seconds)) };
+    }
+    expect(held).toMatchObject({ acceptedAt: at(135), movedAt: at(15) });
+    expect(freshnessOf({ isOnline: true, lastPointAt: held.acceptedAt }, now(300))).toBe('stale');
+    // He moves again: fresh at once.
+    expect(pointClocks(held, R3, now(315))).toEqual({ acceptedAt: at(315), movedAt: at(315) });
+  });
+
+  it('reads a point kept before `movedAt` existed from its acceptance time', () => {
+    const old = { ...R2, acceptedAt: at(0) };
+    expect(pointClocks(old, R2, now(200))).toEqual({ acceptedAt: at(120), movedAt: at(0) });
   });
 });
 
