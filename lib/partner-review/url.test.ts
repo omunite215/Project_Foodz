@@ -1,8 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { listQueryFromSearch } from '@/server/modules/partners/review-schema';
-import { hasFilters, listHref, withFilters, withPage, withSort, withTab } from './url';
+import {
+  applicationHref,
+  hasFilters,
+  listHref,
+  withFilters,
+  withPage,
+  withSort,
+  withTab,
+} from './url';
 
 const base = listQueryFromSearch({});
+
+describe('an application opened from the list (A20.1)', () => {
+  const id = '0192f6a4-5b6c-7d8e-9f01-23456789abcd';
+
+  it("carries the list's query, which reads back as the same list", () => {
+    const query = withPage(withFilters(base, { q: 'souza' }), 2);
+    const href = applicationHref(id, query);
+    expect(href).toBe(`/admin/partners/${id}?tab=review&q=souza&page=2`);
+    const back = listQueryFromSearch(
+      Object.fromEntries(new URL(href, 'http://localhost').searchParams),
+    );
+    expect(listHref(back)).toBe('/admin/partners?tab=review&q=souza&page=2');
+  });
+
+  it('is the bare address when opened from elsewhere', () => {
+    expect(applicationHref(id)).toBe(`/admin/partners/${id}`);
+  });
+});
 
 describe('the list address', () => {
   it('keeps defaults out', () => {

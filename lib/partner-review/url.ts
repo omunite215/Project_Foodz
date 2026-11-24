@@ -69,8 +69,13 @@ export const hasFilters = (query: PartnerListQuery) =>
 /** A search shorter than this isn't sent (A19.6). */
 export const MIN_SEARCH = 2;
 
-/** One application's staff address, by its id (never a plate or a name). */
-export function applicationHref(partnerId: string): Route {
-  const href = `${LIST_PATH}/${partnerId}`;
+/**
+ * One application's staff address, by its id (never a plate or a name). Opened from the list,
+ * it carries the list's query (tab, search, filters, sort, page), so "Back to partners" returns
+ * to the same list (A20.1); the application page reads it back with `listQueryFromSearch`.
+ */
+export function applicationHref(partnerId: string, list?: PartnerListQuery | null): Route {
+  const search = list ? (listHref(list).split('?')[1] ?? '') : '';
+  const href = `${LIST_PATH}/${partnerId}${search ? `?${search}` : ''}`;
   return isSitePath(href) ? href : LIST_PATH;
 }

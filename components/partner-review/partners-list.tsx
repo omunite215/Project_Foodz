@@ -384,10 +384,18 @@ function VehicleWords({ words }: { words: string }) {
   );
 }
 
-function NameLink({ row, className }: { row: PartnerListRow; className?: string }) {
+function NameLink({
+  row,
+  query,
+  className,
+}: {
+  row: PartnerListRow;
+  query: PartnerListQuery;
+  className?: string;
+}) {
   return (
     <Link
-      href={applicationHref(row.partnerId)}
+      href={applicationHref(row.partnerId, query)}
       data-row-link={row.partnerId}
       className={cn(
         'text-body-4 font-medium text-neutral-1 underline-offset-4 [overflow-wrap:anywhere] hover:underline',
@@ -401,16 +409,17 @@ function NameLink({ row, className }: { row: PartnerListRow; className?: string 
 
 function PersonCell({
   row,
-  tab,
+  query,
   timeZone,
 }: {
   row: PartnerListRow;
-  tab: PartnerTab;
+  query: PartnerListQuery;
   timeZone: string;
 }) {
+  const tab = query.tab;
   return (
     <div className="min-w-0">
-      <NameLink row={row} />
+      <NameLink row={row} query={query} />
       <p className="truncate text-body-5 text-neutral-3" title={row.email}>
         {row.email}
       </p>
@@ -498,13 +507,14 @@ const decided = (header: string): ColumnSpec => ({
     row.decided ? decidedCell(row.decided.at, row.decided.byName, timeZone) : null,
 });
 
-function columnsFor(tab: PartnerTab): ColumnSpec[] {
+function columnsFor(query: PartnerListQuery): ColumnSpec[] {
+  const tab = query.tab;
   const person: ColumnSpec = {
     id: 'person',
     header: personHeader[tab],
     className: '',
     sort: 'name',
-    cell: (row, timeZone) => <PersonCell row={row} tab={tab} timeZone={timeZone} />,
+    cell: (row, timeZone) => <PersonCell row={row} query={query} timeZone={timeZone} />,
   };
   const vehicle: ColumnSpec = {
     id: 'vehicle',
@@ -678,7 +688,7 @@ function ResultsTable({
   skeleton: boolean;
 }) {
   const router = useRouter();
-  const specs = useMemo(() => columnsFor(result.query.tab), [result.query.tab]);
+  const specs = useMemo(() => columnsFor(result.query), [result.query]);
   const columns = useMemo(
     () =>
       helper.columns(
@@ -774,7 +784,7 @@ function ResultsTable({
                     const target = event.target;
                     if (target instanceof Element && target.closest('a, button')) return;
                     if (window.getSelection()?.toString()) return;
-                    router.push(applicationHref(row.original.partnerId));
+                    router.push(applicationHref(row.original.partnerId, result.query));
                   }}
                 >
                   {row.getAllCells().map((cell) => {
@@ -883,9 +893,9 @@ function ResultCards({
         >
           <div className="flex items-start justify-between gap-3">
             <Link
-              href={applicationHref(row.partnerId)}
+              href={applicationHref(row.partnerId, result.query)}
               data-row-link={row.partnerId}
-              className="min-w-0 text-body-3 font-medium text-neutral-1 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring focus-visible:after:outline-solid"
+              className="inline-flex min-h-11 min-w-0 items-center text-body-3 font-medium text-neutral-1 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring focus-visible:after:outline-solid"
             >
               {row.name}
             </Link>
