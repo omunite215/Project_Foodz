@@ -39,6 +39,7 @@ export const S3_TEST = {
  */
 export async function setup(project: TestProject) {
   const root = path.resolve(import.meta.dirname, '../..');
+  avoidWslRelay();
 
   [postgres, redis, storage] = await Promise.all([
     new PostgreSqlContainer('postgis/postgis:17-3.5-alpine')
@@ -93,6 +94,18 @@ export async function setup(project: TestProject) {
   project.provide('migratorUrl', migratorUrl);
   project.provide('redisUrl', redis.getConnectionUrl());
   project.provide('s3Endpoint', s3Endpoint);
+}
+
+/**
+ * Docker Desktop on Windows publishes each container port twice: on 127.0.0.1 and ::1 through
+ * WSL's localhost relay, and on every other local address through Docker's own forwarder. The
+ * relay now and then accepts a connection and never passes it on until it resets it 30 s later,
+ * so a test waits on the database or Redis until it times out. Another loopback address goes
+ * straight to Docker's forwarder.
+ */
+function avoidWslRelay() {
+  if (process.platform !== 'win32' || process.env.DOCKER_HOST) return;
+  process.env.TESTCONTAINERS_HOST_OVERRIDE ??= '127.0.0.2';
 }
 
 export async function teardown() {

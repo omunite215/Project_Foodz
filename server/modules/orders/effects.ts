@@ -174,10 +174,11 @@ export async function deliverOrderEmail(input: {
   refundCents?: number;
   at?: string;
 }): Promise<'sent' | 'skipped'> {
-  const [loaded, recipient] = await Promise.all([
-    loadOrderViewAsSystem(input.orderId),
-    runAsSystem('order email', (ctx) => findOrderEmailRecipient(ctx, input.orderId)),
-  ]);
+  // In turn: the view alone reads in two transactions at once.
+  const loaded = await loadOrderViewAsSystem(input.orderId);
+  const recipient = await runAsSystem('order email', (ctx) =>
+    findOrderEmailRecipient(ctx, input.orderId),
+  );
   const user = recipient?.user;
   if (!loaded || !user || user.deletedAt || user.banned) return 'skipped';
   await sendEmail(

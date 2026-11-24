@@ -382,11 +382,9 @@ async function priceCart(
       throw cartTooBig(settings.contactPhone);
     }
     const ids = [...new Set(parsed.lines.map((line) => line.menuItemId))];
-    const [dishes, coupon, campaigns] = await Promise.all([
-      ids.length > 0 ? findDishes(ctx, ids) : Promise.resolve([]),
-      parsed.code ? findCouponByCode(ctx, parsed.code) : Promise.resolve(null),
-      findOfferCampaigns(ctx, now),
-    ]);
+    const dishes = ids.length > 0 ? await findDishes(ctx, ids) : [];
+    const coupon = parsed.code ? await findCouponByCode(ctx, parsed.code) : null;
+    const campaigns = await findOfferCampaigns(ctx, now);
     const couponIds = [
       ...new Set([
         ...(coupon ? [coupon.id] : []),

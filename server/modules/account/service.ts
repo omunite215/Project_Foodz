@@ -231,11 +231,10 @@ export async function exportMyData(
   now = new Date(),
 ): Promise<{ fileName: string; data: AccountExport }> {
   if (!can(actor.role, { account: ['export-own'] })) throw forbidden();
-  const [profile, addresses, devices] = await Promise.all([
-    runAs(actor, (ctx) => findProfile(ctx, actor.userId)),
-    listMyAddresses(actor),
-    listDevices(actor, current),
-  ]);
+  // One after another, so an export holds one pooled connection at a time.
+  const profile = await runAs(actor, (ctx) => findProfile(ctx, actor.userId));
+  const addresses = await listMyAddresses(actor);
+  const devices = await listDevices(actor, current);
   const favorites = await listMyFavoritesForExport(actor);
   const orders = await exportMyOrders(actor);
   const savedCards = await exportSavedCards(actor);
