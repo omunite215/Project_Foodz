@@ -303,7 +303,7 @@ function StarterButtons({
 }) {
   const id = useId();
   return (
-    <fieldset className="m-0 min-w-0 border-0 p-0">
+    <fieldset className="mx-0 min-w-0 border-0 p-0">
       <legend id={id} className="text-body-5 font-medium text-neutral-2">
         {label}
       </legend>

@@ -90,7 +90,8 @@ export function VehicleTiles({
               />
               <Icon className="size-8 text-foreground" aria-hidden />
               <span className="text-body-4 font-medium text-strong">
-                {VEHICLE_WORDS[vehicle.value]}
+                {/* "e-bike" never breaks at its hyphen. */}
+                {VEHICLE_WORDS[vehicle.value].replace('e-bike', 'e‑bike')}
               </span>
               <TileCheck checked={value === vehicle.value} />
             </label>

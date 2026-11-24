@@ -484,8 +484,12 @@ export const REJECT_STARTERS = [
 ] as const;
 
 /** A starter fills an empty field, or adds a line; typed text is never replaced (D28). */
-export const withStarter = (value: string, starter: string) =>
-  value.trim() ? `${value.replace(/\s+$/, '')}\n${starter}` : starter;
+export function withStarter(value: string, starter: string): string {
+  if (!value.trim()) return starter;
+  // Pressing the same starter twice adds it once.
+  if (value.split('\n').some((line) => line.trim() === starter)) return value;
+  return `${value.replace(/\s+$/, '')}\n${starter}`;
+}
 
 // ------------------------------------------------------------------ refusals
 

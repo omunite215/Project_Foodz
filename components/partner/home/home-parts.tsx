@@ -36,12 +36,15 @@ export function KitchenChip({ open, line }: { open: boolean; line: string }) {
   return (
     <p
       className={cn(
-        'inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-body-5 font-medium text-strong',
+        'inline-flex min-h-9 items-start gap-1.5 rounded-lg px-3 py-2 text-left text-body-5 font-medium text-strong',
         open ? 'bg-success-soft' : 'bg-muted',
       )}
     >
       <Store
-        className={cn('size-4', open ? 'text-success-mark' : 'text-muted-foreground')}
+        className={cn(
+          'mt-0.5 size-4 shrink-0',
+          open ? 'text-success-mark' : 'text-muted-foreground',
+        )}
         aria-hidden
       />
       {line}

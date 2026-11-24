@@ -256,7 +256,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
             <Button
               ref={stayRef}
               type="button"
-              variant="outline"
+              variant="ghost"
               size="kitchen"
               aria-disabled={leaving || undefined}
               onClick={() => {

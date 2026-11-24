@@ -449,6 +449,8 @@ export function ApprovedSignedOut({
     >
       <Hero
         titleRef={titleRef}
+        // The animation's colours are baked in for light; dark shows its last frame in the
+        // partner's colours (deliberate, design review P9).
         media={<SuccessMark state="placed" play={resolved === 'light'} tone="partner" />}
         title="You're approved"
       >

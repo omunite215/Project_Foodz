@@ -25,7 +25,7 @@ export function CountrySelect({
         aria-label="Country code"
         value={current?.code ?? value}
         onChange={(event) => onChange(event.target.value)}
-        className="absolute inset-0 cursor-pointer bg-card text-strong opacity-0 outline-none"
+        className="absolute -inset-px cursor-pointer bg-card text-strong opacity-0 outline-none"
       >
         {countries.map((country) => (
           <option key={country.code} value={country.code}>

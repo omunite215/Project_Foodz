@@ -257,7 +257,7 @@ export function PartnerImages({ review, timeZone }: { review: PartnerReview; tim
               />
               <span
                 aria-hidden
-                className="absolute top-2 right-2 inline-flex h-9 items-center gap-1.5 rounded-lg bg-white/95 px-3 text-body-5 font-medium text-neutral-1 shadow-card"
+                className="absolute right-2 bottom-2 inline-flex h-9 items-center gap-1.5 rounded-lg bg-white/95 px-3 text-body-5 font-medium text-neutral-1 shadow-card"
               >
                 <Maximize2 className="size-4" />
                 Open

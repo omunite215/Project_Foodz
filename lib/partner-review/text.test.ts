@@ -198,6 +198,7 @@ describe('decisions', () => {
     expect(withStarter('', 'A.')).toBe('A.');
     expect(withStarter('  ', 'A.')).toBe('A.');
     expect(withStarter('Hello ', 'A.')).toBe('Hello\nA.');
+    expect(withStarter('Hello\nA.', 'A.')).toBe('Hello\nA.');
   });
 
   it('says when a rejected applicant can apply again', () => {
