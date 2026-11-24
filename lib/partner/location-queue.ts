@@ -20,6 +20,13 @@ export const HEARTBEAT_MS = 15_000;
  * `LOOKING_AFTER_MS`, so "Looking for GPS…" means the phone really can't answer (P11.6).
  */
 export const REREAD_AFTER_MS = 5_000;
+/**
+ * Security gate S7: a silent phone's last fix is sent again only this long after it was taken,
+ * so a phone that lost its GPS goes stale (the server caps unchanged coordinates too).
+ */
+export const RESEND_WITHIN_MS = 60_000;
+/** This many timed-out reads in a row count as "position unavailable" (S7, P11.6). */
+export const TIMEOUTS_FOR_UNAVAILABLE = 2;
 export const QUEUE_MAX = 150;
 export const QUEUE_MAX_AGE_MS = 10 * 60_000;
 export const BATCH_SIZE = 50;

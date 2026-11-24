@@ -13,7 +13,7 @@ const announced = vi.hoisted(() => [] as string[]);
 vi.mock('@/lib/announce', () => ({ announce: (message: string) => announced.push(message) }));
 
 const sharing = await import('./sharing');
-const { HEARTBEAT_MS, QUEUE_MAX_AGE_MS } = await import('./location-queue');
+const { HEARTBEAT_MS } = await import('./location-queue');
 
 // Route R from the story: the kitchen, then about 234 m towards Faneuil Hall.
 const R0 = { latitude: 42.3505, longitude: -71.045 };
@@ -31,13 +31,15 @@ const phone = {
    * A fresh read: answered, never answered (a phone that reports only changes, like a test
    * browser), or "position unavailable" (no GPS, in a tunnel, P11.6).
    */
-  answers: 'yes' as 'yes' | 'silent' | 'unavailable',
+  answers: 'yes' as 'yes' | 'silent' | 'timeout' | 'unavailable',
   position: R0,
   onWatch: null as PositionCallback | null,
 };
 const server = {
   posts: [] as SentPoint[][],
   takenOfflineAt: null as string | null,
+  /** How often the app asked whether he is still online (P11.4). */
+  stateReads: 0,
 };
 
 const fixAt = (coords: typeof R0, at = Date.now()) =>
@@ -52,8 +54,20 @@ const answer = (status: number, body: unknown) => ({
   headers: new Headers(),
 });
 
-function fakeFetch(path: string, init: { body: string }) {
-  if (path !== '/api/v1/partner/locations') return Promise.resolve(answer(200, {}));
+function fakeFetch(path: string, init: { body?: string }) {
+  if (path === '/api/v1/partner/me') {
+    server.stateReads += 1;
+    return Promise.resolve(
+      answer(200, {
+        screen: 'home',
+        availability: { online: !server.takenOfflineAt, onThisDevice: true },
+        lastOffline: server.takenOfflineAt
+          ? { reason: 'no-location', at: server.takenOfflineAt }
+          : null,
+      }),
+    );
+  }
+  if (path !== '/api/v1/partner/locations' || !init.body) return Promise.resolve(answer(200, {}));
   const { points } = JSON.parse(init.body) as { points: SentPoint[] };
   server.posts.push(points);
   if (server.takenOfflineAt) {
@@ -116,14 +130,12 @@ beforeAll(() => {
         phone.onWatch = null;
       },
       getCurrentPosition: (success: PositionCallback, failure: PositionErrorCallback) => {
+        const codes = { PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 };
         if (phone.answers === 'yes') success(fixAt(phone.position));
         if (phone.answers === 'unavailable') {
-          failure({
-            code: 2,
-            PERMISSION_DENIED: 1,
-            POSITION_UNAVAILABLE: 2,
-          } as GeolocationPositionError);
+          failure({ code: 2, ...codes } as GeolocationPositionError);
         }
+        if (phone.answers === 'timeout') failure({ code: 3, ...codes } as GeolocationPositionError);
       },
     },
   });
@@ -133,7 +145,7 @@ beforeEach(() => {
   vi.useFakeTimers({ now: new Date('2026-11-24T18:00:00.000Z') });
   vi.stubGlobal('fetch', vi.fn<typeof fakeFetch>(fakeFetch));
   Object.assign(phone, { online: true, answers: 'yes', position: R0 });
-  Object.assign(server, { posts: [], takenOfflineAt: null });
+  Object.assign(server, { posts: [], takenOfflineAt: null, stateReads: 0 });
   announced.length = 0;
 });
 
@@ -153,15 +165,28 @@ describe('the heartbeat (P10.3, P11.6)', () => {
     expect(sharing.sharingStore.state.lastAcceptedAt).toBe('2026-11-24T18:01:00.000Z');
   });
 
-  it('sends the last fix again, stamped now, when the phone stays silent', async () => {
+  it('sends the last fix again, stamped now, for a minute after it, when the phone stays silent', async () => {
     await goOnline();
     phone.answers = 'silent';
-    await vi.advanceTimersByTimeAsync(4 * HEARTBEAT_MS);
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    // At 15, 30, 45 and 60 s, then no more: a stuck phone goes stale (S7).
     expect(server.posts).toHaveLength(5);
     for (const [point] of server.posts) {
       expect(point).toMatchObject({ lat: R0.latitude, lng: R0.longitude });
     }
     expect(sharing.sharingStore.state.lastAcceptedAt).toBe('2026-11-24T18:01:00.000Z');
+
+    // A real fix again: the heartbeat comes back.
+    phone.answers = 'yes';
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS);
+    expect(server.posts.length).toBeGreaterThan(5);
+  });
+
+  it('counts two timed-out reads in a row as no GPS, and re-sends nothing', async () => {
+    await goOnline();
+    phone.answers = 'timeout';
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(server.posts).toHaveLength(1);
   });
 
   it("sends nothing when the phone says it can't find itself", async () => {
@@ -224,13 +249,12 @@ describe('ten minutes without a connection (P11.4)', () => {
     // Meanwhile the server took him offline for having no location (P10.8).
     server.takenOfflineAt = '2026-11-24T18:10:00.000Z';
 
+    const sentBefore = server.posts.length;
     setConnection(true);
     await vi.advanceTimersByTimeAsync(10);
-    const sentOnReturn = server.posts.at(-1) ?? [];
-    expect(sentOnReturn.length).toBeGreaterThan(0);
-    for (const point of sentOnReturn) {
-      expect(Date.now() - Date.parse(point.recordedAt)).toBeLessThanOrEqual(QUEUE_MAX_AGE_MS);
-    }
+    // The server is asked first; what queued in the dead zone is dropped, never sent.
+    expect(server.stateReads).toBe(1);
+    expect(server.posts).toHaveLength(sentBefore);
     expect(sharing.sharingStore.state).toMatchObject({ phase: 'offline', queued: 0, pinned: null });
     expect(sharing.sharingStore.state.notice?.text).toBe(
       'You went offline at 1:10 pm because we lost your connection for 10 minutes.',
