@@ -100,7 +100,7 @@ if (!hashKeyDistinct(process.env)) {
   throw new Error('ID_NUMBER_HASH_KEY must differ from FIELD_ENCRYPTION_KEY.');
 }
 if (clientIpOptInRefused(process.env)) {
-  throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused on Vercel production.');
+  throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused in production.');
 }
 if (dispatchOverridesRefused(process.env)) {
   throw new Error('FOODZ_TEST_TIMING is for tests only and is refused on Vercel production.');

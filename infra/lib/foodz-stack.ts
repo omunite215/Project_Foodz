@@ -386,6 +386,8 @@ export class FoodzStack extends Stack {
 
     const webEnvironment: Record<string, string> = {
       NODE_ENV: 'production',
+      // Test-only switches (CLIENT_IP_FROM_HEADER, INNGEST_DEV) are refused when this is set.
+      FOODZ_DEPLOYMENT: 'production',
       LOG_LEVEL: 'info',
       NEXT_PUBLIC_SITE_URL: siteUrl,
       BETTER_AUTH_URL: siteUrl,

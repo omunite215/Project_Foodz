@@ -60,6 +60,7 @@ describe('Foodz stack', () => {
     expect(web).not.toContain('S3_SECRET_ACCESS_KEY');
     expect(web).not.toContain('S3_ENDPOINT');
     expect(web).toContain('"Name":"TRUSTED_PROXY_HOPS","Value":"2"');
+    expect(web).toContain('"Name":"FOODZ_DEPLOYMENT","Value":"production"');
   });
 
   it('checks /api/health on the target group', () => {
