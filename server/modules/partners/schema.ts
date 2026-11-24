@@ -201,7 +201,10 @@ export const locationPointSchema = z
  */
 export const availabilityInput = z.discriminatedUnion('online', [
   z.object({ online: z.literal(true), point: locationPointSchema.optional() }).strict(),
-  z.object({ online: z.literal(false) }).strict(),
+  // F7 P30.4, U15: a partner holding an order goes offline only with `giveBack: true` (the
+  // "Give back and go offline" dialog); without it, e.g. the page-close request, the server
+  // answers PARTNER_BUSY and the order stays his.
+  z.object({ online: z.literal(false), giveBack: z.boolean().optional() }).strict(),
 ]);
 export type AvailabilityInput = z.input<typeof availabilityInput>;
 

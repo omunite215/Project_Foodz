@@ -281,6 +281,33 @@ const POLICIES = {
     duration: 3600,
     message: "You've reinstated 20 partners this hour. Try again in {wait}.",
   },
+  // Dispatch (F7 B8). Partner routes per account; practice offers per session.
+  'partner.offer-answer': { points: 30, duration: 60 },
+  'partner.offer-current': { points: 30, duration: 60 },
+  'partner.give-back': {
+    points: 10,
+    duration: 3600,
+    message: "You've given back several orders. Call Foodz Kitchen if something's wrong.",
+  },
+  'partner.practice-offer': {
+    points: 10,
+    duration: 3600,
+    message: "You've tried a lot of practice offers. Try again in {wait}.",
+  },
+  // Staff, per account.
+  'delivery.read': { points: 120, duration: 60 },
+  'delivery.staff-offer': {
+    points: 60,
+    duration: 3600,
+    message: "You've sent a lot of offers in the last hour. Try again in {wait}.",
+  },
+  'delivery.take-off': {
+    points: 30,
+    duration: 3600,
+    message: "You've taken orders off couriers many times this hour. Try again in {wait}.",
+  },
+  'delivery.restart': { points: 30, duration: 3600 },
+  'delivery.courier-photo': { points: 60, duration: 60 },
   'realtime.auth': { points: 60, duration: 60 },
   'upload.request': { points: 30, duration: 600 },
   // Address suggestions while typing (debounced in the browser).

@@ -111,6 +111,7 @@ const NOTICED = new Set<string>([
   'kitchen-closed',
   'other-device',
   'demo-other-visitor',
+  'missed-offers',
 ]);
 const isNoticed = (reason: string | null): reason is NoticedOfflineReason =>
   reason !== null && NOTICED.has(reason);

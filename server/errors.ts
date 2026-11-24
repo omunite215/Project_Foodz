@@ -66,6 +66,16 @@ export type AppErrorCode =
   | 'FLAGS_NOT_CHECKED'
   | 'DEMO_PARTNER'
   | 'FILES_DELETED'
+  // Dispatch and offers (F7). `details`: DispatchRefusalDetails in delivery/schema.ts.
+  | 'OFFER_GONE'
+  | 'NOT_OFFERABLE'
+  | 'PARTNER_BUSY'
+  | 'DELIVERY_CHANGED'
+  | 'COURIER_UNAVAILABLE'
+  | 'NOT_ASSIGNED'
+  | 'GIVE_BACK_CLOSED'
+  | 'DEMO_POOL'
+  | 'PRACTICE_OPEN'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'
