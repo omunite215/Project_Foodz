@@ -271,6 +271,25 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
   await expectNoAxeViolations(page);
   await page.getByRole('button', { name: 'Continue' }).click();
 
+  await expect(page.getByRole('heading', { level: 1, name: 'Check and send' })).toBeVisible();
+
+  // A reload keeps everything on this phone but the ID number (design 4.2): the form opens on
+  // the step that lacks it, fully drawn (design review B1), and the photos come back (S1).
+  await page.reload();
+  await expect(page.getByText('We kept what you entered on this phone.')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your ID' })).toBeVisible();
+  await expect(page.locator('form > div').first()).toHaveCSS('opacity', '1');
+  await expectNoAxeViolations(page);
+  await page.getByLabel('License number').fill('S4820 4821');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.locator('form > div').first()).toHaveCSS('opacity', '1');
+  await expect(
+    page
+      .locator('section', { has: page.getByRole('heading', { name: 'About you' }) })
+      .locator('img'),
+  ).toHaveCount(1);
+  await expectNoAxeViolations(page);
+
   // Step 4: the summary shows only the last four; both boxes are needed.
   await expect(page.getByRole('heading', { level: 1, name: 'Check and send' })).toBeVisible();
   await expect(page.getByText(/Driver's license ending 4821 · expires Mar 3, 2029/)).toBeVisible();
@@ -301,4 +320,44 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
   ).toBeVisible({
     timeout: 15_000,
   });
+});
+
+test('the installed app opens its offline page at /partner without a connection', async ({
+  page,
+  context,
+}, testInfo) => {
+  test.skip(projectOf(testInfo) !== 'partner-1440', 'The worker is the same at every width.');
+  await signInTo(page, PARTNERS.jonas);
+  await open(page, '/partner');
+  // The worker controls /partner itself, the start page (scope /partner, security S9).
+  await page.waitForFunction(async () => {
+    await navigator.serviceWorker.ready;
+    return navigator.serviceWorker.controller !== null;
+  });
+  await context.setOffline(true);
+  await page.reload().catch(() => undefined);
+  await expect(page.getByRole('heading', { level: 1, name: "You're offline" })).toBeVisible();
+  await expect(
+    page.getByText("Foodz Partner needs a connection to start. Your location isn't being shared."),
+  ).toBeVisible();
+  await context.setOffline(false);
+});
+
+test('an approximate location stops finding and explains Precise Location', async ({
+  page,
+  context,
+}, testInfo) => {
+  test.skip(projectOf(testInfo) !== 'partner-1440', "One project changes Grace's online state.");
+  // Precise Location off: one fix, 2 km wide, and no second one (P9.6, D21).
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ ...ROUTE.R0, accuracy: 2_000 });
+  await signInTo(page, PARTNERS.grace);
+  await open(page, '/partner');
+  await page.getByRole('button', { name: /^Go online/ }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Your phone is sharing an approximate location' }),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: /^Go online/ })).toBeVisible();
+  await expect(page.getByRole('banner').getByText('Offline', { exact: true })).toBeVisible();
+  await expectNoAxeViolations(page);
 });
