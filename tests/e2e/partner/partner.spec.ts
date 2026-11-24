@@ -295,7 +295,7 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
   await expect(page.getByText(/Driver's license ending 4821 · expires Mar 3, 2029/)).toBeVisible();
   await expect(page.getByText('S48204821')).toHaveCount(0);
   await page.getByRole('button', { name: 'Send application' }).click();
-  await expect(page.getByText('Please fix these before you send:')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Please fix these before you send:')).toBeVisible();
   await page.getByLabel("I'm 18 or older.").check();
   await page.getByLabel('I agree to the Foodz Partner Terms').check();
   await page.getByRole('button', { name: 'Send application' }).click();

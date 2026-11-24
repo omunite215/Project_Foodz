@@ -35,12 +35,17 @@ test('send back, with a starter sentence, then the result line', async ({ page }
   await expect(dialog.getByLabel('What needs fixing')).toHaveValue(
     /^The photo of your ID is blurry/,
   );
+  // The dialog has finished fading in before contrast is measured.
+  await expect(dialog).toHaveCSS('opacity', '1');
   await expectNoAxeViolations(page);
   await dialog.getByRole('button', { name: 'Send back', exact: true }).click();
-  await expect(page.getByText("Sent back to Ana Souza. We've emailed Ana.")).toBeVisible({
+  await expect(
+    page.getByRole('main').getByText("Sent back to Ana Souza. We've emailed Ana."),
+  ).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByText("Sent back to Ana Souza. We've emailed Ana.")).toBeFocused();
+  // The result line takes focus (design 8.10).
+  await expect(page.locator(':focus')).toContainText("Sent back to Ana Souza. We've emailed Ana.");
 });
 
 test('reject needs no code; approve past flags needs the tick and a code', async ({ page }) => {
@@ -50,7 +55,9 @@ test('reject needs no code; approve past flags needs the tick and a code', async
   const reject = page.getByRole('dialog', { name: "Reject Kwame Mensah's application?" });
   await reject.getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(
-    page.getByText("Kwame Mensah's application is rejected. We've emailed Kwame."),
+    page
+      .getByRole('main')
+      .getByText("Kwame Mensah's application is rejected. We've emailed Kwame."),
   ).toBeVisible({
     timeout: 15_000,
   });
@@ -66,16 +73,26 @@ test('reject needs no code; approve past flags needs the tick and a code', async
   ).toBeVisible();
   await approve.getByRole('checkbox', { name: "I've checked these flags" }).check();
   const code = approve.getByLabel('6-digit code from your authenticator app');
+  // A code only when the last check is over 10 minutes old (A27.1): fresh sign-ins skip it.
+  const outcome = page
+    .getByRole('main')
+    .getByText(/Sam Rivera is approved\. We've emailed Sam\./)
+    .or(approve.getByText(/still being checked|missing from storage/));
   if (!(await code.isVisible())) {
     await approve.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(code.or(outcome)).toBeVisible({ timeout: 15_000 });
   }
-  await code.fill(await codeFor(STAFF.support));
-  await approve.getByRole('button', { name: 'Approve', exact: true }).click();
+  if (await code.isVisible()) {
+    await code.fill(await codeFor(STAFF.support));
+    await approve.getByRole('button', { name: 'Approve', exact: true }).click();
+  }
   // Sam's license expires in 20 days: approved, or refused for an image still being checked.
   await expect(
-    page.getByText(
-      /^Sam Rivera is approved\. We've emailed Sam\.$|still being checked|missing from storage/,
-    ),
+    page
+      .getByRole('main')
+      .getByText(
+        /Sam Rivera is approved\. We've emailed Sam\.|still being checked|missing from storage/,
+      ),
   ).toBeVisible({ timeout: 15_000 });
 });
 
@@ -90,7 +107,9 @@ test('suspend takes Diego offline at once', async ({ page }) => {
   if (await code.isVisible()) await code.fill(await codeFor(STAFF.support));
   await dialog.getByRole('button', { name: 'Suspend', exact: true }).click();
   await expect(
-    page.getByText("Diego Alvarez is suspended and offline. We've emailed Diego."),
+    page
+      .getByRole('main')
+      .getByText("Diego Alvarez is suspended and offline. We've emailed Diego."),
   ).toBeVisible({
     timeout: 15_000,
   });
