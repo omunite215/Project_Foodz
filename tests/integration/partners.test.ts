@@ -455,6 +455,59 @@ describe('send back, fix and the version check (A24, A26)', () => {
       details: { how: 'edited', changedParts: ['idPhoto'] },
     });
   });
+
+  it('refuses a save from a form opened before a send-back or another save (P6.3)', async () => {
+    const sam = await applicant('Sam Okafor');
+    const applied = await submit(sam, { plate: '5SB 214', idNumber: 'S7710 3302' });
+    const partnerId = applied.data!.partnerId;
+    const opened = await migrator.deliveryPartner.findUniqueOrThrow({ where: { id: partnerId } });
+    const save = (expectedVersion: number, plate: string) =>
+      as(sam, () =>
+        partners.updateApplicationAction({
+          photoUploadId: opened.photoUploadId!,
+          phone: '(617) 555-0177',
+          vehicleType: 'SCOOTER',
+          plate,
+          idExpiresOn: '2029-03-03',
+          idDocumentUploadId: opened.idDocumentUploadId!,
+          expectedVersion,
+        }),
+      ) as Promise<ActionResult<{ version: number; fixed: boolean }>>;
+
+    // Another tab saved first: this one is refused and changes nothing.
+    expect((await save(opened.version, '5SB 215')).data).toMatchObject({ fixed: false });
+    const otherTab = await save(opened.version, '5SB 216');
+    expect(otherTab.serverError).toMatchObject({
+      code: 'APPLICATION_CHANGED',
+      details: { how: 'edited', current: { status: 'APPLIED', version: opened.version + 1 } },
+    });
+
+    // Morgan sends it back while the form is open: the stale save is a decision to read.
+    const before = await versionOf(partnerId);
+    await as(morgan, () =>
+      review.sendBackPartnerAction({ partnerId, expectedVersion: before, message: 'New plate?' }),
+    );
+    const stale = await save(before, '5SB 217');
+    expect(stale.serverError).toMatchObject({
+      code: 'APPLICATION_DECIDED',
+      message: 'Your application was just reviewed. See the decision below.',
+      details: { status: 'APPLIED' },
+    });
+    expect(await versionOf(partnerId)).toBe(before + 1);
+    const last = await migrator.partnerApplicationEvent.findFirstOrThrow({
+      where: { partnerId },
+      orderBy: { versionAfter: 'desc' },
+      select: { type: true },
+    });
+    expect(last).toEqual({ type: 'sent-back' });
+    expect(await as(sam, () => service.getMyPartnerState(sam.actor))).toMatchObject({
+      screen: 'sentBack',
+      sentBack: { message: 'New plate?' },
+    });
+
+    // Opened again at the current version, the fix goes through.
+    expect((await save(before + 1, '5SB 217')).data).toMatchObject({ fixed: true });
+  });
 });
 
 describe('approving (A23, A27)', () => {

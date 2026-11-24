@@ -151,6 +151,15 @@ const decided = (status: string) =>
     },
   );
 
+/** The application moved on since the form opened: another tab or phone saved it first. */
+const changedElsewhere = (status: string, version: number) =>
+  refuse(
+    'APPLICATION_CHANGED',
+    'Your application was changed on another tab or phone. Open it again to see the latest version.',
+    409,
+    { how: 'edited', current: { status, version } },
+  );
+
 const POINT_MESSAGES: Record<PointRefusal, string> = {
   LOW_ACCURACY:
     'Your phone is sharing an approximate location. Turn on Precise Location, then try again.',
@@ -619,6 +628,12 @@ export async function updateApplication(
     const row = id ? await findPartnerByUser(ctx, actor.userId) : null;
     if (!row) throw applicationNotFound();
     if (row.status !== 'APPLIED') throw decided(row.status);
+    // The save carries the version the form was opened at (P6.3). A send-back that landed in
+    // between is a decision the applicant has to read, so it is never marked fixed unseen.
+    if (row.version !== parsed.expectedVersion) {
+      if (isWaitingForApplicant(row)) throw decided(row.status);
+      throw changedElsewhere(row.status, row.version);
+    }
     const account = await findAccount(ctx, actor.userId);
     await checkUploads(
       ctx,
