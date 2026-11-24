@@ -29,6 +29,9 @@ export const FIXTURE_KEYS = [
   'victor',
   'nora',
   'sam',
+  'luis',
+  'omar',
+  'lena',
 ] as const;
 export type FixtureKey = (typeof FIXTURE_KEYS)[number];
 
@@ -51,6 +54,9 @@ export function fixtureAccounts(
     victor: get('victor'),
     nora: get('nora'),
     sam: get('sam'),
+    luis: get('luis'),
+    omar: get('omar'),
+    lena: get('lena'),
   };
 }
 
@@ -153,6 +159,34 @@ export const PARTNER_ACCOUNTS: readonly PartnerAccount[] = [
     name: 'Sam Rivera',
     role: 'customer',
     phone: '+16175550188',
+    banned: false,
+    banReason: null,
+  },
+  // F7: approved couriers for the dispatch stories (offline until someone goes online).
+  {
+    key: 'luis',
+    email: 'luis.partner@foodz.example',
+    name: 'Luis Moreno',
+    role: 'partner',
+    phone: '+16175550171',
+    banned: false,
+    banReason: null,
+  },
+  {
+    key: 'omar',
+    email: 'omar.partner@foodz.example',
+    name: 'Omar Haddad',
+    role: 'partner',
+    phone: '+16175550172',
+    banned: false,
+    banReason: null,
+  },
+  {
+    key: 'lena',
+    email: 'lena.partner@foodz.example',
+    name: 'Lena Fischer',
+    role: 'partner',
+    phone: '+16175550173',
     banned: false,
     banReason: null,
   },
@@ -317,6 +351,39 @@ const FIXTURES: Fixture[] = [
     submitted: 68 * DAY,
     files: true,
   },
+  {
+    key: 'luis',
+    status: 'APPROVED',
+    vehicle: 'SCOOTER',
+    plate: '7KT 342',
+    document: 'DRIVER_LICENSE',
+    number: 'L3342190',
+    expires: () => new Date('2029-07-12T00:00:00Z'),
+    submitted: 40 * DAY,
+    files: true,
+  },
+  {
+    key: 'omar',
+    status: 'APPROVED',
+    vehicle: 'CAR',
+    plate: '5OH 318',
+    document: 'DRIVER_LICENSE',
+    number: 'H5318822',
+    expires: () => new Date('2030-03-21T00:00:00Z'),
+    submitted: 90 * DAY,
+    files: true,
+  },
+  {
+    key: 'lena',
+    status: 'APPROVED',
+    vehicle: 'BICYCLE',
+    plate: null,
+    document: 'PASSPORT',
+    number: 'C7781934',
+    expires: () => new Date('2032-10-05T00:00:00Z'),
+    submitted: 25 * DAY,
+    files: true,
+  },
 ];
 
 const nameOf = (key: FixtureKey) =>
@@ -363,6 +430,10 @@ export async function resetPartnerFixtures(
 ): Promise<number> {
   const t = now.getTime();
   const ids = FIXTURES.map((fixture) => partnerFixtureId(fixture.key));
+  // F7: no fixture keeps an order or an offer across a reset (offers go with the rows).
+  await tx.$executeRaw`
+    UPDATE deliveries SET status = 'CANCELLED', partner_id = NULL, assigned_at = NULL
+    WHERE partner_id = ANY (${ids}::uuid[])`;
   await tx.deliveryPartner.deleteMany({ where: { id: { in: ids } } });
   await tx.upload.deleteMany({
     where: {
@@ -534,6 +605,20 @@ export async function resetPartnerFixtures(
           welcomedAt: new Date(approved),
         });
         history.push({ type: 'approved', at: approved, actor: admin });
+        break;
+      }
+      case 'luis':
+      case 'omar':
+      case 'lena': {
+        const approved = t - fixture.submitted + 2 * DAY;
+        Object.assign(row, {
+          approvedAt: new Date(approved),
+          decidedAt: new Date(approved),
+          decidedBy: morgan.id,
+          welcomedAt: new Date(approved),
+          ...(fixture.key === 'omar' && { ratingAvg: 4.6, ratingCount: 31 }),
+        });
+        history.push({ type: 'approved', at: approved, actor: morgan });
         break;
       }
       default:
