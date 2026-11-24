@@ -25,7 +25,6 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useSlowPending } from '@/components/forms/submit-button';
 import { announce } from '@/lib/announce';
-import { forgetApplyDrafts } from '@/lib/partner/draft';
 import { cn } from '@/lib/utils';
 
 /*
@@ -267,7 +266,6 @@ export function PartnerAccountMenu() {
           onCloseAutoFocus={() => {
             if (!signOutOnClose.current) return;
             signOutOnClose.current = false;
-            forgetApplyDrafts();
             signOut.request();
           }}
         >

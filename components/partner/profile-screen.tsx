@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { forgetApplyDrafts } from '@/lib/partner/draft';
 import {
   goOffline,
   keepScreenOnSetting,
@@ -125,10 +124,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
   const partner = state.partner;
   const initial = Array.from(partner.name.trim())[0]?.toUpperCase() ?? '';
 
-  const signOutNow = () => {
-    forgetApplyDrafts();
-    signOut.request();
-  };
+  const signOutNow = () => signOut.request();
 
   const rowClass =
     'flex h-14 w-full items-center gap-3 px-4 text-left text-body-4 text-strong hover:bg-muted focus-visible:-outline-offset-2';
