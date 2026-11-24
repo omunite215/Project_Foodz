@@ -75,7 +75,11 @@ describe('the upload field', () => {
 
   it("words the check's refusal by its code", () => {
     expect(rejectedUploadError('TOO_LARGE', 'photo')).toBe('Files for this can be at most 5 MB.');
+    // A renamed file (P2.3): its name says JPEG, so "only JPEG…" would contradict it.
     expect(rejectedUploadError('BAD_TYPE', 'id')).toBe(
+      'The image could not be read. Try a different file.',
+    );
+    expect(browserFileError({ type: 'application/pdf', size: 10 }, 'id')).toBe(
       'Only JPEG, PNG, WebP and AVIF images are accepted.',
     );
     expect(rejectedUploadError('UNREADABLE', 'id')).toBe(

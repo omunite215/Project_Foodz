@@ -10,7 +10,7 @@ import { AppError, forbidden, invalidInput, notFound } from '@/server/errors';
 import { logger } from '@/server/logger';
 import type { PartnerExport } from '@/server/modules/account/schema';
 import { audit } from '@/server/modules/audit/service';
-import { lastClosing } from '@/server/modules/menu/hours';
+import { lastClosing, openState } from '@/server/modules/menu/hours';
 import type { OpeningHours } from '@/server/modules/menu/schema';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import { clockAt } from '@/server/modules/orders/text';
@@ -340,11 +340,13 @@ export async function getMyPartnerState(
   let lastOffline: Extract<PartnerState, { screen: 'home' }>['lastOffline'] = null;
   const reason = row.offlineReason;
   if (!row.isOnline && row.offlineAt && isNoticed(reason)) {
-    const closed = reason === 'kitchen-closed' ? lastClosing(hours, timeZone, row.offlineAt) : null;
+    const kitchenClosed = reason === 'kitchen-closed';
+    const closed = kitchenClosed ? lastClosing(hours, timeZone, row.offlineAt) : null;
+    const opensAt = kitchenClosed ? openState(hours, timeZone, row.offlineAt).opensAt : null;
     lastOffline = {
       reason,
       at: row.offlineAt.toISOString(),
-      ...offlineNotice(reason, row.offlineAt.toISOString(), timeZone, closed?.at ?? null),
+      ...offlineNotice(reason, row.offlineAt.toISOString(), timeZone, closed?.at ?? null, opensAt),
     };
   }
   return {
@@ -1049,7 +1051,11 @@ export async function sweepIdlePartners(
     if (!changed) return null;
     const time = clockAt(reason === 'kitchen-closed' && closedAt ? closedAt : now, timeZone);
     await runPartnerEffects([
-      { kind: 'notify', userId: partner.userId, notice: offlineNoticeText(reason, time) },
+      {
+        kind: 'notify',
+        userId: partner.userId,
+        notice: offlineNoticeText(reason, time, store.opensAt),
+      },
     ]);
     return reason;
   };

@@ -98,12 +98,21 @@ test('Ana waits on the pending screen, in light and in dark', async ({
   await expect(page.locator('.partner')).toHaveClass(/\bdark\b/);
   await expectNoAxeViolations(page);
 
-  // Withdraw asks first, and Keep leaves everything as it was.
-  await page.getByRole('button', { name: 'Withdraw application' }).click();
+  // Withdraw asks first, and Keep leaves everything as it was. Focus goes back to the button
+  // that opened it, after Keep and after Escape (P17.4).
+  const withdraw = page.getByRole('button', { name: 'Withdraw application' });
+  await withdraw.focus();
+  await page.keyboard.press('Enter');
   const dialog = page.getByRole('alertdialog', { name: 'Withdraw your application?' });
   await expect(dialog.getByRole('button', { name: 'Keep application' })).toBeFocused();
-  await dialog.getByRole('button', { name: 'Keep application' }).click();
+  await page.keyboard.press('Enter');
   await expect(dialog).toHaveCount(0);
+  await expect(withdraw).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(withdraw).toBeFocused();
 });
 
 test('Kwame reads the message as typed and fixes the application from step 4', async ({ page }) => {
@@ -350,6 +359,18 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
 
   // Step 4: the summary shows only the last four; both boxes are needed.
   await expect(page.getByRole('heading', { level: 1, name: 'Check and send' })).toBeVisible();
+
+  // The Partner Terms sheet: its text scrolls from the keyboard too (P5.2, P17.4).
+  await page.getByRole('link', { name: 'Read the Partner Terms' }).click();
+  const terms = page.getByRole('dialog', { name: 'Foodz Partner Terms' });
+  await expect(terms).toBeVisible();
+  const termsText = terms.getByRole('region', { name: 'Partner Terms text' });
+  await termsText.focus();
+  await expect(termsText).toBeFocused();
+  await expectNoAxeViolations(page);
+  await page.keyboard.press('Escape');
+  await expect(terms).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Read the Partner Terms' })).toBeFocused();
   await expect(page.getByText(/Driver's license ending 4821 · expires Mar 3, 2029/)).toBeVisible();
   await expect(page.getByText('S48204821')).toHaveCount(0);
   await page.getByRole('button', { name: 'Send application' }).click();

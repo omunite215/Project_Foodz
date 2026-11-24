@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { letterEmail } from '@/server/notifications/email';
 import { offlineNoticeText, PARTNER_NOTICES, partnerEmail } from './notices';
+import { offlineNotice } from './text';
 
 const facts = {
   firstName: 'Jonas',
@@ -8,6 +9,14 @@ const facts = {
   applicantText: null,
   reapplyFrom: '2026-12-17',
 };
+
+/** The kitchen's next opening at 11 am, today or tomorrow as seen when he went offline. */
+const opens = (day: 'today' | 'tomorrow') => ({
+  at: '2026-11-24T16:00:00.000Z',
+  weekday: 'tue' as const,
+  time: '11:00',
+  day,
+});
 
 describe('partner notices (design 11, D23)', () => {
   it('never carries a reviewer text in a notice body', () => {
@@ -25,6 +34,22 @@ describe('partner notices (design 11, D23)', () => {
       type: 'partner.offline-kitchen-closed',
       body: 'Foodz Kitchen closed at 11 pm, so we took you offline.',
     });
+  });
+
+  it('says when the kitchen opens when that is later the same day (P10.6)', () => {
+    // Online before opening: last night's closing time would read oddly in the morning.
+    expect(offlineNoticeText('kitchen-closed', '10 pm', opens('today')).body).toBe(
+      'Foodz Kitchen is closed until 11 am, so we took you offline.',
+    );
+    // Online through closing: the closing time, as the story words it.
+    expect(offlineNoticeText('kitchen-closed', '10 pm', opens('tomorrow')).body).toBe(
+      'Foodz Kitchen closed at 10 pm, so we took you offline.',
+    );
+    expect(
+      offlineNotice('kitchen-closed', '2026-11-24T14:26:00.000Z', 'America/New_York', null, {
+        ...opens('today'),
+      }).words,
+    ).toBe('Foodz Kitchen is closed until 11 am, so we took you offline.');
   });
 });
 
