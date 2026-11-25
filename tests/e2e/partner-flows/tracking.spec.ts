@@ -132,7 +132,7 @@ test('a courier picks up, finds the door with the map and hands over with the co
   await expect(page).toHaveTitle(`Deliver order ${ORDER} | Foodz Partner`);
 
   // Only now the customer: first name, address, the call button (P39).
-  const dropoff = page.getByRole('region', { name: 'Drop-off' });
+  const dropoff = page.getByRole('region', { name: 'Drop-off', exact: true });
   await expect(dropoff.getByText('Priya', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: /^Call Priya, / })).toBeVisible();
   // The first Open in Maps per delivery asks first (U10); "Stay in Foodz" goes back to it.

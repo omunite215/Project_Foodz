@@ -885,8 +885,9 @@ export async function handOverCode(
     if (result.outcome === 'delivered') {
       const pay = earnedOf(result.payWords, current.payText);
       ownRelease = current.deliveryId;
-      endHeld(current);
+      // One update, so the sheet goes straight from the code to the delivered body.
       set({ delivered: { orderNumber: current.orderNumber, pay } });
+      endHeld(current);
       return { kind: 'delivered', pay };
     }
     const otp =
