@@ -28,8 +28,10 @@ import { PREVIOUS_STEP } from '@/server/modules/board/state';
 import { cardTiming } from '@/server/modules/board/timing';
 import { STAFF_STATUS_WORDS } from '@/server/modules/board/text';
 import { restartSearchAction } from '@/server/modules/delivery/actions';
+import { askToWaitAction } from '@/server/modules/tracking/actions';
 import type { StaffCourierSection } from '@/server/modules/delivery/schema';
 import { showBoardNotice } from '@/components/admin/board-notices';
+import { askedToWaitNotice, firstOfShort } from '@/lib/board/tracking-text';
 import { FormAlert } from '@/components/forms/form-alert';
 import { BLOCKED_BUTTON_CLASS, useSlowPending } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
@@ -78,6 +80,7 @@ import {
   TimeBlock,
 } from '../card-parts';
 import { CourierSection } from '../courier-parts';
+import { stuckFromSteps, TrackingDetail } from './tracking-detail';
 import { BoardDialogs, type DialogKind, type DialogState } from '../dialogs/board-dialogs';
 import { StaffTimeline } from './staff-timeline';
 
@@ -702,6 +705,45 @@ export function StaffOrderDetailView({
   const time = card ? timeBlockText(cardTiming(card, now), card, timeZone) : null;
   const cancelledText = useCancelledNotice(detail);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: detailKey(detail.id) });
+  // F8 (A50): "Ask to wait" acts at once from the detail too.
+  const [asking, setAsking] = useState(false);
+  const askToWait = async () => {
+    if (!card || asking) return;
+    setAsking(true);
+    const outcome = await callAction(() =>
+      askToWaitAction({
+        orderId: detail.id,
+        expectedVersion: card.courier?.deliveryVersion ?? 0,
+      }),
+    );
+    setAsking(false);
+    if (outcome.ok) {
+      showBoardNotice(
+        askedToWaitNotice(
+          card.courier?.shortName ?? 'the courier',
+          card.masked.firstName ? null : card.firstName,
+        ),
+      );
+      refresh();
+      return;
+    }
+    if (outcome.error.code === 'UNAUTHENTICATED') {
+      onSignedOut();
+      return;
+    }
+    showBoardNotice(outcome.error.message, { variant: 'error' });
+    refresh();
+  };
+  const openStuckDialog = (kind: 'confirmHandover' | 'cancelUnreachable') => {
+    if (!card) return;
+    const opener = document.activeElement;
+    setDialog({
+      kind,
+      cardId: card.id,
+      card,
+      opener: opener instanceof HTMLElement ? opener : null,
+    });
+  };
   const howItWent = howItWentLine(detail.howItWent);
 
   return (
@@ -764,6 +806,32 @@ export function StaffOrderDetailView({
             now={courierNow}
             timeZone={timeZone}
             level={level}
+            tracking={
+              detail.tracking && detail.courierSection.view === 'full' ? (
+                <TrackingDetail
+                  tracking={detail.tracking}
+                  orderNumber={detail.number}
+                  courierName={detail.courierSection.assigned?.name ?? null}
+                  courierId={detail.courierSection.assigned?.partnerId ?? null}
+                  courierFirst={firstOfShort(detail.courierSection.courier.shortName)}
+                  timeZone={timeZone}
+                  serverNowMs={courierNow.getTime()}
+                  level={level === 'h2' ? 'h3' : 'h4'}
+                  stuck={
+                    cancelledText || detail.status !== 'PICKED_UP'
+                      ? []
+                      : stuckFromSteps(detail.tracking.steps, courierNow.getTime())
+                  }
+                  readOnly={detail.courierSection.actions.readOnly}
+                  offline={!online}
+                  asking={asking}
+                  onStuck={(item) => {
+                    if (item === 'askToWait') void askToWait();
+                    else openStuckDialog(item);
+                  }}
+                />
+              ) : null
+            }
             actions={
               detail.courierSection.view === 'full' && !cancelledText ? (
                 <CourierActions

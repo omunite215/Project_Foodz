@@ -158,6 +158,27 @@ describe('the staff timeline milestones (design 2.5)', () => {
       { event: 'search-restarted' as const, staff: { name: 'Foodz Admin', role: 'admin' } },
       'Foodz Admin (Admin) started looking for a courier again',
     ],
+    // F8 (design 3.13).
+    [{ event: 'at-kitchen' as const }, 'Luis Moreno arrived at the kitchen'],
+    [{ event: 'picked-up' as const }, 'Luis Moreno picked it up'],
+    [{ event: 'almost-there' as const }, 'Almost there · Foodz (automatic)'],
+    [{ event: 'no-answer' as const }, "Luis Moreno: customer isn't answering"],
+    [{ event: 'problem' as const, reason: 'address' }, "Luis Moreno: can't find the address"],
+    [
+      { event: 'asked-to-wait' as const, staff: morgan },
+      'Morgan Diaz (Support) asked Luis Moreno to wait 5 more minutes',
+    ],
+    [{ event: 'otp-wrong' as const, tryNumber: 2 }, 'Delivery code: wrong try (2 of 5)'],
+    [{ event: 'otp-locked' as const }, 'Delivery code locked'],
+    [
+      { event: 'delivered-with-code' as const, cashCents: 5897 },
+      'Delivered with the code by Luis Moreno · cash $58.97 collected',
+    ],
+    [{ event: 'delivered-with-code' as const }, 'Delivered with the code by Luis Moreno'],
+    [
+      { event: 'handover-confirmed' as const, staff: morgan, reason: 'customer-confirmed' },
+      'Hand-over confirmed by Morgan Diaz (Support): Customer confirmed by phone',
+    ],
   ])('words %j', (change, words) => {
     expect(courierTimelineWords({ ...base, ...change })).toBe(words);
   });

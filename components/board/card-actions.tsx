@@ -2,9 +2,11 @@
 
 import {
   ArrowLeftRight,
+  CircleCheck,
   CircleX,
   Clock,
   EllipsisVertical,
+  Hourglass,
   House,
   type LucideIcon,
   OctagonX,
@@ -32,6 +34,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { announce } from '@/lib/announce';
 import { msUntil } from '@/lib/board/clock';
 import type { CourierMenuItem } from '@/lib/board/courier-text';
+import { STUCK_LABELS, type StuckAction } from '@/lib/board/tracking-text';
 import {
   MENU_WORDS,
   OFFLINE_CAPTION,
@@ -69,6 +72,14 @@ const COURIER_ITEMS: Record<CourierMenuItem, { icon: LucideIcon; words: string }
 };
 
 const NO_COURIER_ITEMS: readonly CourierMenuItem[] = [];
+
+/** F8 (design 3.10): a stuck delivery's actions; "Cancel and bring it back" is destructive. */
+const STUCK_ICONS: Record<StuckAction, LucideIcon> = {
+  confirmHandover: CircleCheck,
+  askToWait: Hourglass,
+  cancelUnreachable: Undo2,
+};
+const NO_STUCK_ITEMS: readonly StuckAction[] = [];
 
 const DESTRUCTIVE: ReadonlySet<CardMenuItem> = new Set(['refuse', 'cancel']);
 const OVERRIDES: ReadonlySet<CardMenuItem> = new Set(['moveBack', 'pickUp', 'deliver']);
@@ -178,6 +189,9 @@ export function CardActions({
   onMenu,
   onUndo,
   courierItems = NO_COURIER_ITEMS,
+  stuckItems = NO_STUCK_ITEMS,
+  courierFirst = 'the courier',
+  onStuck,
   onCourier,
 }: {
   number: string;
@@ -185,6 +199,10 @@ export function CardActions({
   /** F7: "Assign courier", "Take off courier", "Choose another courier", "Find a courier". */
   courierItems?: readonly CourierMenuItem[];
   onCourier?: (item: CourierMenuItem) => void;
+  /** F8 (A50): Confirm hand-over, Ask to wait, Cancel and bring it back. */
+  stuckItems?: readonly StuckAction[];
+  courierFirst?: string;
+  onStuck?: (item: StuckAction) => void;
   /** KITCHEN on a Ready card: no button, "Waiting for pickup" (design 2.7). */
   waitingForPickup: boolean;
   progress: MoveProgress;
@@ -356,6 +374,41 @@ export function CardActions({
                             aria-hidden
                           />
                           {COURIER_ITEMS[item].words}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </>
+                ) : null}
+                {group.includes('details') && stuckItems.length ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    {stuckItems.map((item) => {
+                      const Icon = STUCK_ICONS[item];
+                      const destructive = item === 'cancelUnreachable';
+                      return (
+                        <DropdownMenuItem
+                          key={item}
+                          disabled={demo}
+                          onSelect={() => onStuck?.(item)}
+                          className={cn(
+                            'h-12',
+                            demo
+                              ? 'text-neutral-3'
+                              : destructive &&
+                                  'text-destructive data-[highlighted]:text-destructive',
+                          )}
+                        >
+                          <Icon
+                            className={
+                              demo
+                                ? 'text-neutral-4'
+                                : destructive
+                                  ? 'text-destructive'
+                                  : 'text-neutral-3'
+                            }
+                            aria-hidden
+                          />
+                          {STUCK_LABELS[item](courierFirst)}
                         </DropdownMenuItem>
                       );
                     })}

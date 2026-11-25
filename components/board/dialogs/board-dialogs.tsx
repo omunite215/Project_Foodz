@@ -12,6 +12,7 @@ import type { BoardWriter } from '@/lib/data/board';
 import { CancelDialog } from './cancel-dialog';
 import { AssignCourierDialog, TakeOffCourierDialog } from './courier-dialogs';
 import { HandoverDialog, MoveBackDialog } from './status-dialogs';
+import { CancelBringBackDialog, ConfirmHandoverDialog } from './tracking-dialogs';
 
 /*
  * The board's dialogs (F5 design 3) and what their success does to the board: the card leaves
@@ -28,7 +29,10 @@ export type DialogKind =
   // F7 (design 2.7, 2.8).
   | 'assignCourier'
   | 'takeOffCourier'
-  | 'chooseAnother';
+  | 'chooseAnother'
+  // F8 (design 3.10).
+  | 'confirmHandover'
+  | 'cancelUnreachable';
 
 export interface DialogState {
   kind: DialogKind;
@@ -132,7 +136,35 @@ export function BoardDialogs({
     return true;
   };
 
+  // F8: a finished or cancelled delivery leaves the board; focus goes to the next card.
+  const deliveryEnded = () => {
+    finished.current = true;
+    writer.remove([card.id]);
+    onClose();
+    focusAfter(card, null);
+  };
+
   switch (dialog.kind) {
+    case 'confirmHandover':
+      return (
+        <ConfirmHandoverDialog
+          key={`${dialog.cardId}-confirm`}
+          {...common}
+          card={current ?? card}
+          readOnly={can.readOnly}
+          onFinished={deliveryEnded}
+        />
+      );
+    case 'cancelUnreachable':
+      return (
+        <CancelBringBackDialog
+          key={`${dialog.cardId}-bring-back`}
+          {...common}
+          card={current ?? card}
+          readOnly={can.readOnly}
+          onFinished={deliveryEnded}
+        />
+      );
     case 'assignCourier':
       return (
         <AssignCourierDialog

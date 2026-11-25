@@ -1,4 +1,9 @@
-import { COURIER_MILESTONES, courierTimelineWords } from '@/server/modules/delivery/text';
+import {
+  COURIER_MILESTONES,
+  type CourierMilestone,
+  courierTimelineWords,
+  TRACKING_MILESTONES,
+} from '@/server/modules/delivery/text';
 import { displayPhone } from '@/lib/phone';
 import { can as roleCan, type Role } from '@/server/auth/roles';
 import type { OrderStatus } from '@/server/db/enums';
@@ -501,8 +506,15 @@ export function timelineOf(
           },
         ];
       case 'picked-up':
+        // F8 (A53.2): the courier's own slide reads as his milestone (not for the kitchen).
+        if (data.actor === 'courier' && !kitchen) {
+          return [courierEntry('picked-up', base, data, null)];
+        }
         return [{ ...base, type: 'picked-up', reason: oneOf(HANDOVER_REASONS, data.reason), note }];
       case 'delivered':
+        if (data.actor === 'courier' && !kitchen) {
+          return [courierEntry('delivered-with-code', base, data, null)];
+        }
         return [
           {
             ...base,
@@ -518,28 +530,60 @@ export function timelineOf(
         return [{ ...base, type: 'sold-out', dishes: stringList(data.dishes) }];
       default: {
         // F7 (design 2.5): courier milestones, named from the caller's (masked) name map.
-        const milestone = COURIER_MILESTONES.find((name) => `courier-${name}` === event.type);
+        const milestone: CourierMilestone | undefined =
+          COURIER_MILESTONES.find((name) => `courier-${name}` === event.type) ??
+          TRACKING_MILESTONES.find((name) => name === event.type);
         if (!milestone) return [];
-        const partnerId = text(data.partnerId);
-        const courierName = partnerId ? (courierNames.get(partnerId) ?? null) : null;
-        const reason = text(data.reason);
-        const staff = base.by.kind === 'staff' ? { name: base.by.name, role: base.by.role } : null;
-        const pickupM = typeof data.pickupM === 'number' ? data.pickupM : null;
-        return [
-          {
-            ...base,
-            type: 'courier',
-            event: milestone,
-            courierName,
-            reason,
-            note: kitchen ? null : note,
-            words: courierTimelineWords({ event: milestone, courierName, staff, reason, pickupM }),
-          },
-        ];
+        // F8 (A47): the kitchen sees the pickup, not the door.
+        if (kitchen && F8_MILESTONES.has(milestone)) return [];
+        return [courierEntry(milestone, base, data, kitchen ? null : note)];
       }
     }
   });
+
+  function courierEntry(
+    milestone: CourierMilestone,
+    base: TimelineBaseFields,
+    data: Record<string, unknown>,
+    entryNote: string | null,
+  ): StaffTimelineEntry {
+    const partnerId = text(data.partnerId);
+    const courierName = partnerId ? (courierNames.get(partnerId) ?? null) : null;
+    const reason = text(data.reason);
+    const staff = base.by.kind === 'staff' ? { name: base.by.name, role: base.by.role } : null;
+    const pickupM = typeof data.pickupM === 'number' ? data.pickupM : null;
+    const tryNumber = typeof data.try === 'number' ? data.try : null;
+    const cashCents = typeof data.cashCollectedCents === 'number' ? data.cashCollectedCents : null;
+    return {
+      ...base,
+      type: 'courier',
+      event: milestone,
+      courierName,
+      reason,
+      note: entryNote,
+      words: courierTimelineWords({
+        event: milestone,
+        courierName,
+        staff,
+        reason,
+        pickupM,
+        tryNumber,
+        cashCents,
+      }),
+    };
+  }
 }
+
+type TimelineBaseFields = Pick<StaffTimelineEntry, 'id' | 'at' | 'by' | 'fromStatus' | 'toStatus'>;
+
+/** F8's milestones about the door and the code, never shown to the kitchen (A47). */
+const F8_MILESTONES: ReadonlySet<CourierMilestone> = new Set<CourierMilestone>([
+  'at-kitchen',
+  'almost-there',
+  'no-answer',
+  'problem',
+  ...TRACKING_MILESTONES,
+]);
 
 // ------------------------------------------------------------------ the detail (A10)
 

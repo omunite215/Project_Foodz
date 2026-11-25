@@ -36,10 +36,13 @@ import {
 } from '@/lib/board/text';
 import { isOrderChangedDetails } from '@/lib/board/model';
 import {
-  assignedCourierReason,
-  deliveredByCourierReason,
   holdingCourier,
   moveBackCourierLine,
+  deliveryDoneLine,
+  HELD_DELIVER_REASONS,
+  HELD_PICKUP_REASONS,
+  KEEP_COURIER_REASON,
+  keepsCourierLine,
   otherWayLine,
 } from '@/lib/board/courier-text';
 import { ActionDialog } from './action-dialog';
@@ -253,22 +256,23 @@ export function HandoverDialog({
       ? card.payment.totalCents
       : null;
   const schema = deliver ? markDeliveredInput : markPickedUpInput;
-  // F7 (design 2.11, D30): with a courier on the order, "by the assigned courier" comes first and
-  // is chosen already; without one it isn't offered at all.
+  // F8 (design 3.11, A51): with a courier holding the order, these are overrides. Picked up:
+  // "Courier's app isn't working (keep the courier)" comes first, chosen by nobody yet; Mark
+  // delivered: the app, the customer's phone call, or Other. Without a courier, F5's reasons.
   const courier = holdingCourier(card.courier);
-  const reasons = HANDOVER_REASONS;
-  const labels: Record<HandoverReason, string> = courier
-    ? {
-        ...HANDOVER_REASON_LABELS,
-        'courier-app-down': deliver
-          ? deliveredByCourierReason(courier)
-          : assignedCourierReason(courier),
-      }
-    : HANDOVER_REASON_LABELS;
+  const reasons: readonly HandoverReason[] = courier
+    ? deliver
+      ? HELD_DELIVER_REASONS
+      : HELD_PICKUP_REASONS
+    : HANDOVER_REASONS.filter((item) => item !== 'customer-confirmed');
+  const labels: Record<HandoverReason, string> =
+    courier && !deliver
+      ? { ...HANDOVER_REASON_LABELS, 'courier-app-down': KEEP_COURIER_REASON }
+      : HANDOVER_REASON_LABELS;
 
   const form = useForm({
     defaultValues: {
-      reason: courier ? 'courier-app-down' : '',
+      reason: '',
       note: '',
       cashCollected: false,
     },
@@ -382,8 +386,16 @@ export function HandoverDialog({
               />
             )}
           </form.Field>
-          {courier && !deliver && reason && reason !== 'courier-app-down' ? (
-            <OutcomeBox lines={[otherWayLine(courier)]} />
+          {courier && reason ? (
+            <OutcomeBox
+              lines={[
+                deliver
+                  ? deliveryDoneLine(courier)
+                  : reason === 'courier-app-down'
+                    ? keepsCourierLine(courier, card.number)
+                    : otherWayLine(courier),
+              ]}
+            />
           ) : null}
           {cashCents !== null ? (
             <form.Field name="cashCollected">
