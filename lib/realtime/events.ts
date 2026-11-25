@@ -118,6 +118,11 @@ export interface DeliveryChangedEvent {
   status: 'SEARCHING' | 'ASSIGNED' | 'AT_RESTAURANT' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED';
   version: number;
   at: string;
+  /**
+   * F8, on the partner's own channel only: why staff changed his delivery, so the phone picks
+   * the right words (design 2.9, 2.10). Never on the order or ops channels.
+   */
+  notice?: 'askedToWait' | 'confirmed' | 'cancelledBringBack' | 'markedDelivered';
 }
 
 export interface RealtimeEvents {
@@ -146,6 +151,10 @@ export interface RealtimeEvents {
   'delivery.changed': DeliveryChangedEvent;
   /** On `private-ops`: "86 it" from any board (design 4.3). */
   'menu.availability-changed': { dishId: string; available: boolean; at: string };
+  /**
+   * F8, on `private-track-{orderId}` only (not the order channel, which staff can watch): the
+   * courier's latest accepted point, at most every 4 s, picked up to delivered (L2.1).
+   */
   'courier.location': {
     orderId: string;
     lat: number;
@@ -153,6 +162,28 @@ export interface RealtimeEvents {
     heading: number | null;
     at: string;
   };
+  /**
+   * F8, on `private-ops-map` or `private-ops-map-demo`: an online courier's point, at most every
+   * 10 s and at once on a state change (L3.1). No name, phone or address (L9.2).
+   */
+  'courier.position': {
+    partnerId: string;
+    lat: number;
+    lng: number;
+    heading: number | null;
+    state:
+      | 'free'
+      | 'offered'
+      | 'toKitchen'
+      | 'atKitchen'
+      | 'delivering'
+      | 'noAnswer'
+      | 'problem'
+      | 'locked';
+    at: string;
+  };
+  /** F8, on `private-ops-map-demo`: the demo run started, moved on or ended (A54). */
+  'demo.run-changed': { running: boolean; endsAt: string | null; at: string };
 }
 
 export type RealtimeEventName = keyof RealtimeEvents;

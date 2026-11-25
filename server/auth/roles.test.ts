@@ -26,6 +26,7 @@ const MATRIX: [Permission, Role[]][] = [
   [{ partner: ['apply'] }, ['customer', 'partner']],
   [{ delivery: ['dispatch'] }, ['admin']],
   [{ delivery: ['assign'] }, ['support', 'admin']],
+  [{ delivery: ['confirm-handover'] }, ['support', 'admin']],
   [{ support: ['decide-refund'] }, ['support', 'admin']],
   [{ support: ['ban-member'] }, ['support', 'admin']],
   [{ analytics: ['read'] }, ['admin']],

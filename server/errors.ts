@@ -76,6 +76,10 @@ export type AppErrorCode =
   | 'GIVE_BACK_CLOSED'
   | 'DEMO_POOL'
   | 'PRACTICE_OPEN'
+  | 'ORDER_NOT_READY'
+  | 'CONFIRM_NOT_ALLOWED'
+  | 'DEMO_RUN_BUSY'
+  | 'DEMO_RUN_LIMIT'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'

@@ -308,6 +308,20 @@ const POLICIES = {
   },
   'delivery.restart': { points: 30, duration: 3600 },
   'delivery.courier-photo': { points: 60, duration: 60 },
+  // Tracking (F8 B3, B4). The code's own fence stays `delivery.otp` (L6.3).
+  'partner.delivery-step': { points: 30, duration: 60 },
+  'partner.problem': {
+    points: 10,
+    duration: 3600,
+    message: "You've reported a lot of problems. Call Foodz Kitchen if you need help.",
+  },
+  'tracking.map': { points: 120, duration: 60 },
+  'tracking.confirm': { points: 60, duration: 3600 },
+  'tracking.demo-run': {
+    points: 6,
+    duration: 3600,
+    message: 'Demo deliveries are limited to 6 an hour. Try again in {wait}.',
+  },
   'realtime.auth': { points: 60, duration: 60 },
   'upload.request': { points: 30, duration: 600 },
   // Address suggestions while typing (debounced in the browser).
