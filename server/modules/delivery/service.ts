@@ -9,6 +9,8 @@ import type { DeliveryStatus } from '@/server/db/enums';
 import { AppError, forbidden, notFound, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
+import { inngest } from '@/server/jobs/client';
+import { deliveryTrackingStarted } from '@/server/jobs/tracking-events';
 import { redis } from '@/server/redis';
 import { presignDownload } from '@/server/storage/s3';
 import type { TurnResult } from '@/server/jobs/dispatch-run';
@@ -431,6 +433,15 @@ export async function acceptOffer(
       },
     ]);
     logger.info({ offerId, deliveryId: result.deliveryId, partnerId: me.id }, 'offer accepted');
+    // F8 L4.1: the estimate loop runs from the accept until the delivery ends.
+    await inngest
+      .send(
+        deliveryTrackingStarted.create(
+          { deliveryId: result.deliveryId, orderId: result.orderId, at: at.toISOString() },
+          { id: `delivery-tracking-${result.deliveryId}-${result.version}` },
+        ),
+      )
+      .catch((error: unknown) => logger.error({ err: error }, 'tracking start failed'));
   }
   return {
     deliveryId: result.deliveryId,

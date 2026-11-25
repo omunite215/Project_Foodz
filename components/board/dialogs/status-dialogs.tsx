@@ -256,13 +256,11 @@ export function HandoverDialog({
   // F7 (design 2.11, D30): with a courier on the order, "by the assigned courier" comes first and
   // is chosen already; without one it isn't offered at all.
   const courier = holdingCourier(card.courier);
-  const reasons = courier
-    ? HANDOVER_REASONS
-    : HANDOVER_REASONS.filter((reason) => reason !== 'assigned-courier');
+  const reasons = HANDOVER_REASONS;
   const labels: Record<HandoverReason, string> = courier
     ? {
         ...HANDOVER_REASON_LABELS,
-        'assigned-courier': deliver
+        'courier-app-down': deliver
           ? deliveredByCourierReason(courier)
           : assignedCourierReason(courier),
       }
@@ -270,7 +268,7 @@ export function HandoverDialog({
 
   const form = useForm({
     defaultValues: {
-      reason: courier ? 'assigned-courier' : '',
+      reason: courier ? 'courier-app-down' : '',
       note: '',
       cashCollected: false,
     },
@@ -384,7 +382,7 @@ export function HandoverDialog({
               />
             )}
           </form.Field>
-          {courier && !deliver && reason && reason !== 'assigned-courier' ? (
+          {courier && !deliver && reason && reason !== 'courier-app-down' ? (
             <OutcomeBox lines={[otherWayLine(courier)]} />
           ) : null}
           {cashCents !== null ? (

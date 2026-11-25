@@ -70,15 +70,15 @@ beforeAll(async () => {
 
   await runAsSystem('assign courier', (ctx) =>
     db(ctx).delivery.create({
-      data: { orderId: order, partnerId: courierPartnerId, otpHash: 'x', status: 'ASSIGNED' },
+      data: { orderId: order, partnerId: courierPartnerId, status: 'ASSIGNED' },
     }),
   );
 });
 
 describe('realtime order channels', () => {
-  it('admit the customer who placed the order and the courier delivering it', async () => {
+  it('admit the customer who placed the order, and never its courier (F8 L9.1)', async () => {
     expect(await canSubscribe(as(customer, 'customer'), channels.order(order))).toBe(true);
-    expect(await canSubscribe(as(courier, 'partner'), channels.order(order))).toBe(true);
+    expect(await canSubscribe(as(courier, 'partner'), channels.order(order))).toBe(false);
   });
 
   it('refuse other customers and couriers', async () => {

@@ -2,7 +2,7 @@ import 'server-only';
 import { parseChannel } from '@/lib/realtime/channels';
 import { can, isStaff, type Role } from '@/server/auth/roles';
 import { runAs } from '@/server/db/context';
-import { isOrderVisible, partnerIdOfUser } from './repo';
+import { isOrderVisible, isOwnOrder, partnerIdOfUser } from './repo';
 
 export interface Subscriber {
   userId: string;
@@ -37,8 +37,30 @@ export async function canSubscribe(subscriber: Subscriber, channelName: string):
     }
     case 'order':
       if (isStaff(subscriber.role)) return isOperations(subscriber);
-      // The customer who placed it and the courier assigned to it: exactly who RLS lets read it.
+      // F8 L9.1: partners stay off order channels; a partner's own order as a customer is fine.
+      if (subscriber.role === 'partner') {
+        return runAs(actorOf(subscriber), (ctx) => isOwnOrder(ctx, channel.id, subscriber.userId));
+      }
       return runAs(actorOf(subscriber), (ctx) => isOrderVisible(ctx, channel.id));
+    case 'track':
+      // F8 L2: the courier's live position goes to the order's customer only, never staff.
+      if (isStaff(subscriber.role)) return false;
+      return runAs(actorOf(subscriber), (ctx) => isOwnOrder(ctx, channel.id, subscriber.userId));
+    case 'opsMap':
+      // F8 L3.1: real couriers for non-demo support and admin with two-factor; never the kitchen.
+      return (
+        isStaff(subscriber.role) &&
+        can(subscriber.role, { delivery: ['track-any'] }) &&
+        !subscriber.isDemo &&
+        subscriber.twoFactorEnabled
+      );
+    case 'opsMapDemo':
+      // F8 L3.2: demo couriers for demo staff only.
+      return (
+        isStaff(subscriber.role) &&
+        can(subscriber.role, { delivery: ['track-any'] }) &&
+        subscriber.isDemo
+      );
     default:
       return false;
   }

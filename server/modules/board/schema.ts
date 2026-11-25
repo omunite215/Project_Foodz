@@ -4,6 +4,7 @@ import type {
   StaffCourierSection,
 } from '@/server/modules/delivery/schema';
 import type { CourierMilestone } from '@/server/modules/delivery/text';
+import type { AttentionItem, DeliveryLine } from '@/server/modules/tracking/schema';
 import { z } from 'zod';
 import type { Cuisine, DisputeStatus, OrderStatus, PaymentStatus } from '@/server/db/enums';
 import { cleanNote } from '@/server/modules/cart/schema';
@@ -130,11 +131,11 @@ export const MOVE_BACK_REASONS = [
 export type MoveBackReason = (typeof MOVE_BACK_REASONS)[number];
 
 export const HANDOVER_REASONS = [
-  /** F7: the courier who accepted the order (until F8 the courier's own step). */
-  'assigned-courier',
+  /** F8 A51: with a courier on the order it keeps him ("Courier's app isn't working"). */
+  'courier-app-down',
   'own-driver',
   'customer-collected',
-  'courier-app-down',
+  'customer-confirmed',
   'other',
 ] as const;
 export type HandoverReason = (typeof HANDOVER_REASONS)[number];
@@ -146,7 +147,6 @@ export const BOARD_FIELD_ERRORS = {
   dishes: "Check the dishes you can't make.",
   refusalNote: 'Tell us what happened, so support can answer the customer.',
   otherNote: 'Add a note about what happened.',
-  noCourier: 'No courier has this order. Choose another reason.',
   noteLength: 'Keep the note under 500 characters.',
   orderNumber: 'Enter an order number, like 1042.',
   /** Mark delivered on a cash order without the tick (A9.2, design 3.6). */
@@ -380,6 +380,8 @@ interface BoardCardBase {
    * null elsewhere. Always sent by the server; optional so older fixtures still type-check.
    */
   courier?: BoardCourier | null;
+  /** F8 (A48.1): how the delivery is going, on Out-for-delivery cards; never for the kitchen. */
+  delivery?: DeliveryLine | null;
   id: string;
   number: string;
   status: BoardStatus;
@@ -447,6 +449,8 @@ export interface BoardAbilities {
 export interface BoardSnapshot {
   /** F7 (A35.1): real couriers online and free, no names. */
   couriers?: CouriersCount;
+  /** F8 (A49): stuck deliveries, oldest first, words ready; never for the kitchen. */
+  attention?: AttentionItem[];
   /** The server's clock; timers count from it, never from the device's (B14). */
   asOf: string;
   view: 'kitchen' | 'full';

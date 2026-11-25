@@ -689,3 +689,55 @@ export function fixtureImageSvg(image: FixtureImage): string {
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="756"><rect width="1200" height="756" rx="40" fill="#f4f5f6" stroke="#777e90" stroke-width="6"/><rect x="60" y="160" width="300" height="380" rx="20" fill="#e6e8ec"/><text x="600" y="110" font-family="Arial" font-size="56" fill="#d12b4f" text-anchor="middle">SAMPLE ID — NOT A REAL DOCUMENT</text><text x="420" y="260" font-family="Arial" font-size="52" fill="#23262f">${escape(image.name)}</text><text x="420" y="350" font-family="Arial" font-size="40" fill="#353945">${escape(image.documentLine)}</text><text x="420" y="430" font-family="Arial" font-size="36" fill="#777e90">Drawn for testing. Not issued by anyone.</text></svg>`;
 }
+
+/**
+ * F8 (U14, L13.2): Jamie, the demo courier the demo run drives. A demo account with no
+ * credential (nobody signs in as him) and a bot partner row; any half-done demo run ends.
+ */
+export async function ensureDemoCourier(tx: Tx): Promise<string> {
+  const user = await tx.user.upsert({
+    where: { email: 'demo.courier@foodz.example' },
+    create: {
+      id: seedId('user:demo-courier'),
+      email: 'demo.courier@foodz.example',
+      name: 'Jamie Courier',
+      role: 'partner',
+      isDemo: true,
+      emailVerified: true,
+    },
+    update: { name: 'Jamie Courier', role: 'partner', isDemo: true },
+    select: { id: true },
+  });
+  await tx.account.deleteMany({ where: { userId: user.id } });
+  await tx.$executeRaw`
+    UPDATE deliveries SET status = 'CANCELLED', partner_id = NULL, assigned_at = NULL
+    WHERE partner_id IN (SELECT id FROM delivery_partners WHERE user_id = ${user.id}::uuid)
+      AND status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP')`;
+  await tx.demoRun.updateMany({ where: { status: 'running' }, data: { status: 'failed' } });
+  const approvedAt = new Date('2026-11-01T15:00:00Z');
+  const partner = await tx.deliveryPartner.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      status: 'APPROVED',
+      vehicleType: 'SCOOTER',
+      vehiclePlate: 'DEMO 01',
+      isBot: true,
+      approvedAt,
+      decidedAt: approvedAt,
+      welcomedAt: approvedAt,
+      submittedAt: approvedAt,
+      version: 2,
+    },
+    update: {
+      status: 'APPROVED',
+      isBot: true,
+      isOnline: false,
+      onlineSince: null,
+      onlineSessionId: null,
+    },
+    select: { id: true },
+  });
+  await tx.$executeRaw`UPDATE delivery_partners SET last_location = NULL WHERE id = ${partner.id}::uuid`;
+  return partner.id;
+}

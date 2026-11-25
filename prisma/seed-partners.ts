@@ -13,6 +13,7 @@ import {
   fixtureAccounts,
   PARTNER_ACCOUNTS,
   partnerFixtureId,
+  ensureDemoCourier,
   resetPartnerFixtures,
 } from './seeding/partners';
 
@@ -62,6 +63,7 @@ async function main() {
             },
           });
         }
+        await ensureDemoCourier(tx);
         await resetPartnerFixtures(
           tx,
           {

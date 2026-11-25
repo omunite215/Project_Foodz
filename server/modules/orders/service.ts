@@ -13,6 +13,7 @@ import {
 } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { getCustomerDispatch } from '@/server/modules/delivery/service';
+import { getCustomerTracking } from '@/server/modules/tracking/service';
 import { getAddress, getAddressBook } from '@/server/modules/addresses/service';
 import { ADDRESS_LIMIT } from '@/server/modules/addresses/schema';
 import { PHONE_ERROR } from '@/server/modules/account/schema';
@@ -743,7 +744,9 @@ export async function getOrderView(
   if (!row) return null;
   const view = toOrderView(row, store, now);
   const dispatch = await getCustomerDispatch(actor, parsed.data.orderId);
-  return dispatch ? { ...view, progress: { ...view.progress, dispatch } } : view;
+  // F8 B7: the live map, estimate and code, for her own order from the courier's accept on.
+  const tracking = await getCustomerTracking(actor, parsed.data.orderId);
+  return { ...view, progress: { ...view.progress, ...(dispatch && { dispatch }), tracking } };
 }
 
 async function requireOwnView(actor: UserActor, orderId: string, now: Date) {

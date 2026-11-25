@@ -272,6 +272,8 @@ model Order {
   addressLine2          String?                                @map("address_line2")
   /// City and ZIP, e.g. "Boston, MA 02109".
   addressCity           String?                                @map("address_city")
+  /// F8: the neighborhood from the address geocode, for "Priya · Downtown" (A46).
+  addressArea           String?                                @map("address_area")
   courierInstructions   String?                                @map("courier_instructions")
   addressLat            Float                                  @map("address_lat")
   addressLng            Float                                  @map("address_lng")
@@ -456,6 +458,8 @@ model DeliveryPartner {
   partnerTermsAcceptedAt DateTime?                              @map("partner_terms_accepted_at")
   adultConfirmedAt       DateTime?                              @map("adult_confirmed_at")
   welcomedAt             DateTime?                              @map("welcomed_at")
+  /// F8: the demo courier the platform drives (U14); never set by anyone else.
+  isBot                  Boolean                                @default(false) @map("is_bot")
   /// F7: the dispatch line (W3) and its counters (P25, W7.4), kept by the database.
   waitingSince           DateTime?                              @map("waiting_since")
   lastPointAt            DateTime?                              @map("last_point_at")
@@ -515,43 +519,56 @@ enum DeliveryStatus {
 }
 
 model Delivery {
-  id                     String             @id @default(uuid(7)) @db.Uuid
-  orderId                String             @unique @map("order_id") @db.Uuid
-  partnerId              String?            @map("partner_id") @db.Uuid
-  status                 DeliveryStatus     @default(SEARCHING)
-  otpHash                String?            @map("otp_hash")
-  otpAttempts            Int                @default(0) @map("otp_attempts")
-  routeGeoJson           Json?              @map("route_geojson")
-  routeDistanceM         Int?               @map("route_distance_m")
-  routeDurationSec       Int?               @map("route_duration_sec")
-  etaAt                  DateTime?          @map("eta_at")
-  partnerFeeCents        Int                @default(0) @map("partner_fee_cents")
-  assignedAt             DateTime?          @map("assigned_at")
-  pickedUpAt             DateTime?          @map("picked_up_at")
-  deliveredAt            DateTime?          @map("delivered_at")
+  id                      String             @id @default(uuid(7)) @db.Uuid
+  orderId                 String             @unique @map("order_id") @db.Uuid
+  partnerId               String?            @map("partner_id") @db.Uuid
+  status                  DeliveryStatus     @default(SEARCHING)
+  routeGeoJson            Json?              @map("route_geojson")
+  routeDistanceM          Int?               @map("route_distance_m")
+  routeDurationSec        Int?               @map("route_duration_sec")
+  etaAt                   DateTime?          @map("eta_at")
+  partnerFeeCents         Int                @default(0) @map("partner_fee_cents")
+  assignedAt              DateTime?          @map("assigned_at")
+  pickedUpAt              DateTime?          @map("picked_up_at")
+  deliveredAt             DateTime?          @map("delivered_at")
   /// F7 (B2): the search for a courier. Partial unique indexes and the guard trigger live in
   /// the migration.
-  readyAt                DateTime?          @map("ready_at")
-  readyEventId           String?            @map("ready_event_id") @db.Uuid
-  searchStartedAt        DateTime?          @map("search_started_at")
-  searchRestartedAt      DateTime?          @map("search_restarted_at")
-  escalatedAt            DateTime?          @map("escalated_at")
-  searchStoppedAt        DateTime?          @map("search_stopped_at")
-  searchStopReason       String?            @map("search_stop_reason")
-  pool                   String             @default("REAL")
-  tipCents               Int                @default(0) @map("tip_cents")
-  excludedPartnerIds     String[]           @default([]) @map("excluded_partner_ids") @db.Uuid
-  partnerWaitingSince    DateTime?          @map("partner_waiting_since")
-  readyToAssignedSeconds Int?               @map("ready_to_assigned_seconds")
-  courierChanged         Boolean            @default(false) @map("courier_changed")
-  version                Int                @default(0)
-  createdAt              DateTime           @default(now()) @map("created_at")
-  updatedAt              DateTime           @updatedAt @map("updated_at")
-  order                  Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  partner                DeliveryPartner?   @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-  offers                 DeliveryOffer[]
-  locations              DeliveryLocation[]
-  earnings               PartnerEarning[]
+  readyAt                 DateTime?          @map("ready_at")
+  readyEventId            String?            @map("ready_event_id") @db.Uuid
+  searchStartedAt         DateTime?          @map("search_started_at")
+  searchRestartedAt       DateTime?          @map("search_restarted_at")
+  escalatedAt             DateTime?          @map("escalated_at")
+  searchStoppedAt         DateTime?          @map("search_stopped_at")
+  searchStopReason        String?            @map("search_stop_reason")
+  pool                    String             @default("REAL")
+  tipCents                Int                @default(0) @map("tip_cents")
+  excludedPartnerIds      String[]           @default([]) @map("excluded_partner_ids") @db.Uuid
+  partnerWaitingSince     DateTime?          @map("partner_waiting_since")
+  readyToAssignedSeconds  Int?               @map("ready_to_assigned_seconds")
+  courierChanged          Boolean            @default(false) @map("courier_changed")
+  /// F8: the courier's own steps, the code's lock and the door (contract §5).
+  atRestaurantAt          DateTime?          @map("at_restaurant_at")
+  endedAt                 DateTime?          @map("ended_at")
+  otpWrongTries           Int                @default(0) @map("otp_wrong_tries")
+  otpLockedAt             DateTime?          @map("otp_locked_at")
+  almostNotifiedAt        DateTime?          @map("almost_notified_at")
+  noAnswerSince           DateTime?          @map("no_answer_since")
+  noAnswerReportedAt      DateTime?          @map("no_answer_reported_at")
+  noAnswerWaitRestartedAt DateTime?          @map("no_answer_wait_restarted_at")
+  problemKind             String?            @map("problem_kind")
+  problemAt               DateTime?          @map("problem_at")
+  etaEstimated            Boolean            @default(false) @map("eta_estimated")
+  routeUpdatedAt          DateTime?          @map("route_updated_at")
+  handoverHow             String?            @map("handover_how")
+  code                    DeliveryCode?
+  version                 Int                @default(0)
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+  order                   Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  partner                 DeliveryPartner?   @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  offers                  DeliveryOffer[]
+  locations               DeliveryLocation[]
+  earnings                PartnerEarning[]
 
   @@index([partnerId, status])
   @@map("deliveries")
@@ -1065,4 +1082,29 @@ model AppInstance {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("app_instance")
+}
+
+/// F8 (U4): the delivery code, encrypted for the customer's page and hashed for the check. Read
+/// only by the order's customer and the platform; written by the definer functions.
+model DeliveryCode {
+  deliveryId String   @id @map("delivery_id") @db.Uuid
+  codeEnc    String   @map("code_enc")
+  codeHash   String   @map("code_hash")
+  createdAt  DateTime @default(now()) @map("created_at")
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_codes")
+}
+
+/// F8 (L10): the demo admin's pretend deliveries, one at a time.
+model DemoRun {
+  id          String   @id @db.Uuid
+  orderId     String?  @map("order_id") @db.Uuid
+  startedAt   DateTime @default(now()) @map("started_at")
+  endsAt      DateTime @map("ends_at")
+  status      String   @default("running")
+  requestedBy String?  @map("requested_by") @db.Uuid
+
+  @@index([startedAt])
+  @@map("demo_runs")
 }
