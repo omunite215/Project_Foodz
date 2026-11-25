@@ -223,14 +223,20 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(heading).toBeFocused();
   await expect(page).toHaveTitle(`Pick up order ${courier.order} | Foodz Partner`);
   await expect(page.getByText('Foodz Kitchen · 88 Harbor Street')).toBeVisible();
-  await expect(page.getByText("You're at the kitchen")).toBeVisible();
-  const maps = page.getByRole('link', { name: /^Open in Maps for directions to Foodz Kitchen$/ });
-  await expect(maps).toHaveAttribute(
-    'href',
-    courier.first === 'Lena'
-      ? /travelmode=bicycling/
-      : /google\.com\/maps\/dir\/.*travelmode=driving/,
-  );
+  await expect(page.getByText("You're at the kitchen", { exact: true })).toBeVisible();
+  // F8 2.2: "Open in Maps" sits in the map card (the slider holds the dock), until he's at the
+  // kitchen, where the counter card takes the map's place.
+  const maps = page.getByRole('link', { name: 'Open in Maps, directions to Foodz Kitchen' });
+  const counter = page.getByRole('region', { name: 'At the kitchen' });
+  await expect(maps.or(counter)).toBeVisible();
+  if (await maps.isVisible()) {
+    await expect(maps).toHaveAttribute(
+      'href',
+      courier.first === 'Lena'
+        ? /travelmode=bicycling/
+        : /google\.com\/maps\/dir\/.*travelmode=driving/,
+    );
+  }
   await expect(page.getByRole('link', { name: /^Call Foodz Kitchen, / })).toBeVisible();
   await expect(page.getByRole('button', { name: "Can't do this delivery" })).toBeVisible();
   await expectNoAxeViolationsAtEnd(page);

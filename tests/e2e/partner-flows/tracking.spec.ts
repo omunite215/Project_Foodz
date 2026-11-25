@@ -94,7 +94,12 @@ test('a courier picks up, finds the door with the map and hands over with the co
   const assign = support.page.getByRole('dialog', { name: `Assign a courier to order ${ORDER}` });
   await assign.getByRole('radio', { name: new RegExp(`^${OMAR.name},`) }).check();
   await assign.getByRole('button', { name: 'Send offer' }).click();
-  await expect(assign).toHaveCount(0);
+  // Dispatch may have offered it to him automatically a moment before (F7): either offer will do.
+  const changed = assign.getByText(new RegExp(`^Order ${ORDER} changed a moment ago`));
+  await expect(async () => {
+    if (await changed.isVisible()) await assign.getByRole('button', { name: 'Close' }).click();
+    await expect(assign).toHaveCount(0, { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   const href = await card(support.page, ORDER).locator('h3 a').getAttribute('href');
   const offer = page.getByRole('dialog', { name: 'New order offer' });
   await expect(offer).toBeVisible({ timeout: 20_000 });
@@ -195,11 +200,18 @@ test('a courier picks up, finds the door with the map and hands over with the co
   // The right code: delivered, with the pay (P41.3).
   await box.fill(code);
   await sheet.getByRole('button', { name: 'Complete delivery' }).click();
-  await expect(sheet.getByRole('heading', { name: `Order ${ORDER} delivered` })).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(sheet.getByText(/^You earned/)).toBeVisible();
-  await sheet.getByRole('button', { name: 'Back to waiting' }).click();
+  // He's offerable at once: another ready order may be offered over the sheet (F7 1.1).
+  // The sheet's name follows its heading: "Order S1105 delivered".
+  const delivered = page.getByRole('dialog', { name: `Order ${ORDER} delivered` });
+  const nextOffer = page.getByRole('dialog', { name: 'New order offer' });
+  await expect(delivered.or(nextOffer)).toBeVisible({ timeout: 20_000 });
+  if (await nextOffer.isVisible()) {
+    await nextOffer.getByRole('button', { name: 'Decline order' }).click();
+  }
+  await expect(delivered).toBeVisible();
+  await expect(delivered.getByText(/^You earned/)).toBeVisible();
+  await expectNoAxeViolations(page);
+  await delivered.getByRole('button', { name: 'Back to waiting' }).click();
   await expect(page.getByRole('heading', { name: 'Waiting for orders' })).toBeVisible();
 
   // Her page: the code and the map are gone within moments (S4.3, S6.1).
