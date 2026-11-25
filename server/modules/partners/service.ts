@@ -16,7 +16,7 @@ import {
   partnerDispatchState,
   partnerLeaving,
 } from '@/server/modules/delivery/service';
-import { lastClosing } from '@/server/modules/menu/hours';
+import { lastClosing, openState } from '@/server/modules/menu/hours';
 import type { OpeningHours } from '@/server/modules/menu/schema';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import { clockAt } from '@/server/modules/orders/text';
@@ -32,6 +32,7 @@ import {
   DEMO_POINT,
   freshnessOf,
   judgeBatch,
+  pointClocks,
   lastLocationWriteDue,
   type LocationPoint,
   pointRefusal,
@@ -156,6 +157,15 @@ const decided = (status: string) =>
     {
       status,
     },
+  );
+
+/** The application moved on since the form opened: another tab or phone saved it first. */
+const changedElsewhere = (status: string, version: number) =>
+  refuse(
+    'APPLICATION_CHANGED',
+    'Your application was changed on another tab or phone. Open it again to see the latest version.',
+    409,
+    { how: 'edited', current: { status, version } },
   );
 
 const POINT_MESSAGES: Record<PointRefusal, string> = {
@@ -338,11 +348,13 @@ export async function getMyPartnerState(
   let lastOffline: Extract<PartnerState, { screen: 'home' }>['lastOffline'] = null;
   const reason = row.offlineReason;
   if (!row.isOnline && row.offlineAt && isNoticed(reason)) {
-    const closed = reason === 'kitchen-closed' ? lastClosing(hours, timeZone, row.offlineAt) : null;
+    const kitchenClosed = reason === 'kitchen-closed';
+    const closed = kitchenClosed ? lastClosing(hours, timeZone, row.offlineAt) : null;
+    const opensAt = kitchenClosed ? openState(hours, timeZone, row.offlineAt).opensAt : null;
     lastOffline = {
       reason,
       at: row.offlineAt.toISOString(),
-      ...offlineNotice(reason, row.offlineAt.toISOString(), timeZone, closed?.at ?? null),
+      ...offlineNotice(reason, row.offlineAt.toISOString(), timeZone, closed?.at ?? null, opensAt),
     };
   }
   return {
@@ -627,6 +639,12 @@ export async function updateApplication(
     const row = id ? await findPartnerByUser(ctx, actor.userId) : null;
     if (!row) throw applicationNotFound();
     if (row.status !== 'APPLIED') throw decided(row.status);
+    // The save carries the version the form was opened at (P6.3). A send-back that landed in
+    // between is a decision the applicant has to read, so it is never marked fixed unseen.
+    if (row.version !== parsed.expectedVersion) {
+      if (isWaitingForApplicant(row)) throw decided(row.status);
+      throw changedElsewhere(row.status, row.version);
+    }
     const account = await findAccount(ctx, actor.userId);
     await checkUploads(
       ctx,
@@ -952,6 +970,7 @@ export async function recordLocations(
   let lastPointAt = stored?.acceptedAt ?? null;
   if (newest) {
     const write = lastLocationWriteDue(stored?.writtenAt ?? null, now);
+    const clocks = pointClocks(stored, newest, now);
     await writePoint(row.id, {
       lat: newest.lat,
       lng: newest.lng,
@@ -959,11 +978,11 @@ export async function recordLocations(
       heading: newest.heading,
       speed: newest.speed,
       recordedAt: new Date(newest.recordedAt).toISOString(),
-      acceptedAt: now.toISOString(),
+      ...clocks,
       writtenAt: write ? now.toISOString() : (stored?.writtenAt ?? null),
     });
     if (write) await runAs(actor, (ctx) => writeLastLocation(ctx, row.id, newest, now));
-    lastPointAt = now.toISOString();
+    lastPointAt = clocks.acceptedAt;
   }
   if (verdict.jumps > 0) {
     const total = await countJumps(row.id, verdict.jumps);
@@ -1061,7 +1080,11 @@ export async function sweepIdlePartners(
     if (!changed) return null;
     const time = clockAt(reason === 'kitchen-closed' && closedAt ? closedAt : now, timeZone);
     await runPartnerEffects([
-      { kind: 'notify', userId: partner.userId, notice: offlineNoticeText(reason, time) },
+      {
+        kind: 'notify',
+        userId: partner.userId,
+        notice: offlineNoticeText(reason, time, store.opensAt),
+      },
     ]);
     return reason;
   };

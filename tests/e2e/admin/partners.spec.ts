@@ -66,7 +66,9 @@ test('one application: flags, what to check, photo and ID, history, and the view
 }) => {
   await signInStaff(page, STAFF.support, '/admin/partners');
   await page.getByRole('link', { name: 'Sam Rivera' }).first().click();
-  await expect(page).toHaveURL(/\/admin\/partners\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/admin\/partners\/[0-9a-f-]{36}\?tab=review$/, {
+    timeout: 15_000,
+  });
   await expect(page).toHaveTitle('Partner application | Foodz Admin');
   await expect(page.getByRole('heading', { level: 1, name: 'Sam Rivera' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Flags' })).toBeVisible();
@@ -102,6 +104,37 @@ test('the demo admin sees every decision disabled, and real people masked', asyn
     'true',
   );
   await expectNoAxeViolations(page);
+});
+
+test('"Back to partners" returns to the list as it was (A20.1)', async ({ page }) => {
+  await signInStaff(page, STAFF.support, '/admin/partners?tab=review&q=souza');
+  const ana = page.getByRole('link', { name: 'Ana Souza' }).first();
+  await expect(ana).toBeVisible();
+  await ana.click();
+  await expect(page).toHaveURL(/\/admin\/partners\/[0-9a-f-]{36}\?tab=review&q=souza$/);
+  const back = page.getByRole('link', { name: 'Back to partners' }).first();
+  await expect(back).toHaveAttribute('href', '/admin/partners?tab=review&q=souza');
+  await back.click();
+  await expect(page).toHaveURL(/\/admin\/partners\?tab=review&q=souza$/);
+  await expect(page.getByRole('searchbox', { name: 'Search name, email or plate' })).toHaveValue(
+    'souza',
+  );
+  await expect(page.getByRole('link', { name: 'Ana Souza' }).first()).toBeVisible();
+});
+
+test('a partner at a Partners address gets the storefront 404, title included (A18.3)', async ({
+  page,
+}) => {
+  await open(page, `/sign-in?callbackUrl=${encodeURIComponent('/admin/partners')}`);
+  await page.getByLabel('Email').fill('approved.partner@foodz.example');
+  await page.getByLabel('Password', { exact: true }).fill(SAMPLE_PASSWORD);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  const notFound = page.getByRole('heading', { level: 1, name: "We couldn't find that page" });
+  await expect(notFound).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveTitle('Page not found | Foodz');
+  await open(page, '/admin/partners/0192f6a4-5b6c-7d8e-9f01-23456789abcd');
+  await expect(notFound).toBeVisible();
+  await expect(page).toHaveTitle('Page not found | Foodz');
 });
 
 test('the kitchen gets the no-access page; an unknown id is not found', async ({

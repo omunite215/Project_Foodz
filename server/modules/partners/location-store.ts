@@ -16,8 +16,13 @@ const storedPoint = z.object({
   heading: z.number().nullable(),
   speed: z.number().nullable(),
   recordedAt: z.string(),
-  /** The server's acceptance time: "Location shared · 20 s ago". */
+  /**
+   * The server's acceptance time: "Location shared · 20 s ago", and what freshness reads. The
+   * same coordinates again move it at most 2 minutes past `movedAt` (S7, `pointClocks`).
+   */
   acceptedAt: z.string(),
+  /** When the coordinates last changed; missing on points kept before it existed. */
+  movedAt: z.string().nullish(),
   /** When the point last went to `last_location` (at most once a minute). */
   writtenAt: z.string().nullable(),
 });

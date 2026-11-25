@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { Page } from '@playwright/test';
 import {
   expect,
   expectNoAxeViolations,
@@ -17,6 +18,28 @@ import {
  * screens, the application form, going online and offline, the profile and the dark theme.
  * Flows that change shared state (going online, the demo partner) run in one project only.
  */
+
+/** Design 6.8: within 3 km the map frames the kitchen too; its pin sits inside the map's box. */
+async function expectKitchenPinInMap(page: Page) {
+  const map = page.locator('.maplibregl-map');
+  const pin = map.locator('.maplibregl-marker').first();
+  await expect(pin).toBeAttached({ timeout: 20_000 });
+  await expect
+    .poll(
+      async () => {
+        const [box, mark] = await Promise.all([map.boundingBox(), pin.boundingBox()]);
+        if (!box || !mark) return false;
+        return (
+          mark.x >= box.x - 1 &&
+          mark.y >= box.y - 1 &&
+          mark.x + mark.width <= box.x + box.width + 1 &&
+          mark.y + mark.height <= box.y + box.height + 1
+        );
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
 
 test.beforeEach(() => {
   test.skip(!SAMPLE_PASSWORD, 'Needs the sample password (E2E_SEED_OUTPUT).');
@@ -76,12 +99,21 @@ test('Ana waits on the pending screen, in light and in dark', async ({
   await expect(page.locator('.partner')).toHaveClass(/\bdark\b/);
   await expectNoAxeViolations(page);
 
-  // Withdraw asks first, and Keep leaves everything as it was.
-  await page.getByRole('button', { name: 'Withdraw application' }).click();
+  // Withdraw asks first, and Keep leaves everything as it was. Focus goes back to the button
+  // that opened it, after Keep and after Escape (P17.4).
+  const withdraw = page.getByRole('button', { name: 'Withdraw application' });
+  await withdraw.focus();
+  await page.keyboard.press('Enter');
   const dialog = page.getByRole('alertdialog', { name: 'Withdraw your application?' });
   await expect(dialog.getByRole('button', { name: 'Keep application' })).toBeFocused();
-  await dialog.getByRole('button', { name: 'Keep application' }).click();
+  await page.keyboard.press('Enter');
   await expect(dialog).toHaveCount(0);
+  await expect(withdraw).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(withdraw).toBeFocused();
 });
 
 test('Kwame reads the message as typed and fixes the application from step 4', async ({ page }) => {
@@ -120,9 +152,14 @@ test('Jonas sees the reason and when he can apply again; Victor sees the suspens
   await expect(page.getByRole('link', { name: 'Apply again' })).toHaveCount(0);
   await expectNoAxeViolations(page);
 
+  // A partner who signs in with no address lands on the partner app (P7.3).
   const other = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
   const victor = await other.newPage();
-  await signInTo(victor, PARTNERS.victor);
+  await open(victor, '/sign-in');
+  await victor.getByLabel('Email').fill(PARTNERS.victor);
+  await victor.getByLabel('Password', { exact: true }).fill(SAMPLE_PASSWORD);
+  await victor.getByRole('button', { name: 'Sign in' }).click();
+  await expect(victor).toHaveURL(/\/partner$/, { timeout: 30_000 });
   await expect(
     victor.getByRole('heading', { level: 1, name: 'Your partner account is suspended' }),
   ).toBeVisible();
@@ -155,7 +192,7 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   page,
   context,
 }, testInfo) => {
-  test.skip(projectOf(testInfo) !== 'partner-375', "One project changes Diego's online state.");
+  test.skip(projectOf(testInfo) !== 'partner-360', "One project changes Diego's online state.");
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ ...ROUTE.R0, accuracy: 15 });
   await signInTo(page, PARTNERS.diego);
@@ -176,9 +213,30 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   // He rides two steps along route R: the distance follows each fix (P10.2).
   await context.setGeolocation({ ...ROUTE.R2, accuracy: 15 });
   await expect(page.getByText('0.5 km')).toBeVisible({ timeout: 15_000 });
+  await expectKitchenPinInMap(page);
   await expect(page.getByText(/^Location shared · /)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: 'Go offline' })).toBeVisible();
   await expectNoAxeViolations(page);
+
+  // Standing still, with no new fix from the phone, a point still goes every 15 s (P10.3).
+  await page.waitForRequest(
+    (request) => request.method() === 'POST' && request.url().endsWith('/api/v1/partner/locations'),
+    { timeout: 25_000 },
+  );
+
+  // A dead zone: the banner pins, what he rides meanwhile waits, and goes when he's back
+  // (P11.1, P11.2). The banners are paragraphs; the live region repeats their words.
+  const banner = (text: string) => page.getByRole('paragraph').filter({ hasText: text });
+  await context.setOffline(true);
+  await expect(banner("No connection. You're still online.")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByRole('banner').getByText('Online', { exact: true })).toBeVisible();
+  await context.setGeolocation({ ...ROUTE.R0, accuracy: 15 });
+  await expect(page.getByText('At the kitchen')).toBeVisible({ timeout: 15_000 });
+  await context.setOffline(false);
+  await expect(banner('Back online. Location sent.')).toBeVisible({ timeout: 15_000 });
+  await expect(banner("No connection. You're still online.")).toHaveCount(0);
+  // It stays 4 seconds, then the screen is as before.
+  await expect(banner('Back online. Location sent.')).toHaveCount(0, { timeout: 10_000 });
 
   // Profile keeps the status in view; Appearance applies at once.
   await page.getByRole('link', { name: 'Profile' }).last().click();
@@ -232,6 +290,7 @@ test('the demo partner goes online with a pretend location', async ({ page }, te
     timeout: 15_000,
   });
   await expect(page.getByText('Not your real location')).toBeVisible();
+  await expectKitchenPinInMap(page);
   // F7 made the online home taller ("How offers work", the practice card): checked from its end.
   await expectNoAxeViolationsAtEnd(page);
   await page.getByRole('button', { name: 'Go offline' }).click();
@@ -248,9 +307,17 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
 
   // Step 1: the photo goes up with real progress, is checked, then shows (design 4.4).
   await page.getByLabel('Choose a photo').setInputFiles(picture);
-  await expect(
-    page.getByRole('group', { name: 'Profile photo' }).getByText('Photo added'),
-  ).toBeVisible({ timeout: 45_000 });
+  const photoField = page.getByRole('group', { name: 'Profile photo' });
+  await expect(photoField.getByText('Photo added')).toBeVisible({ timeout: 45_000 });
+
+  // A reload on step 1 draws the draft's photo again, not an empty field (design review S8).
+  await page.waitForFunction(() =>
+    Object.keys(window.localStorage).some((key) => key.startsWith('foodz.partner-apply:')),
+  );
+  await page.goto('/partner/apply?step=1');
+  await expect(page.getByText('We kept what you entered on this phone.')).toBeVisible();
+  await expect(photoField.getByText('Photo added')).toBeVisible({ timeout: 15_000 });
+  await expect(photoField.getByLabel('Change photo')).toBeAttached();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Step 2: a scooter needs a plate, shown back in capitals.
@@ -294,6 +361,18 @@ test('Marco applies with a photo and his license, then withdraws', async ({ page
 
   // Step 4: the summary shows only the last four; both boxes are needed.
   await expect(page.getByRole('heading', { level: 1, name: 'Check and send' })).toBeVisible();
+
+  // The Partner Terms sheet: its text scrolls from the keyboard too (P5.2, P17.4).
+  await page.getByRole('link', { name: 'Read the Partner Terms' }).click();
+  const terms = page.getByRole('dialog', { name: 'Foodz Partner Terms' });
+  await expect(terms).toBeVisible();
+  const termsText = terms.getByRole('region', { name: 'Partner Terms text' });
+  await termsText.focus();
+  await expect(termsText).toBeFocused();
+  await expectNoAxeViolations(page);
+  await page.keyboard.press('Escape');
+  await expect(terms).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Read the Partner Terms' })).toBeFocused();
   await expect(page.getByText(/Driver's license ending 4821 · expires Mar 3, 2029/)).toBeVisible();
   await expect(page.getByText('S48204821')).toHaveCount(0);
   await page.getByRole('button', { name: 'Send application' }).click();

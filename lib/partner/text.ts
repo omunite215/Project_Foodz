@@ -82,13 +82,15 @@ export function browserFileError(
   return null;
 }
 
-/** The check's refusal, by its code (design 4.4). */
+/**
+ * The check's refusal, by its code (design 4.4). The browser already accepted the file's type
+ * (`browserFileError`), so a type refused by its bytes is a renamed file, like an HTML page
+ * called `page.jpg`: "could not be read", not "only JPEG…", which its name contradicts (P2.3).
+ */
 export function rejectedUploadError(code: UploadRejectCode, kind: UploadKind): string {
   switch (code) {
     case 'TOO_LARGE':
       return `Files for this can be at most ${limitMb(kind)} MB.`;
-    case 'BAD_TYPE':
-      return UPLOAD_ERRORS.badType;
     case 'NOT_RECEIVED':
       return UPLOAD_ERRORS.stopped;
     default:

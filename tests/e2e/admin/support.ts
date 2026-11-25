@@ -3,6 +3,7 @@ import { createOTP } from '@better-auth/utils/otp';
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, type Page, type TestInfo } from '@playwright/test';
 import { ACCOUNTS, DEMO_PASSWORD, open, SAMPLE_PASSWORD, test } from '../account/support';
+import { settleBeforeScan } from '../settle';
 
 /*
  * Staff for the F5 suites (tests/e2e/admin). They use the seeded sample staff and the board's
@@ -70,6 +71,7 @@ export async function signInDemoAdmin(page: Page, path = '/admin/orders') {
 
 /** WCAG 2.2 AA on the page as it is now (A16.9). */
 export async function expectNoAxeViolations(page: Page) {
+  await settleBeforeScan(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();

@@ -112,7 +112,13 @@ export function PartnerTermsSheet({
             <X className="size-6" aria-hidden />
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+        {/* The terms scroll on their own: a Tab stop lets keyboard users scroll them too. */}
+        <section
+          aria-label="Partner Terms text"
+          // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          tabIndex={0}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-5 focus-visible:-outline-offset-2"
+        >
           {terms ? (
             <TermsProse blocks={terms.blocks} />
           ) : (
@@ -120,7 +126,7 @@ export function PartnerTermsSheet({
               {TERMS_UNAVAILABLE}
             </p>
           )}
-        </div>
+        </section>
         <div className="border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button type="button" variant="outline" size="dock" onClick={() => onOpenChange(false)}>
             Close

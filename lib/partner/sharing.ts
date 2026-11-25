@@ -10,16 +10,20 @@ import {
   backoffMs,
   CONNECTION_BANNER_DELAY_MS,
   type Fix,
+  HEARTBEAT_MS,
   locationsBody,
   nextBatch,
   NOT_FOUND_AFTER_MS,
   pruneQueue,
   type QueuedPoint,
+  REREAD_AFTER_MS,
+  RESEND_WITHIN_MS,
   retryAfterSeconds,
   SEND_ACCURACY_M,
   SEND_GAP_MS,
   SEND_TIMEOUT_MS,
   shouldQueue,
+  TIMEOUTS_FOR_UNAVAILABLE,
   toPoint,
 } from './location-queue';
 import { PARTNER_COPY, tooManySwitches } from './text';
@@ -113,7 +117,7 @@ interface Answer {
 }
 
 async function call(
-  method: 'PUT' | 'POST',
+  method: 'GET' | 'PUT' | 'POST',
   path: string,
   body: unknown,
   { keepalive = false, timeoutMs = SEND_TIMEOUT_MS } = {},
@@ -123,8 +127,9 @@ async function call(
   try {
     const response = await fetch(path, {
       method,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      ...(method === 'GET'
+        ? {}
+        : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
       keepalive,
       signal: keepalive ? undefined : controller.signal,
       credentials: 'same-origin',
@@ -157,6 +162,15 @@ const codeOf = (body: unknown) => {
 // ------------------------------------------------------------------ internals
 
 let watchId: number | null = null;
+let rereadTimer: ReturnType<typeof setInterval> | null = null;
+/** When the outstanding read started; a browser that never answers doesn't block the next. */
+let rereadingSince: number | null = null;
+/** The phone said it can't tell where it is (no GPS), since its last fix (P11.6, S7). */
+let positionUnavailable = false;
+/** Reads that timed out in a row since the last fix; two count as unavailable (S7). */
+let timeoutsInRow = 0;
+/** The server is being asked whether he is still online after a dead zone (P11.4). */
+let checkingReturn = false;
 let coarseSince: number | null = null;
 let findTimers: ReturnType<typeof setTimeout>[] = [];
 let queue: QueuedPoint[] = [];
@@ -277,6 +291,11 @@ function clearFindTimers() {
 function stopWatching() {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
+  if (rereadTimer) clearInterval(rereadTimer);
+  rereadTimer = null;
+  rereadingSince = null;
+  positionUnavailable = false;
+  timeoutsInRow = 0;
   clearFindTimers();
   // Whoever waits for a first fix hears that none is coming.
   resolveFirstFix?.(null);
@@ -328,18 +347,25 @@ function onFix(position: GeolocationPosition) {
     return;
   }
   if (state.phase !== 'online') return;
+  positionUnavailable = false;
+  timeoutsInRow = 0;
   set({ lastFix: fix });
   const now = Date.now();
-  if (shouldQueue(fix, lastQueued, now)) {
-    const point = toPoint(fix);
-    lastQueued = point;
-    queue = pruneQueue([...queue, point], now);
-    set({ queued: queue.length });
-    scheduleSend(0);
-  }
+  if (shouldQueue(fix, lastQueued, now)) queuePoint(toPoint(fix), now);
+}
+
+function queuePoint(point: QueuedPoint, now: number) {
+  lastQueued = point;
+  queue = pruneQueue([...queue, point], now);
+  set({ queued: queue.length });
+  scheduleSend(0);
 }
 
 function onWatchError(error: GeolocationPositionError) {
+  if (error.code === error.TIMEOUT) timeoutsInRow += 1;
+  if (error.code === error.POSITION_UNAVAILABLE || timeoutsInRow >= TIMEOUTS_FOR_UNAVAILABLE) {
+    positionUnavailable = true;
+  }
   if (error.code !== error.PERMISSION_DENIED) return;
   const state = get();
   if (state.phase === 'finding') {
@@ -361,6 +387,49 @@ function startWatching() {
     maximumAge: 0,
     timeout: 60_000,
   });
+  rereadTimer = setInterval(heartbeat, REREAD_AFTER_MS);
+}
+
+/**
+ * The heartbeat (P10.3), which keeps the server's 2-minute freshness rule while he stands still.
+ * Some phones report only changes, so after a few seconds without a fix the app asks for one;
+ * an answer goes through `onFix`, which sends it once the 15 s heartbeat is due. A phone that
+ * stays silent hasn't seen him move: the last fix is sent again, stamped now, but only for a
+ * minute after it was taken, and not once the phone has said it can't find itself (position
+ * unavailable, or two reads timed out). Then he goes stale as he should (P11.6, S7).
+ */
+function heartbeat() {
+  const state = get();
+  if (state.phase !== 'online' || state.isDemo || watchId === null) return;
+  const now = Date.now();
+  const fix = state.lastFix;
+  if (fix && now - fix.at < REREAD_AFTER_MS) return;
+  reread();
+  if (!fix || !lastQueued || positionUnavailable) return;
+  if (now - fix.at > RESEND_WITHIN_MS || now - lastQueued.at < HEARTBEAT_MS) return;
+  queuePoint(toPoint({ ...fix, at: now }), now);
+}
+
+const REREAD_TIMEOUT_MS = REREAD_AFTER_MS * 2;
+
+function reread() {
+  const now = Date.now();
+  if (rereadingSince !== null && now - rereadingSince < REREAD_TIMEOUT_MS + REREAD_AFTER_MS) return;
+  rereadingSince = now;
+  const watching = watchId;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      if (watchId !== watching) return;
+      rereadingSince = null;
+      onFix(position);
+    },
+    (error) => {
+      if (watchId !== watching) return;
+      rereadingSince = null;
+      onWatchError(error);
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: REREAD_TIMEOUT_MS },
+  );
 }
 
 function failFinding(card: HelpCard) {
@@ -380,7 +449,7 @@ function scheduleSend(delay: number) {
 
 async function sendNow() {
   const state = get();
-  if (state.phase !== 'online' || state.isDemo || sending) return;
+  if (state.phase !== 'online' || state.isDemo || sending || checkingReturn) return;
   queue = pruneQueue(queue, Date.now());
   if (!queue.length) {
     set({ queued: 0 });
@@ -440,21 +509,104 @@ function markDisconnected() {
   }, CONNECTION_BANNER_DELAY_MS);
 }
 
+/**
+ * A send got through. Only this marks the connection back: the browser's `online` event doesn't,
+ * so a refusal on reconnecting is still judged as disconnected (P11.4). "Back online. Location
+ * sent." shows once the points queued in the dead zone are all through (P11.2).
+ */
 function markConnected() {
-  const wasOffline = get().connection === 'offline';
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = null;
-  set({ connection: 'online' });
-  if (wasOffline && get().pinned === 'noConnection' && queue.length === 0) {
-    set({ pinned: 'backOnline' });
-    announce(PARTNER_COPY.backOnline);
-    backTimer = setTimeout(() => {
-      backTimer = null;
-      if (get().pinned === 'backOnline') set({ pinned: null });
-    }, BACK_ONLINE_MS);
-  } else if (wasOffline && get().pinned === 'noConnection' && queue.length) {
-    scheduleSend(0);
+  if (get().connection === 'offline') set({ connection: 'online' });
+  if (get().pinned !== 'noConnection' || queue.length > 0) return;
+  set({ pinned: 'backOnline' });
+  announce(PARTNER_COPY.backOnline);
+  if (backTimer) clearTimeout(backTimer);
+  backTimer = setTimeout(() => {
+    backTimer = null;
+    if (get().pinned === 'backOnline') set({ pinned: null });
+  }, BACK_ONLINE_MS);
+}
+
+/**
+ * Whether the server still has him online on this phone, asked before anything queued in the
+ * dead zone goes out: after it took him offline, nothing from that time is sent (P11.4). Null
+ * when it can't tell; the queue then goes as usual and a refusal says the rest.
+ */
+async function stillOnlineHere(): Promise<boolean | null> {
+  const answer = await call('GET', '/api/v1/partner/me', undefined);
+  if (!answer || answer.status >= 500 || answer.status === 429) return null;
+  if (answer.status === 401) {
+    suspend('signedOut');
+    return false;
   }
+  const screen = field(answer.body, 'screen');
+  if (screen === 'suspended') {
+    suspend('event');
+    return false;
+  }
+  if (screen !== 'home') return null;
+  const availability = field(answer.body, 'availability');
+  if (field(availability, 'online') !== true) {
+    const lastOffline = field(answer.body, 'lastOffline');
+    const reason = field(lastOffline, 'reason');
+    const at = field(lastOffline, 'at');
+    takenOffline(typeof reason === 'string' ? reason : null, typeof at === 'string' ? at : null);
+    return false;
+  }
+  if (field(availability, 'onThisDevice') === false) {
+    otherDeviceTookOver();
+    return false;
+  }
+  return true;
+}
+
+/** The browser has a connection again (P11.2, P11.4): ask the server first, then send. */
+async function onReconnect() {
+  if (get().isDemo) {
+    sendOnReconnect();
+    return;
+  }
+  if (checkingReturn) return;
+  checkingReturn = true;
+  if (sendTimer) clearTimeout(sendTimer);
+  sendTimer = null;
+  const still = await stillOnlineHere();
+  checkingReturn = false;
+  if (still === false || get().phase !== 'online') return;
+  sendOnReconnect();
+}
+
+/** Send what's queued now, without waiting for a backoff. */
+function sendOnReconnect() {
+  if (!queue.length) {
+    const fix = get().isDemo ? null : get().lastFix;
+    if (!fix) {
+      // Nothing to send, so nothing to confirm with: the banner goes without "Location sent".
+      if (bannerTimer) clearTimeout(bannerTimer);
+      bannerTimer = null;
+      set({ connection: 'online', ...(get().pinned === 'noConnection' ? { pinned: null } : {}) });
+      return;
+    }
+    // The last fix once more: the server ignores a repeat but answers, which confirms the
+    // connection, or refuses it when it took him offline meanwhile (P11.4).
+    queue = [toPoint(fix)];
+    set({ queued: queue.length });
+  }
+  if (sendTimer) clearTimeout(sendTimer);
+  sendTimer = null;
+  attempt = 0;
+  scheduleSend(0);
+}
+
+function otherDeviceTookOver() {
+  stopEverything();
+  set({
+    phase: 'offline',
+    otherDevice: true,
+    notice: { text: PARTNER_COPY.otherDevice, tone: 'muted' },
+  });
+  announce(PARTNER_COPY.otherDevice);
 }
 
 function handleRefusal(answer: Answer) {
@@ -465,13 +617,7 @@ function handleRefusal(answer: Answer) {
     return;
   }
   if (code === 'OTHER_DEVICE') {
-    stopEverything();
-    set({
-      phase: 'offline',
-      otherDevice: true,
-      notice: { text: PARTNER_COPY.otherDevice, tone: 'muted' },
-    });
-    announce(PARTNER_COPY.otherDevice);
+    otherDeviceTookOver();
     return;
   }
   if (code === 'NOT_ONLINE') {
@@ -842,10 +988,7 @@ async function deliverPendingOffline() {
 
 function onBrowserOnline() {
   if (offlinePending) void deliverPendingOffline();
-  if (get().phase === 'online') {
-    markConnected();
-    scheduleSend(0);
-  }
+  if (get().phase === 'online') void onReconnect();
   if (get().dockReason?.kind === 'connection') set({ dockReason: null });
 }
 

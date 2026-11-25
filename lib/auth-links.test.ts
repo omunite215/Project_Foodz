@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   authPageHref,
+  confirmedContinue,
   isAuthPage,
   returnPathFor,
   returnRoute,
@@ -22,6 +23,35 @@ describe('returnPathFor', () => {
     expect(returnPathFor('/sign-in/two-factor', 'callbackUrl=%2Fmenu')).toBe('/menu');
     // An auth page never becomes its own return path.
     expect(returnPathFor('/forgot-password', '')).toBe('/');
+  });
+});
+
+describe('confirmedContinue (S3.2, F6 P1.3)', () => {
+  it('sends someone applying to deliver on with their application, in its own words', () => {
+    const apply = {
+      href: '/partner/apply',
+      label: 'Continue',
+      line: 'Carry on with your application.',
+    };
+    expect(confirmedContinue('/partner/apply')).toEqual(apply);
+    expect(confirmedContinue('/partner/apply?step=1')).toEqual(apply);
+    expect(confirmedContinue('/partnership')).not.toEqual(apply);
+  });
+
+  it('continues where the person was going', () => {
+    expect(confirmedContinue('/menu/bulgogi')).toEqual({
+      href: '/menu/bulgogi',
+      label: 'Continue',
+      line: "You're ready to order.",
+    });
+  });
+
+  it('offers the menu when they were going nowhere in particular, or somewhere unsafe', () => {
+    const menu = { href: '/menu', label: 'Continue to the menu', line: "You're ready to order." };
+    expect(confirmedContinue('/')).toEqual(menu);
+    expect(confirmedContinue('/menu')).toEqual(menu);
+    expect(confirmedContinue(undefined)).toEqual(menu);
+    expect(confirmedContinue('//evil.example')).toEqual(menu);
   });
 });
 

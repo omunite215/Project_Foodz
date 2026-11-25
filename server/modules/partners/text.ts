@@ -127,14 +127,27 @@ export type OfflineReason = PartnerAvailabilityReason;
 export type NoticedOfflineReason = Exclude<OfflineReason, 'self' | 'signed-out' | 'suspended'>;
 
 /**
+ * Why the kitchen took him offline (P10.6). When it opens again later that day (he went online
+ * before opening, or across a break) the opening time says more than last night's closing:
+ * "Foodz Kitchen is closed until 11 am, so we took you offline."
+ */
+export function kitchenClosedSentence(closedAt: string, opensAt?: StoreMoment | null): string {
+  return opensAt?.day === 'today'
+    ? `Foodz Kitchen is closed until ${formatClock(opensAt.time)}, so we took you offline.`
+    : `Foodz Kitchen closed at ${closedAt}, so we took you offline.`;
+}
+
+/**
  * The offline home's notice (design 6.6). The two "no location" sentences come from one
- * reason; the app shows `ifDisconnected` when it had no connection itself (D20).
+ * reason; the app shows `ifDisconnected` when it had no connection itself (D20). `opensAt` is
+ * the kitchen's next opening as seen at `at`.
  */
 export function offlineNotice(
   reason: NoticedOfflineReason,
   at: string,
   timeZone: string,
   kitchenClosedAt?: string | null,
+  opensAt?: StoreMoment | null,
 ): { words: string; ifDisconnected: string | null } {
   const time = clockAt(at, timeZone);
   switch (reason) {
@@ -145,7 +158,7 @@ export function offlineNotice(
       };
     case 'kitchen-closed':
       return {
-        words: `Foodz Kitchen closed at ${clockAt(kitchenClosedAt ?? at, timeZone)}, so we took you offline.`,
+        words: kitchenClosedSentence(clockAt(kitchenClosedAt ?? at, timeZone), opensAt),
         ifDisconnected: null,
       };
     case 'other-device':

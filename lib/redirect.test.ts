@@ -150,14 +150,16 @@ describe('landingFor', () => {
   });
 });
 
-describe('signInLanding (F5 A1.1)', () => {
-  it('sends staff who asked for nowhere to their tools', () => {
-    expect(signInLanding('/', true)).toBe('/admin');
+describe('signInLanding (F5 A1.1, F6 P7.3)', () => {
+  it('sends staff and partners who asked for nowhere to their home', () => {
+    expect(signInLanding('/', '/admin')).toBe('/admin');
+    expect(signInLanding('/', '/partner')).toBe('/partner');
   });
 
-  it("keeps the address staff asked for, and everyone else's", () => {
-    expect(signInLanding('/admin/orders/abc', true)).toBe('/admin/orders/abc');
-    expect(signInLanding('/menu', true)).toBe('/menu');
-    expect(signInLanding('/', false)).toBe('/');
+  it("keeps the address they asked for, and everyone else's", () => {
+    expect(signInLanding('/admin/orders/abc', '/admin')).toBe('/admin/orders/abc');
+    expect(signInLanding('/menu', '/admin')).toBe('/menu');
+    expect(signInLanding('/menu', '/partner')).toBe('/menu');
+    expect(signInLanding('/', null)).toBe('/');
   });
 });

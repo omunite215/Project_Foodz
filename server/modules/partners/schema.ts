@@ -165,7 +165,8 @@ export type SubmitApplicationInput = z.input<typeof submitApplicationInput>;
 /**
  * "Save changes" while pending or sent back (P6.3, P6.5): no Turnstile and no agreements; an
  * empty number keeps the stored one. `expectedVersion` is what the screen showed; a decision
- * in between is refused with `APPLICATION_DECIDED`.
+ * in between (a send-back included) is refused with `APPLICATION_DECIDED`, and a save made
+ * first on another tab or phone with `APPLICATION_CHANGED`.
  */
 export const updateApplicationInput = z
   .object({
@@ -383,7 +384,10 @@ export interface UpdateResult {
 export interface PartnerRefusalDetails {
   REAPPLY_LATER: { reapplyFrom: IsoDate };
   APPLICATION_EXISTS: { status: 'APPLIED' | 'APPROVED' | 'SUSPENDED' | 'REJECTED' };
-  APPLICATION_DECIDED: { status: 'APPROVED' | 'REJECTED' | 'SUSPENDED' };
+  /** `APPLIED` when the decision was a send-back (P6.3). */
+  APPLICATION_DECIDED: { status: 'APPLIED' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' };
+  /** A save from a form opened at an older version, after another tab or phone saved (P6.3). */
+  APPLICATION_CHANGED: { how: 'edited'; current: { status: 'APPLIED'; version: number } };
   UPLOAD_NOT_READY: { field: 'photoUploadId' | 'idDocumentUploadId' };
   NOT_ONLINE: { reason: OfflineReason | null; at: string | null };
   OTHER_DEVICE: { since: string };

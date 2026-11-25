@@ -1,5 +1,6 @@
 import type { PartnerNoticeType } from '@/lib/realtime/events';
-import { weekdayDate, longDate } from './text';
+import type { StoreMoment } from '@/server/modules/menu/schema';
+import { kitchenClosedSentence, weekdayDate, longDate } from './text';
 import type { IsoDate } from './rules';
 
 /*
@@ -52,10 +53,15 @@ export const PARTNER_NOTICES = {
   },
 } as const satisfies Record<string, NoticeText>;
 
-/** B8 and F7 P25: the automatic offline notices (no email). `time` is "6:42 pm" in store time. */
+/**
+ * B8 and F7 P25: the automatic offline notices (no email). `time` is "6:42 pm" in store time
+ * (the closing time for the kitchen); `opensAt` is the kitchen's next opening, as seen then
+ * (P10.6).
+ */
 export const offlineNoticeText = (
   reason: 'no-location' | 'kitchen-closed' | 'missed-offers',
   time: string,
+  opensAt?: StoreMoment | null,
 ): NoticeText => {
   switch (reason) {
     case 'no-location':
@@ -74,7 +80,7 @@ export const offlineNoticeText = (
       return {
         type: 'partner.offline-kitchen-closed',
         title: 'You went offline',
-        body: `Foodz Kitchen closed at ${time}, so we took you offline.`,
+        body: kitchenClosedSentence(time, opensAt),
       };
   }
 };

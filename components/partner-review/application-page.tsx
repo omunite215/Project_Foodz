@@ -15,7 +15,6 @@ import {
   ShieldBan,
   TriangleAlert,
 } from 'lucide-react';
-import type { Route } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useEffectEvent, useId, useRef, useState } from 'react';
@@ -24,6 +23,7 @@ import type {
   DecisionResult,
   FlagOther,
   HistoryEntry,
+  PartnerListQuery,
   PartnerReview,
   ReviewAction,
   ReviewActionState,
@@ -61,9 +61,7 @@ import {
   dateTime,
   whatToCheck,
 } from '@/lib/partner-review/text';
-import { isSitePath } from '@/lib/navigation';
-import { applicationHref, LIST_PATH } from '@/lib/partner-review/url';
-import { previousRoute } from '@/lib/route-memory';
+import { applicationHref, listHref } from '@/lib/partner-review/url';
 import { useOnline } from '@/lib/use-online';
 import { cn } from '@/lib/utils';
 import { ApplicationHistory } from './application-history';
@@ -633,7 +631,14 @@ const EMPTY_DRAFTS: Record<ReviewAction, DialogDraft> = {
   reopen: EMPTY_DRAFT,
 };
 
-export function ApplicationPage({ initial }: { initial: PartnerReview }) {
+export function ApplicationPage({
+  initial,
+  list,
+}: {
+  initial: PartnerReview;
+  /** The list it was opened from (its address carries the query, A20.1). */
+  list: PartnerListQuery;
+}) {
   const shell = useStaffShell();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -645,7 +650,7 @@ export function ApplicationPage({ initial }: { initial: PartnerReview }) {
   const data = review.data ?? initial;
   const timeZone = shell.timeZone;
   const historyId = useId();
-  const [backHref, setBackHref] = useState<Route>(LIST_PATH);
+  const backHref = listHref(list);
   const [dialog, setDialog] = useState<ReviewAction | null>(null);
   const [drafts, setDrafts] = useState(EMPTY_DRAFTS);
   const [result, setResult] = useState<Result | null>(null);
@@ -656,17 +661,6 @@ export function ApplicationPage({ initial }: { initial: PartnerReview }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const openers = useRef<Partial<Record<ReviewAction, HTMLButtonElement | null>>>({});
   const focusResult = useRef(false);
-
-  // "Back to partners" returns to the list with its tab, filters, sort and page (route memory).
-  useEffect(() => {
-    const previous = previousRoute();
-    const timer = setTimeout(() => {
-      if (previous && /^\/admin\/partners(\?|$)/.test(previous)) {
-        setBackHref(rememberedList(previous));
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Someone else changed or decided it: say so once, in place (8.9). Our own decision doesn't.
   useEffect(() => {
@@ -804,7 +798,7 @@ export function ApplicationPage({ initial }: { initial: PartnerReview }) {
                   showsNext(result.action) ? (
                     result.next ? (
                       <Button asChild variant="outline" size="touch" className="bg-white">
-                        <Link href={applicationHref(result.next.partnerId)}>
+                        <Link href={applicationHref(result.next.partnerId, list)}>
                           {nextText(result.next.name)}
                         </Link>
                       </Button>
@@ -897,8 +891,3 @@ export function ApplicationPage({ initial }: { initial: PartnerReview }) {
 }
 
 /** A remembered list address, kept only when it is the list on this site. */
-function rememberedList(previous: string): Route {
-  return /^\/admin\/partners\?[\w=&%.~+-]*$/.test(previous) && isSitePath(previous)
-    ? previous
-    : LIST_PATH;
-}

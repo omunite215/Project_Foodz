@@ -126,10 +126,13 @@ export function WithdrawDialog({
   open,
   userId,
   onOpenChange,
+  returnFocusTo,
 }: {
   open: boolean;
   userId: string;
   onOpenChange: (open: boolean) => void;
+  /** The button that opened it: it isn't a Radix trigger, so focus is put back by hand (P17.4). */
+  returnFocusTo?: React.RefObject<HTMLElement | null>;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -166,6 +169,11 @@ export function WithdrawDialog({
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           keepRef.current?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusTo?.current) return;
+          event.preventDefault();
+          returnFocusTo.current.focus();
         }}
       >
         <AlertDialogTitle className="font-heading text-title-2 text-strong">
@@ -210,6 +218,7 @@ export function WithdrawDialog({
 
 function WaitingActions({ userId, withEdit }: { userId: string; withEdit: boolean }) {
   const [withdrawing, setWithdrawing] = useState(false);
+  const withdrawRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="mt-6 flex flex-col gap-3">
       {withEdit ? (
@@ -224,6 +233,7 @@ function WaitingActions({ userId, withEdit }: { userId: string; withEdit: boolea
         <Link href="/menu">Order food while you wait</Link>
       </Button>
       <Button
+        ref={withdrawRef}
         type="button"
         variant="ghost"
         size="kitchen"
@@ -232,7 +242,12 @@ function WaitingActions({ userId, withEdit }: { userId: string; withEdit: boolea
       >
         Withdraw application
       </Button>
-      <WithdrawDialog open={withdrawing} userId={userId} onOpenChange={setWithdrawing} />
+      <WithdrawDialog
+        open={withdrawing}
+        userId={userId}
+        onOpenChange={setWithdrawing}
+        returnFocusTo={withdrawRef}
+      />
     </div>
   );
 }

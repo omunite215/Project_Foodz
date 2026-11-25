@@ -623,7 +623,11 @@ export function DecisionDialog({
         return;
       case 'STEP_UP_INVALID':
         setCodeError(failure.fieldErrors?.stepUp?.[0] ?? failure.message);
-        requestAnimationFrame(() => codeRef.current?.focus());
+        requestAnimationFrame(() => {
+          codeRef.current?.focus();
+          // The message under the field stays in view above the footer.
+          codeRef.current?.parentElement?.scrollIntoView({ block: 'nearest' });
+        });
         return;
       case 'STEP_UP_LOCKED': {
         const retryAt = retryAtOf(failure);

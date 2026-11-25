@@ -6,7 +6,7 @@ import { redis } from '@/server/redis';
 import { objectSize } from '@/server/storage/s3';
 import { seedCatalog } from '../../prisma/seeding';
 import { asBrowser, type Browser, nextHeaders, switchBrowser } from './support/browser';
-import { openAllDay } from './support/checkout';
+import { openAllDay, restoreHours } from './support/checkout';
 import { readyUpload, seedBulkApplicants } from './support/partners';
 import { signedInAgo, type StaffMember, staffMember } from './support/staff';
 
@@ -189,6 +189,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  // Leave the store's hours as the seed set them; the suites share one database.
+  await restoreHours(migrator);
   await migrator.$disconnect();
 });
 
@@ -455,6 +457,59 @@ describe('send back, fix and the version check (A24, A26)', () => {
       details: { how: 'edited', changedParts: ['idPhoto'] },
     });
   });
+
+  it('refuses a save from a form opened before a send-back or another save (P6.3)', async () => {
+    const sam = await applicant('Sam Okafor');
+    const applied = await submit(sam, { plate: '5SB 214', idNumber: 'S7710 3302' });
+    const partnerId = applied.data!.partnerId;
+    const opened = await migrator.deliveryPartner.findUniqueOrThrow({ where: { id: partnerId } });
+    const save = (expectedVersion: number, plate: string) =>
+      as(sam, () =>
+        partners.updateApplicationAction({
+          photoUploadId: opened.photoUploadId!,
+          phone: '(617) 555-0177',
+          vehicleType: 'SCOOTER',
+          plate,
+          idExpiresOn: '2029-03-03',
+          idDocumentUploadId: opened.idDocumentUploadId!,
+          expectedVersion,
+        }),
+      ) as Promise<ActionResult<{ version: number; fixed: boolean }>>;
+
+    // Another tab saved first: this one is refused and changes nothing.
+    expect((await save(opened.version, '5SB 215')).data).toMatchObject({ fixed: false });
+    const otherTab = await save(opened.version, '5SB 216');
+    expect(otherTab.serverError).toMatchObject({
+      code: 'APPLICATION_CHANGED',
+      details: { how: 'edited', current: { status: 'APPLIED', version: opened.version + 1 } },
+    });
+
+    // Morgan sends it back while the form is open: the stale save is a decision to read.
+    const before = await versionOf(partnerId);
+    await as(morgan, () =>
+      review.sendBackPartnerAction({ partnerId, expectedVersion: before, message: 'New plate?' }),
+    );
+    const stale = await save(before, '5SB 217');
+    expect(stale.serverError).toMatchObject({
+      code: 'APPLICATION_DECIDED',
+      message: 'Your application was just reviewed. See the decision below.',
+      details: { status: 'APPLIED' },
+    });
+    expect(await versionOf(partnerId)).toBe(before + 1);
+    const last = await migrator.partnerApplicationEvent.findFirstOrThrow({
+      where: { partnerId },
+      orderBy: { versionAfter: 'desc' },
+      select: { type: true },
+    });
+    expect(last).toEqual({ type: 'sent-back' });
+    expect(await as(sam, () => service.getMyPartnerState(sam.actor))).toMatchObject({
+      screen: 'sentBack',
+      sentBack: { message: 'New plate?' },
+    });
+
+    // Opened again at the current version, the fix goes through.
+    expect((await save(before + 1, '5SB 217')).data).toMatchObject({ fixed: true });
+  });
 });
 
 describe('approving (A23, A27)', () => {
@@ -616,6 +671,48 @@ describe('going online and sharing a location (P9, P10, P16)', () => {
     await expect(
       service.recordLocations(member.actor, sessionId, { points: [point(42.3521, -71.0469)] }),
     ).rejects.toMatchObject({ code: 'NOT_ONLINE', details: { reason: 'self' } });
+  });
+
+  it('lets unchanged coordinates keep a partner fresh for 2 minutes after he moved, no longer (S7)', async () => {
+    const { member, partnerId } = await approvedPartner('Sam Still');
+    const sessionId = await sessionOf(member.userId);
+    const start = Date.now();
+    const at = (seconds: number) => new Date(start + seconds * 1000);
+    const send = (lat: number, lng: number, seconds: number) =>
+      service.recordLocations(
+        member.actor,
+        sessionId,
+        { points: [{ lat, lng, accuracy: 15, recordedAt: at(seconds).toISOString() }] },
+        at(seconds),
+      );
+    await service.setAvailability(
+      member.actor,
+      sessionId,
+      { online: true, point: point(42.3505, -71.045) },
+      at(0),
+    );
+    expect((await send(42.3521, -71.0469, 15)).lastPointAt).toBe(at(15).toISOString());
+
+    // A phone that lost its GPS keeps sending the same fix every 15 s for 5 minutes.
+    let last = '';
+    for (let seconds = 30; seconds <= 300; seconds += 15) {
+      last = (await send(42.3521, -71.0469, seconds)).lastPointAt ?? '';
+    }
+    expect(last).toBe(at(135).toISOString());
+    const held = JSON.parse((await redis.get(`partner:loc:${partnerId}`)) ?? '{}') as {
+      acceptedAt: string;
+      recordedAt: string;
+    };
+    expect(held).toMatchObject({
+      acceptedAt: at(135).toISOString(),
+      recordedAt: at(300).toISOString(),
+    });
+    const { freshnessOf } = await import('@/server/modules/partners/location');
+    expect(freshnessOf({ isOnline: true, lastPointAt: held.acceptedAt }, at(300))).toBe('stale');
+
+    // A real move makes him fresh again at once.
+    expect((await send(42.3537, -71.0487, 315)).lastPointAt).toBe(at(315).toISOString());
+    await service.setAvailability(member.actor, sessionId, { online: false }, at(316));
   });
 
   it('refuses applicants and real points from the demo partner, which shares one online state', async () => {

@@ -2,14 +2,31 @@ import { distanceMeters } from '@/lib/map-geometry';
 
 /*
  * The app's rules for sending positions while online (F6 P10.3, P11, P16.5, design 6.4): a
- * point when he has moved 25 m, at most every 4 s, and a 30 s heartbeat; up to 150 kept in
+ * point when he has moved 25 m, at most every 4 s, and a 15 s heartbeat; up to 150 kept in
  * memory while the connection is down, none older than 10 minutes, oldest dropped first; sent
  * oldest first, 50 a request, one request every 2 s. Pure, so it can be tested on its own.
  */
 
 export const MIN_MOVE_M = 25;
 export const MIN_GAP_MS = 4_000;
-export const HEARTBEAT_MS = 30_000;
+/**
+ * Standing still sends a point this often, well inside the server's 2-minute freshness rule
+ * (B22). The order's live map (F7) wants one every 15 s too.
+ */
+export const HEARTBEAT_MS = 15_000;
+/**
+ * No fix from the phone for this long: ask it for one. Some phones report only changes, so a
+ * partner standing still would otherwise send nothing and go stale (P10.3). Shorter than
+ * `LOOKING_AFTER_MS`, so "Looking for GPS…" means the phone really can't answer (P11.6).
+ */
+export const REREAD_AFTER_MS = 5_000;
+/**
+ * Security gate S7: a silent phone's last fix is sent again only this long after it was taken,
+ * so a phone that lost its GPS goes stale (the server caps unchanged coordinates too).
+ */
+export const RESEND_WITHIN_MS = 60_000;
+/** This many timed-out reads in a row count as "position unavailable" (S7, P11.6). */
+export const TIMEOUTS_FOR_UNAVAILABLE = 2;
 export const QUEUE_MAX = 150;
 export const QUEUE_MAX_AGE_MS = 10 * 60_000;
 export const BATCH_SIZE = 50;
@@ -26,8 +43,8 @@ export const NOT_FOUND_AFTER_MS = 20_000;
 export const LOOKING_AFTER_MS = 10_000;
 /** B22: no accepted point for 2 minutes means not offered orders. */
 export const STALE_AFTER_MS = 2 * 60_000;
-/** The pinned "No connection" banner waits this long (design 6.4). */
-export const CONNECTION_BANNER_DELAY_MS = 3_000;
+/** The pinned "No connection" banner waits this long, to show within 3 s (P11.1). */
+export const CONNECTION_BANNER_DELAY_MS = 2_500;
 /** "Back online. Location sent." stays this long. */
 export const BACK_ONLINE_MS = 4_000;
 /** A send without an answer in this long is given up and retried. */
