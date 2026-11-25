@@ -11,7 +11,9 @@ const instant = z.iso.datetime();
 
 /** A courier accepted (F7): the per-delivery estimate loop starts (L4.1, L11.1). */
 export const deliveryTrackingStarted = eventType('delivery.tracking-started', {
-  schema: z.object({ deliveryId: z.uuid(), orderId: z.uuid(), at: instant }).strict(),
+  schema: z
+    .object({ deliveryId: z.uuid(), orderId: z.uuid(), version: z.int().min(0), at: instant })
+    .strict(),
 });
 
 /** He strayed 150 m from the route: the loop re-plans now instead of at its next tick. */

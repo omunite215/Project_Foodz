@@ -383,6 +383,19 @@ export async function findDemoCast(ctx: DbContext) {
   return rows[0] ?? null;
 }
 
+/** P44.3: what staff did to his delivery, for a phone that missed the realtime event. */
+export async function setPartnerNotice(
+  ctx: DbContext,
+  partnerId: string,
+  kind: 'confirmed' | 'cancelledBringBack' | 'markedDelivered',
+  orderNumber: string,
+) {
+  await db(ctx).$executeRaw`
+    UPDATE delivery_partners
+    SET released_kind = ${kind}, released_order_number = ${orderNumber}, released_at = app_now()
+    WHERE id = ${partnerId}::uuid`;
+}
+
 export async function markOverride(ctx: DbContext, deliveryId: string) {
   await db(ctx).$executeRaw`
     UPDATE deliveries SET handover_how = 'admin-override'

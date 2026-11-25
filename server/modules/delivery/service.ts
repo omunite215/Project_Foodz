@@ -88,6 +88,14 @@ const DEMO_CANNOT = 'Read-only in the demo';
 const PHOTO_SECONDS = 300;
 const RELEASE_NOTICE_MS = 30 * 60_000;
 const GIVE_BACK_ALERT_AT = 10;
+const RELEASE_KINDS = [
+  'takenOff',
+  'cancelled',
+  'handedOver',
+  'confirmed',
+  'cancelledBringBack',
+  'markedDelivered',
+] as const;
 const LATE_ACCEPT_ALERT_AT = 5;
 const DAY_MS = 24 * 60 * 60_000;
 const ASSIGN = { delivery: ['assign'] } as const satisfies Permission;
@@ -437,7 +445,12 @@ export async function acceptOffer(
     await inngest
       .send(
         deliveryTrackingStarted.create(
-          { deliveryId: result.deliveryId, orderId: result.orderId, at: at.toISOString() },
+          {
+            deliveryId: result.deliveryId,
+            orderId: result.orderId,
+            version: result.version,
+            at: at.toISOString(),
+          },
           { id: `delivery-tracking-${result.deliveryId}-${result.version}` },
         ),
       )
@@ -686,12 +699,7 @@ export async function partnerDispatchState(
     partner.releasedAt &&
     now.getTime() - partner.releasedAt.getTime() <= RELEASE_NOTICE_MS
       ? {
-          kind:
-            partner.releasedKind === 'takenOff'
-              ? ('takenOff' as const)
-              : partner.releasedKind === 'handedOver'
-                ? ('handedOver' as const)
-                : ('cancelled' as const),
+          kind: RELEASE_KINDS.find((kind) => kind === partner.releasedKind) ?? 'cancelled',
           orderNumber: partner.releasedOrderNumber,
           at: partner.releasedAt.toISOString(),
         }

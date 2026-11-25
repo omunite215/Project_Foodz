@@ -192,6 +192,7 @@ async function afterDelivered(result: {
   version: number;
   how: 'code' | 'staff-confirmed' | 'admin-override' | 'demo';
   notice?: PartnerTrackingNotice;
+  orderNumber?: string;
 }) {
   const at = new Date();
   const effects: OrderEffect[] = [
@@ -199,6 +200,14 @@ async function afterDelivered(result: {
     { kind: 'notice', orderId: result.orderId, step: 'delivered' },
   ];
   await safely('order', () => runEffects(effects));
+  if (result.notice === 'confirmed' && result.orderNumber) {
+    const orderNumber = result.orderNumber;
+    await safely('notice', () =>
+      runAsSystem('partner notice', (ctx) =>
+        repo.setPartnerNotice(ctx, result.partnerId, 'confirmed', orderNumber),
+      ),
+    );
+  }
   await safely('changed', () =>
     publishChanged(
       { orderId: result.orderId, status: 'DELIVERED', version: result.version },
@@ -397,7 +406,16 @@ export async function getCurrentDeliveryF8(actor: UserActor): Promise<PartnerDel
       : null,
     problem: problemFact(row.problemKind),
     otp: { locked: row.otpLockedAt !== null, triesLeft: triesLeft(row.otpWrongTries) },
-    notice: null,
+    // P43.4: "asked to wait" stays readable for 10 minutes for a phone that missed the event.
+    notice:
+      row.noAnswerWaitRestartedAt &&
+      Date.now() - row.noAnswerWaitRestartedAt.getTime() <= 10 * 60_000
+        ? {
+            kind: 'askedToWait',
+            orderNumber: row.orderNumber,
+            at: row.noAnswerWaitRestartedAt.toISOString(),
+          }
+        : null,
   };
 }
 
@@ -453,8 +471,10 @@ export async function pickUp(
 export async function notifyMarkedDelivered(orderId: string): Promise<void> {
   const row = await runAsSystem('marked delivered', async (ctx) => {
     const found = await repo.findTrackedByOrder(ctx, orderId);
-    if (found?.status === 'DELIVERED' && found.partnerId)
+    if (found?.status === 'DELIVERED' && found.partnerId) {
       await repo.markOverride(ctx, found.deliveryId);
+      await repo.setPartnerNotice(ctx, found.partnerId, 'markedDelivered', found.orderNumber);
+    }
     return found;
   });
   if (row?.status !== 'DELIVERED' || !row.partnerId) return;
@@ -1239,6 +1259,7 @@ export async function confirmHandover(
     version: result.version,
     how: result.how,
     notice: 'confirmed',
+    orderNumber: row.orderNumber,
   });
   return {
     orderId: result.orderId,
@@ -1337,6 +1358,22 @@ export async function cancelUnreachable(
     return parsed;
   });
   const result = staffOutcome.parse(raw);
+  if (result.outcome === 'not-stuck') {
+    throw refusal(
+      'CONFIRM_NOT_ALLOWED',
+      'Cancel it after a code lock, a reported problem or 5 minutes without an answer.',
+      409,
+      { why: 'not-stuck' },
+    );
+  }
+  if (result.outcome === 'cancelled' && result.partnerId) {
+    const partnerId = result.partnerId;
+    await safely('notice', () =>
+      runAsSystem('partner notice', (ctx) =>
+        repo.setPartnerNotice(ctx, partnerId, 'cancelledBringBack', result.orderNumber),
+      ),
+    );
+  }
   if (result.outcome !== 'cancelled') {
     throw changed(
       row.orderNumber,

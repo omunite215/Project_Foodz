@@ -286,6 +286,11 @@ describe('door problems and staff (P43, A50)', () => {
     expect(wait?.serverError).toBeUndefined();
     const second = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
     expect(second.noAnswerWaitRestartedAt).not.toBeNull();
+    expect((await tracking.getCurrentDeliveryF8(luis.actor))?.notice).toMatchObject({
+      kind: 'askedToWait',
+      orderNumber: order.number,
+    });
+    await migrator.$executeRaw`UPDATE deliveries SET no_answer_since = app_now() - interval '6 minutes' WHERE id = ${deliveryId}::uuid`;
     const cancel = await asBrowser(morgan.browser, () =>
       actions.cancelUnreachableAction({ orderId: order.id, expectedVersion: second.version }),
     );
@@ -307,6 +312,8 @@ describe('door problems and staff (P43, A50)', () => {
     });
     await tracking.pickUp(luis.actor, deliveryId, {});
     await tracking.reportProblem(luis.actor, deliveryId, { kind: 'no-answer' });
+    // Support cancels only a stuck delivery (S4): the 5-minute wait has run out.
+    await migrator.$executeRaw`UPDATE deliveries SET no_answer_since = app_now() - interval '6 minutes' WHERE id = ${deliveryId}::uuid`;
     const held = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
     await signedInAgo(migrator, morgan.userId, 11);
     const asked = await asBrowser(morgan.browser, () =>
@@ -363,6 +370,11 @@ describe('door problems and staff (P43, A50)', () => {
     expect(
       (await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } })).handoverHow,
     ).toBe('admin-override');
+    const { partnerDispatchState } = await import('@/server/modules/delivery/service');
+    expect((await partnerDispatchState(luis.partnerId)).notice).toMatchObject({
+      kind: 'markedDelivered',
+      orderNumber: order.number,
+    });
   });
 
   it('puts a locked code on the board, oldest first', async () => {

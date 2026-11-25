@@ -529,6 +529,10 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
         'contentVersions',
         await correctParagraph(tx, 'privacy', admin.id, now, SEED_CORRECTIONS.privacyWhoSeesIt),
       );
+      count(
+        'contentVersions',
+        await correctParagraph(tx, 'privacy', admin.id, now, SEED_CORRECTIONS.privacyTracking),
+      );
 
       // -------------------------------------------------------------- blog
       for (const tag of tags) {

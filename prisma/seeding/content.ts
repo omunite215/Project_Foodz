@@ -72,8 +72,13 @@ export const FAQ_CASH_ANSWER =
  * Privacy, "Who sees it" (F4 security S14): what Stripe receives with each card payment, and that
  * it keeps its records after the Foodz account is deleted.
  */
-export const PRIVACY_WHO_SEES_IT =
+/** F4's wording, before F8 named Photon, OpenFreeMap and "after pickup". */
+const PRIVACY_WHO_SEES_IT_F4 =
   'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. When you pay by card, your card details go straight to our payment processor, Stripe, and never reach our servers. With each card payment Stripe also receives the name and delivery address on the order and the order number, which it needs to process the payment and check it for fraud. Stripe keeps its own record of each payment under its privacy policy, including after you delete your Foodz account.';
+
+/** Privacy, "Who sees it" (F4 S14, F8 S3): Stripe, Photon (Komoot) and OpenFreeMap, and when couriers see what. */
+export const PRIVACY_WHO_SEES_IT =
+  'Couriers see your first name, drop-off address and phone number only after they pick up your order, until it is delivered. To suggest addresses as you type, the address you type goes to Photon, an address search run by Komoot; if we use it to name your area, your drop-off point goes there too, rounded to about 100 metres. Maps are drawn from OpenFreeMap (openfreemap.org), which receives the requests your browser makes for map tiles but no order details. When you pay by card, your card details go straight to our payment processor, Stripe, and never reach our servers. With each card payment Stripe also receives the name and delivery address on the order and the order number, which it needs to process the payment and check it for fraud. Stripe keeps its own record of each payment under its privacy policy, including after you delete your Foodz account.';
 
 export const SEED_CORRECTIONS = {
   taxRateBps: { from: 625, to: 700 },
@@ -89,6 +94,10 @@ export const SEED_CORRECTIONS = {
   faqCashAnswer: {
     from: 'Yes. Choose cash at checkout and pay the courier when your order arrives.',
     to: FAQ_CASH_ANSWER,
+  },
+  privacyTracking: {
+    from: PRIVACY_WHO_SEES_IT_F4,
+    to: PRIVACY_WHO_SEES_IT,
   },
   privacyWhoSeesIt: {
     from: 'Couriers see your first name and drop-off address once they accept your order, and your phone number only while the delivery is under way. Card details go straight to our payment processor and never reach our servers.',

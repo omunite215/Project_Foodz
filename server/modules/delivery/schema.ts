@@ -234,7 +234,15 @@ export interface AcceptResult {
 }
 
 /** P31: what happened to an order he held, when he missed the event. */
-export type DeliveryNotice = 'takenOff' | 'cancelled' | 'handedOver' | 'movedBack';
+export type DeliveryNotice =
+  | 'takenOff'
+  | 'cancelled'
+  | 'handedOver'
+  | 'movedBack'
+  // F8: staff finished or stopped it (P44.3).
+  | 'confirmed'
+  | 'cancelledBringBack'
+  | 'markedDelivered';
 
 /** `GET /api/v1/partner/deliveries/current` (P29), only while he holds the order. */
 export interface PartnerDelivery {

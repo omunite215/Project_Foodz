@@ -137,13 +137,27 @@ export function parseNeighborhood(json: unknown): string | null {
   return name && /^[\p{L}\p{N} .'&-]{2,60}$/u.test(name) ? name : null;
 }
 
-/** A46: Photon's reverse geocode for the drop-off (server-side only); null on any failure. */
-export async function neighborhoodOf(point: Point): Promise<string | null> {
+/** S2: the reverse lookup is opt-in (`GEOCODER_REVERSE=photon`); off by default, in tests and CI. */
+export const reverseGeocoderOn = (env: Record<string, string | undefined> = process.env) =>
+  env.GEOCODER_REVERSE === 'photon';
+
+/** The request for the drop-off's neighborhood, rounded to 3 decimals (about 100 m). */
+export function reverseUrl(point: Point): URL {
   const { lat, lng } = latLngSchema.parse({ lat: point.lat, lng: point.lng });
   const url = new URL('https://photon.komoot.io/reverse');
-  url.searchParams.set('lat', lat.toFixed(5));
-  url.searchParams.set('lon', lng.toFixed(5));
+  url.searchParams.set('lat', lat.toFixed(3));
+  url.searchParams.set('lon', lng.toFixed(3));
   url.searchParams.set('limit', '1');
+  return url;
+}
+
+/** A46: Photon's reverse geocode for the drop-off (server-side, opt-in); null when off or failing. */
+export async function neighborhoodOf(
+  point: Point,
+  env: Record<string, string | undefined> = process.env,
+): Promise<string | null> {
+  if (!reverseGeocoderOn(env)) return null;
+  const url = reverseUrl(point);
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(ROUTING.timeoutMs),

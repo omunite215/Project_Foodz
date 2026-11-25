@@ -221,9 +221,39 @@ describe('staff finishing a stuck delivery (A50)', () => {
     });
   });
 
+  it('fixes the support wait at 5 minutes and lets support cancel only a stuck delivery (S4, S5)', async () => {
+    const { deliveryId } = await assigned();
+    await pickUp(luis, deliveryId);
+    await migrator.$executeRaw`UPDATE deliveries SET no_answer_since = app_now() - interval '2 minutes' WHERE id = ${deliveryId}::uuid`;
+    const { version } = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+    const shortWait = await call(
+      support(),
+      (ctx) =>
+        db(ctx)
+          .$queryRaw`SELECT app_staff_confirm_handover(${deliveryId}::uuid, ${version}::int, 'customer-confirmed', true, 1, NULL) AS "result"`,
+    );
+    expect(shortWait).toEqual({ outcome: 'not-stuck' });
+    const early = await call(
+      support(),
+      (ctx) =>
+        db(ctx)
+          .$queryRaw`SELECT app_staff_cancel_unreachable(${deliveryId}::uuid, ${version}::int, NULL) AS "result"`,
+    );
+    expect(early).toEqual({ outcome: 'not-stuck' });
+    await migrator.$executeRaw`UPDATE deliveries SET problem_kind = 'address', problem_at = app_now() WHERE id = ${deliveryId}::uuid`;
+    const stuck = await call(
+      support(),
+      (ctx) =>
+        db(ctx)
+          .$queryRaw`SELECT app_staff_cancel_unreachable(${deliveryId}::uuid, ${version}::int, NULL) AS "result"`,
+    );
+    expect(stuck).toMatchObject({ outcome: 'cancelled' });
+  });
+
   it('cancels and brings it back with "Customer couldn\'t be reached"', async () => {
     const { order, deliveryId } = await assigned();
     await pickUp(luis, deliveryId);
+    await migrator.$executeRaw`UPDATE deliveries SET otp_locked_at = app_now(), otp_wrong_tries = 5 WHERE id = ${deliveryId}::uuid`;
     const { version } = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
     const result = await call(
       support(),

@@ -30,7 +30,8 @@ export const deliveryEta = inngest.createFunction(
   {
     id: 'delivery-eta',
     triggers: [deliveryTrackingStarted],
-    idempotency: 'event.data.deliveryId',
+    // One loop per assignment: a re-assigned delivery (a new version) gets a fresh one.
+    idempotency: 'event.data.deliveryId + "-" + string(event.data.version)',
     concurrency: { key: 'event.data.deliveryId', limit: 1 },
     cancelOn: [{ event: deliveryAssignmentEnded, match: 'data.deliveryId' }],
     retries: 3,
