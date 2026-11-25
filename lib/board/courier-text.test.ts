@@ -7,6 +7,7 @@ import {
   assignTags,
   cardTone,
   courierLineText,
+  courierLineShown,
   courierLinesToRead,
   courierMenuFor,
   courierReadKey,
@@ -159,6 +160,14 @@ describe('reading the courier line of a card that just became Ready (A34.1)', ()
     expect(courierLinesToRead(cards, asked)).toEqual([]);
     // Undone and marked ready again: a new version, read again.
     expect(courierLinesToRead([card({ version: 6 })], asked)).toEqual(['a']);
+  });
+
+  it('shows the line on Ready and Out for delivery only, never after Undo to Preparing', () => {
+    const starting = line({ state: 'starting', words: 'Finding a courier…' });
+    expect(courierLineShown(card({ courier: starting }))).toBe(starting);
+    expect(courierLineShown(card({ status: 'PICKED_UP', courier: starting }))).toBe(starting);
+    expect(courierLineShown(card({ status: 'COOKING', courier: starting }))).toBeNull();
+    expect(courierLineShown(card({}))).toBeNull();
   });
 });
 

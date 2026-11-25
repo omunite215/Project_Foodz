@@ -8,7 +8,7 @@ import { type BoardAbilities, type BoardCard, LATENESS } from '@/server/modules/
 import { type CardMenuItem, cardActions, PREVIOUS_STEP } from '@/server/modules/board/state';
 import { cardTiming } from '@/server/modules/board/timing';
 import { msUntil } from '@/lib/board/clock';
-import { cardTone } from '@/lib/board/courier-text';
+import { cardTone, courierLineShown } from '@/lib/board/courier-text';
 import { timeBlockText } from '@/lib/board/text';
 import { prefersReducedMotion, useMotion } from '@/lib/motion';
 import { isSitePath } from '@/lib/navigation';
@@ -155,7 +155,8 @@ export function OrderCard({
   const backTo = PREVIOUS_STEP[card.status];
   const outlined = useHighlight(highlight, cardRef, washRef);
   // F7 (D18): the card's border takes the worse of the time tone and the courier tone.
-  const courierTone = card.status === 'READY' ? card.courier?.tone : null;
+  const courier = courierLineShown(card);
+  const courierTone = card.status === 'READY' ? courier?.tone : null;
   const tone = cardTone(time.tone, courierTone);
 
   return (
@@ -192,8 +193,8 @@ export function OrderCard({
       </div>
       <div className="relative">
         <TimeLine text={time} />
-        {card.courier ? (
-          <CourierLine courier={card.courier} now={courierNow ?? now} orderStatus={card.status} />
+        {courier ? (
+          <CourierLine courier={courier} now={courierNow ?? now} orderStatus={card.status} />
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">

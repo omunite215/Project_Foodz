@@ -68,6 +68,15 @@ interface CourierCardFacts {
   courier?: BoardCourier | null;
 }
 
+/**
+ * The line a card shows: Ready and Out for delivery only, as the server words them. A card
+ * taken back with Undo or "Move back" keeps the line it read until the next read; it never
+ * shows on Preparing.
+ */
+export function courierLineShown(card: CourierCardFacts): BoardCourier | null {
+  return card.status === 'READY' || card.status === 'PICKED_UP' ? (card.courier ?? null) : null;
+}
+
 /** One read per card version: a card that keeps no line after its read isn't asked again. */
 export const courierReadKey = (card: CourierCardFacts): string => `${card.id}:${card.version}`;
 
