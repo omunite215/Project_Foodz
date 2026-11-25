@@ -15,7 +15,7 @@ import {
   Scooter,
   TriangleAlert,
 } from 'lucide-react';
-import { type Ref, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, type Ref, useEffect, useId, useRef, useState } from 'react';
 import type { OrderStep } from '@/server/modules/orders/progress-schema';
 import type { CourierPoint, CustomerTracking } from '@/server/modules/tracking/schema';
 import {
@@ -407,6 +407,7 @@ export function TrackingArrivalRow({
   asOf,
   timeZone,
   phone,
+  fallback = null,
 }: {
   orderId: string;
   tracking: CustomerTracking;
@@ -414,6 +415,8 @@ export function TrackingArrivalRow({
   asOf: string;
   timeZone: string;
   phone: string;
+  /** Before the first estimate is ready, F5's window stands (it never says "unknown", S2.4). */
+  fallback?: ReactNode;
 }) {
   const point = useCourierPoint(orderId, tracking.courierPoint);
   const now = useServerNow(asOf, 15_000);
@@ -452,7 +455,7 @@ export function TrackingArrivalRow({
     // oxlint-disable-next-line react/exhaustive-deps
   }, [kind]);
 
-  if (!row) return null;
+  if (!row) return fallback;
   const note = row.note ?? (later && row.kind === 'eta' ? LATER_NOTE : null);
   const look =
     row.kind === 'overdue'

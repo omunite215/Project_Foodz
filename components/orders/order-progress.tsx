@@ -406,6 +406,7 @@ export function ProgressCard({
             asOf={view.progress.asOf}
             timeZone={view.store.timeZone}
             phone={view.store.phone}
+            fallback={<ArrivalRow view={view} />}
           />
           {tracking.tracking.code ? (
             <DeliveryCodeCard
