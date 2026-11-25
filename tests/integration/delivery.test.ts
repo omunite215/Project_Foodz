@@ -693,6 +693,17 @@ describe('order changes (F5 hooks) and what people see', () => {
     const masked = await words(demoAdmin);
     expect(masked).toHaveLength(3);
     expect(masked.join(' ')).not.toContain('Grace');
+
+    // A36.4: the kitchen reads "Grace O.", and the full name is nowhere in its data.
+    expect(await words(alex)).toEqual([
+      'Looking for a courier · Foodz (automatic)',
+      'Grace O. accepted · 1.4 km from the kitchen',
+      'Morgan Diaz (Support) took it off Grace O. · Courier is too far away',
+    ]);
+    const kitchenDetail = await asBrowser(alex.browser, () =>
+      board.getStaffOrderDetail(alex.actor, order.id),
+    );
+    expect(JSON.stringify(kitchenDetail)).not.toContain('Okafor');
   });
 
   it("never shows a real courier's plate to the demo admin (S1)", async () => {

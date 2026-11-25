@@ -1406,19 +1406,23 @@ export async function courierSection(
   };
 }
 
-/** Full names for the staff timeline (design 2.5), masked for the demo admin (A36.5). */
+/**
+ * The couriers the staff timeline names (design 2.5): full names for SUPPORT and ADMIN, masked
+ * for the demo admin (A36.5), and only the first name and last initial for KITCHEN (A36.4), so
+ * a full name never reaches the tablet.
+ */
 export async function courierNames(
-  viewer: { isDemo: boolean },
+  viewer: { isDemo: boolean; role: UserActor['role'] },
   partnerIds: readonly string[],
 ): Promise<Map<string, string>> {
   const unique = [...new Set(partnerIds)];
   if (unique.length === 0) return new Map();
   const partners = await runAsSystem('courier names', (ctx) => repo.listCourierFacts(ctx, unique));
   return new Map(
-    partners.map((partner) => [
-      partner.partnerId,
-      nameFor(viewer, partner.name, partner.shownToDemo),
-    ]),
+    partners.map((partner) => {
+      const name = nameFor(viewer, partner.name, partner.shownToDemo);
+      return [partner.partnerId, viewer.role === 'kitchen' ? shortName(name) : name];
+    }),
   );
 }
 
