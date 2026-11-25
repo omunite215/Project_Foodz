@@ -131,6 +131,8 @@ export function CodeSheet({
   const [pending, setPending] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [far, setFar] = useState<number | null>(null);
+  // P41.4 asks once per delivery; after "Yes, hand it over" later tries go straight through.
+  const [farConfirmed, setFarConfirmed] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cashRef = useRef<HTMLInputElement>(null);
@@ -149,6 +151,7 @@ export function CodeSheet({
       setCashError(false);
       setMessage(null);
       setWaiting(false);
+      setFarConfirmed(false);
     }, 0);
     return () => clearTimeout(timer);
   }, [deliveryId]);
@@ -248,11 +251,11 @@ export function CodeSheet({
     }
     const door = delivery.dropoff?.point ?? null;
     const meters = position && door ? distanceMeters(position, door) : null;
-    if (meters !== null && meters > FAR_M && far === null) {
+    if (meters !== null && meters > FAR_M && !farConfirmed) {
       setFar(Math.round(meters));
       return;
     }
-    go(false);
+    go(farConfirmed);
   };
 
   const go = (confirmFar: boolean) => {
@@ -444,7 +447,10 @@ export function CodeSheet({
           orderNumber={delivery.orderNumber}
           meters={far ?? 0}
           onCancel={() => setFar(null)}
-          onConfirm={() => go(true)}
+          onConfirm={() => {
+            setFarConfirmed(true);
+            go(true);
+          }}
         />
       ) : null}
     </>

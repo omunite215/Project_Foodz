@@ -115,16 +115,9 @@ test('a courier picks up, finds the door with the map and hands over with the co
   const counter = page
     .getByRole('region', { name: 'At the kitchen' })
     .getByText(`You're at the kitchen. Show order number ${ORDER} at the counter.`);
-  const mapsLink = page.getByRole('link', { name: 'Open in Maps, directions to Foodz Kitchen' });
-  if (await mapsLink.isVisible()) {
-    // The first press per delivery asks first (U10); "Stay in Foodz" goes back to it.
-    await mapsLink.click();
-    const warning = page.getByRole('alertdialog', { name: 'Open another maps app?' });
-    await expect(warning.getByText(/Foodz can't see you coming/)).toBeVisible();
-    await expectNoAxeViolations(page);
-    await warning.getByRole('button', { name: 'Stay in Foodz' }).click();
-    await expect(mapsLink).toBeFocused();
-  }
+  await expect(
+    page.getByRole('link', { name: 'Open in Maps, directions to Foodz Kitchen' }).or(counter),
+  ).toBeVisible();
   await expect(counter).toBeVisible({ timeout: 60_000 });
   await expectNoAxeViolationsAtEnd(page);
 
@@ -142,9 +135,14 @@ test('a courier picks up, finds the door with the map and hands over with the co
   const dropoff = page.getByRole('region', { name: 'Drop-off' });
   await expect(dropoff.getByText('Priya', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: /^Call Priya, / })).toBeVisible();
-  await expect(
-    page.getByRole('link', { name: "Open in Maps, directions to Priya's door" }),
-  ).toBeVisible();
+  // The first Open in Maps per delivery asks first (U10); "Stay in Foodz" goes back to it.
+  const mapsLink = page.getByRole('link', { name: "Open in Maps, directions to Priya's door" });
+  await mapsLink.click();
+  const warning = page.getByRole('alertdialog', { name: 'Open another maps app?' });
+  await expect(warning.getByText(/the customer's map pauses/)).toBeVisible();
+  await expectNoAxeViolations(page);
+  await warning.getByRole('button', { name: 'Stay in Foodz' }).click();
+  await expect(mapsLink).toBeFocused();
   await expect(page.getByRole('button', { name: 'Problem with this delivery' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Go offline' })).toHaveCount(0);
   await expectNoAxeViolationsAtEnd(page);
@@ -166,6 +164,9 @@ test('a courier picks up, finds the door with the map and hands over with the co
   await priya.setViewportSize({ width: 1440, height: 900 });
   await expect(priya.getByRole('complementary', { name: 'Your delivery' })).toBeVisible();
   await expectNoAxeViolations(priya);
+  await priya.setViewportSize({ width: 360, height: 760 });
+  await expect(codeCard).toBeVisible();
+  await expectNoAxeViolations(priya);
 
   // A wrong code: the boxes clear, the server's tries, said assertively (P42).
   await page.setViewportSize({ width: 375, height: 812 });
@@ -178,6 +179,11 @@ test('a courier picks up, finds the door with the map and hands over with the co
   const box = sheet.getByRole('textbox', { name: 'Delivery code, 4 digits' });
   await box.fill(wrong);
   await sheet.getByRole('button', { name: 'Complete delivery' }).click();
+  // He's still at the kitchen, 300 m or more from the door: it asks once (P41.4).
+  const far = page.getByRole('alertdialog', { name: `Hand over order ${ORDER} anyway?` });
+  await expect(far.getByText(/^You're \d+\.\d km from the drop-off\.$/)).toBeVisible();
+  await expect(far.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await far.getByRole('button', { name: 'Yes, hand it over' }).click();
   await expect(
     sheet.getByText(
       "That code doesn't match. Ask Priya to read it from the order page. 4 tries left.",
