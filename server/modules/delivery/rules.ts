@@ -368,6 +368,32 @@ export function courierStateOf(
   return 'between';
 }
 
+/**
+ * The ending the offers list words (A36.2, design 2.4.1). An offer that expired although the
+ * partner pressed Accept within its time (offline, reported after the end, P28.2) was answered
+ * too late, not missed: the press time decides, not only the stored end reason.
+ */
+export function listedEnding(
+  offer: {
+    status: string;
+    endedReason: OfferEnding | null;
+    pressedAt: Date | null;
+    expiresAt: Date;
+  },
+  graceSeconds: number = DISPATCH_DEFAULTS.graceSeconds,
+): OfferEnding | 'open' {
+  if (offer.status === 'PENDING') return 'open';
+  const ending = offer.endedReason ?? 'expired';
+  if (
+    ending === 'expired' &&
+    offer.pressedAt !== null &&
+    offer.pressedAt.getTime() <= offer.expiresAt.getTime() + graceSeconds * 1000
+  ) {
+    return 'too-late';
+  }
+  return ending;
+}
+
 /** F7 S1 to S4: the customer's state; never who was asked or what staff did (S5.4). */
 export function customerStateOf(facts: {
   orderStatus: string;

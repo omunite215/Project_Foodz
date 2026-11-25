@@ -21,6 +21,7 @@ import {
   courierStateOf,
   customerStateOf,
   dispatchTimings,
+  listedEnding,
   offerPay,
   reachesToTry,
   reachMeters,
@@ -1342,8 +1343,7 @@ export async function courierSection(
     delivery.searchStoppedAt === null;
   const offers: OfferRow[] = data.offers.map((offer) => {
     const partner = partners.get(offer.partnerId);
-    const ending: OfferEnding | 'open' =
-      offer.status === 'PENDING' ? 'open' : (offer.endedReason ?? 'expired');
+    const ending: OfferEnding | 'open' = listedEnding(offer, timings().graceSeconds);
     const answered =
       (ending === 'accepted' || ending === 'declined') && offer.respondedAt
         ? Math.max(0, Math.round((offer.respondedAt.getTime() - offer.createdAt.getTime()) / 1000))

@@ -172,26 +172,36 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(offer).toBeVisible();
   await expectNoAxeViolations(page);
 
-  // At 320 × 568 the whole card fits (design 1.2, review B2): the band shows its heading and
-  // kind line in full, and the payment row (Lena's order is cash) ends above Decline.
+  // On short and common phones the band shows its heading and kind line in full, and the payment
+  // row (Lena's order is cash) ends above Decline (design 1.2, review B2 and S5).
   if (projectOf(testInfo) === 'partner-360') {
     const before = page.viewportSize();
+    for (const size of [
+      { width: 320, height: 568 },
+      { width: 375, height: 812 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      const title = offer.getByRole('heading', { name: 'New order offer' });
+      const kindLine = offer.getByText('Foodz support picked you for this order.');
+      const band = title.locator('xpath=..');
+      const [bandBox, titleBox, kindBox] = await Promise.all([
+        band.boundingBox(),
+        title.boundingBox(),
+        kindLine.boundingBox(),
+      ]);
+      if (!bandBox || !titleBox || !kindBox) throw new Error('No band');
+      expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
+      expect(kindBox.y + kindBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
+      const payment = offer.getByText(/^Cash order · collect \$/);
+      const [paymentBox, declineTop] = [await payment.boundingBox(), await decline.boundingBox()];
+      if (!paymentBox || !declineTop) throw new Error('No payment row');
+      expect(
+        paymentBox.y + paymentBox.height,
+        `${size.width} × ${size.height}`,
+      ).toBeLessThanOrEqual(declineTop.y);
+    }
     await page.setViewportSize({ width: 320, height: 568 });
-    const title = offer.getByRole('heading', { name: 'New order offer' });
-    const kindLine = offer.getByText('Foodz support picked you for this order.');
-    const band = title.locator('xpath=..');
-    const [bandBox, titleBox, kindBox] = await Promise.all([
-      band.boundingBox(),
-      title.boundingBox(),
-      kindLine.boundingBox(),
-    ]);
-    if (!bandBox || !titleBox || !kindBox) throw new Error('No band');
-    expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
-    expect(kindBox.y + kindBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
-    const payment = offer.getByText(/^Cash order · collect \$/);
-    const [paymentBox, declineTop] = [await payment.boundingBox(), await decline.boundingBox()];
-    if (!paymentBox || !declineTop) throw new Error('No payment row');
-    expect(paymentBox.y + paymentBox.height).toBeLessThanOrEqual(declineTop.y);
     await expectNoAxeViolations(page);
     if (before) await page.setViewportSize(before);
   }

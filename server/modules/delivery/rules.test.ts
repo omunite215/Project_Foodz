@@ -8,6 +8,7 @@ import {
   type CourierLineInput,
   courierStateOf,
   customerStateOf,
+  listedEnding,
   dispatchOverridesRefused,
   dispatchTimingWarning,
   dispatchTimings,
@@ -348,5 +349,40 @@ describe("the customer's courier state (S1 to S4)", () => {
       customerStateOf({ orderStatus: 'PICKED_UP', delivery: { ...delivery, status: 'CANCELLED' } }),
     ).toBe('none');
     expect(customerStateOf({ orderStatus: 'PREPARING', delivery })).toBe('none');
+  });
+});
+
+describe('the offers list ending (A36.2, review S6)', () => {
+  const expiresAt = new Date('2026-11-21T03:50:30.000Z');
+  const offer = (patch: Partial<Parameters<typeof listedEnding>[0]>) => ({
+    status: 'EXPIRED',
+    endedReason: 'expired' as const,
+    pressedAt: null,
+    expiresAt,
+    ...patch,
+  });
+
+  it('reads an offline press in time, reported after the end, as answered too late', () => {
+    expect(listedEnding(offer({ pressedAt: new Date('2026-11-21T03:50:12.000Z') }))).toBe(
+      'too-late',
+    );
+    // Pressed in the 2-second grace still counts as in time.
+    expect(listedEnding(offer({ pressedAt: new Date('2026-11-21T03:50:31.500Z') }))).toBe(
+      'too-late',
+    );
+  });
+
+  it('keeps a real miss, a press after the end, and every other ending as they are', () => {
+    expect(listedEnding(offer({}))).toBe('expired');
+    expect(listedEnding(offer({ pressedAt: new Date('2026-11-21T03:50:40.000Z') }))).toBe(
+      'expired',
+    );
+    expect(
+      listedEnding(
+        offer({ endedReason: 'declined', pressedAt: new Date('2026-11-21T03:50:10.000Z') }),
+      ),
+    ).toBe('declined');
+    expect(listedEnding(offer({ status: 'PENDING', endedReason: null }))).toBe('open');
+    expect(listedEnding(offer({ endedReason: null }))).toBe('expired');
   });
 });

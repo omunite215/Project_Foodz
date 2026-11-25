@@ -353,9 +353,8 @@ export function OfferCardView({
             </div>
             {detail ? (
               <dl className="mt-6 divide-y divide-border rounded-2xl border border-border bg-card [@media(max-height:700px)]:mt-4">
-                <FactRow icon={Store} label={OFFER_COPY.pickup} value={detail.pickupText} />
-                <FactRow icon={MapPin} label={OFFER_COPY.dropoff} value={detail.dropoffText} />
-                <FactRow icon={ShoppingBag} label={OFFER_COPY.items} value={detail.itemsText} />
+                {/* Payment first, right under the pay: "collect $40.04" is what he needs
+                    before saying yes, on every phone (design 1.2, review S5). */}
                 <FactRow
                   icon={cash ? Banknote : CreditCard}
                   label={OFFER_COPY.payment}
@@ -363,6 +362,9 @@ export function OfferCardView({
                   cash={cash}
                   iconClassName={cash ? 'text-warning-mark' : undefined}
                 />
+                <FactRow icon={Store} label={OFFER_COPY.pickup} value={detail.pickupText} />
+                <FactRow icon={MapPin} label={OFFER_COPY.dropoff} value={detail.dropoffText} />
+                <FactRow icon={ShoppingBag} label={OFFER_COPY.items} value={detail.itemsText} />
               </dl>
             ) : card.detailFailed ? (
               <p className="mt-6 text-body-4 text-foreground">{OFFER_COPY.detailsFailed}</p>
