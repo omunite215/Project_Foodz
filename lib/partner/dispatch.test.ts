@@ -384,6 +384,23 @@ describe('the order he holds', () => {
     expect(dispatchStore.state.delivered).toEqual({ orderNumber: '1042', pay: '$7.64' });
   });
 
+  it('shows his pay even when the delivered event beats the answer', async () => {
+    const held = { ...delivery, status: 'PICKED_UP' as const, stage: 'delivering' as const };
+    dispatchStore.setState((state) => ({ ...state, delivery: held }));
+    routes[`POST /api/v1/partner/deliveries/${delivery.deliveryId}/hand-over`] = () => {
+      onDeliveryChanged({ orderId: 'o1', status: 'DELIVERED', version: 9, at: '' });
+      // The event waits for the answer: nothing ended yet.
+      expect(dispatchStore.state.delivery).not.toBeNull();
+      return {
+        status: 200,
+        body: { outcome: 'delivered', payWords: 'Order 1042 delivered · You earned $7.64' },
+      };
+    };
+    expect(await handOverCode('4821', true, false)).toEqual({ kind: 'delivered', pay: '$7.64' });
+    expect(dispatchStore.state.delivery).toBeNull();
+    expect(dispatchStore.state.delivered).toEqual({ orderNumber: '1042', pay: '$7.64' });
+  });
+
   it('reports a problem and tells Foodz nobody answered once the clock is up', async () => {
     dispatchStore.setState((state) => ({ ...state, delivery }));
     routes[`POST /api/v1/partner/deliveries/${delivery.deliveryId}/problem`] = () => ({

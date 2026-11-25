@@ -39,6 +39,7 @@ import {
 } from '@/lib/partner/dispatch';
 import { LOOKING_AFTER_MS, STALE_AFTER_MS, fixQuality } from '@/lib/partner/location-queue';
 import { keepRecent, type PartnerFix } from '@/lib/partner/moving';
+import { pickedUpAnnouncement } from '@/lib/partner/delivery-text';
 import { unlockOfferSound } from '@/lib/partner/offer-sound';
 import { deliverTitle, pickUpTitle } from '@/lib/partner/offer-text';
 import {
@@ -433,6 +434,18 @@ export function PartnerHome({
   // The tab's title names the order he holds (design, Screens and routes).
   const heldNumber = holding?.orderNumber ?? null;
   const heldStatus = holding?.status ?? null;
+  // F8 2.3: picked up (by his slide, or ADMIN's "keep the courier"): the deliver screen is
+  // read and its h1 focused, whichever arrives first, the answer or the event.
+  const heldFirst = holding?.dropoff?.firstName ?? null;
+  const shownStatus = useRef(heldStatus);
+  useEffect(() => {
+    const before = shownStatus.current;
+    shownStatus.current = heldStatus;
+    if (!heldNumber || heldStatus !== 'PICKED_UP' || !before || before === 'PICKED_UP') return;
+    announce(pickedUpAnnouncement(heldNumber, heldFirst));
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-partner-h1]')?.focus());
+  }, [heldStatus, heldNumber, heldFirst]);
+
   useEffect(() => {
     if (!adopted) return;
     const title = heldNumber

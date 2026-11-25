@@ -42,7 +42,6 @@ import {
   mapsName,
   mapsWarning,
   notReadyText,
-  pickedUpAnnouncement,
 } from '@/lib/partner/delivery-text';
 import {
   earnWords,
@@ -463,10 +462,6 @@ const PICKUP_SLIDE = {
 const RETRY_MS = 2_000;
 const DONE_HOLD_MS = 800;
 
-/** Focus the deliver screen's h1 after his own slide (it's his action). */
-const focusScreen = () =>
-  requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-partner-h1]')?.focus());
-
 export function PickUpDock({
   delivery,
   position,
@@ -496,14 +491,9 @@ export function PickUpDock({
       return;
     }
     if (outcome === 'done') {
+      // "Picked up" for a moment; Home then opens the deliver screen, reads it and focuses it.
       setState('accepted');
-      retry.current = setTimeout(() => {
-        void (async () => {
-          const next = await loadDelivery();
-          announce(pickedUpAnnouncement(delivery.orderNumber, next?.dropoff?.firstName ?? null));
-          focusScreen();
-        })();
-      }, DONE_HOLD_MS);
+      retry.current = setTimeout(() => void loadDelivery(), DONE_HOLD_MS);
       return;
     }
     // Moved back, released or cancelled a moment before: it springs back; the notices say why.

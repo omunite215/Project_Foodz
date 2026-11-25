@@ -663,6 +663,8 @@ function isDelivery(body: unknown): body is PartnerDeliveryF8 {
 let loadingDelivery: Promise<PartnerDeliveryF8 | null | undefined> | null = null;
 /** He gave the order back himself: the release that follows needs no notice. */
 let ownRelease: string | null = null;
+/** His code is on its way to the server: its own "delivered" event waits for the answer. */
+let handingOver: string | null = null;
 
 /** `GET /deliveries/current`; undefined when it couldn't be read. */
 export function loadDelivery(): Promise<PartnerDeliveryF8 | null | undefined> {
@@ -766,8 +768,9 @@ export function onDeliveryChanged(event: DeliveryChangedEvent) {
     set({ askedToWaitAt: event.at });
   }
   if (event.status === 'DELIVERED' && held) {
-    // His own code (the sheet already shows it) or another device's: nothing of the
-    // customer stays, and no second notice.
+    // His own code: the event can beat the answer to the phone; the answer ends it, with the
+    // pay. Another device's: nothing of the customer stays, and no second notice.
+    if (handingOver === held.deliveryId) return;
     ownRelease = held.deliveryId;
     endHeld(held);
     return;
@@ -872,24 +875,28 @@ export async function handOverCode(
   const held = get().delivery;
   if (!held) return { kind: 'gone' };
   if (!deviceOnline()) return { kind: 'offline' };
+  handingOver = held.deliveryId;
   const answer = await request('POST', deliveryPath(held.deliveryId, 'hand-over'), {
     code,
     ...(held.payment.kind === 'cash' ? { cashCollected } : {}),
     ...(confirmFar ? { confirmFar: true } : {}),
+  }).finally(() => {
+    handingOver = null;
   });
   if (!answer || answer.status >= 500) return { kind: 'offline' };
   if (answer.status === 200) {
     const result = handOverResult(answer.body);
-    const current = get().delivery;
-    if (!result || !current) return { kind: 'failed' };
+    if (!result) return { kind: 'failed' };
     if (result.outcome === 'delivered') {
-      const pay = earnedOf(result.payWords, current.payText);
-      ownRelease = current.deliveryId;
-      // One update, so the sheet goes straight from the code to the delivered body.
-      set({ delivered: { orderNumber: current.orderNumber, pay } });
-      endHeld(current);
+      const pay = earnedOf(result.payWords, held.payText);
+      ownRelease = held.deliveryId;
+      // The delivered moment first, so the sheet goes straight from the code to the pay.
+      set({ delivered: { orderNumber: held.orderNumber, pay } });
+      if (get().delivery?.deliveryId === held.deliveryId) endHeld(held);
       return { kind: 'delivered', pay };
     }
+    const current = get().delivery;
+    if (!current) return { kind: 'gone' };
     const otp =
       result.outcome === 'locked'
         ? { locked: true, triesLeft: 0 }
@@ -1106,6 +1113,7 @@ export function resetDispatchForTests() {
   queued = [];
   pressedAt = null;
   ownRelease = null;
+  handingOver = null;
   polling = false;
   loadingDelivery = null;
   dispatchStore.setState(() => ({ ...initial }));
