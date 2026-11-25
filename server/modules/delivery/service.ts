@@ -375,7 +375,9 @@ export async function markOfferSeen(
   if (practice) return { seenAt: practice.seenAt ?? new Date().toISOString() };
   const result = seenOutcome.parse(await runAs(actor, (ctx) => repo.markOfferSeen(ctx, offerId)));
   if (result.outcome === 'not-found') throw offerNotFound();
-  return { seenAt: new Date(result.seenAt).toISOString() };
+  // The database keeps UTC without a zone (`app_now()`), so its JSON text has none: read it as UTC.
+  const zoned = /(?:Z|[+-]\d\d:?\d\d)$/.test(result.seenAt) ? result.seenAt : `${result.seenAt}Z`;
+  return { seenAt: new Date(zoned).toISOString() };
 }
 
 /** `POST /api/v1/partner/offers/{id}/accept` (P22, W6): atomic in the database. */

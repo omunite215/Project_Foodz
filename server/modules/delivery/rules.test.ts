@@ -45,6 +45,7 @@ describe('who may be offered (W2)', () => {
     hasOpenOffer: false,
     excluded: false,
     previousAutoEnding: null,
+    autoOffers: 0,
     secondChance: false,
     isDemo: false,
     unseenInRow: 0,
@@ -83,10 +84,23 @@ describe('who may be offered (W2)', () => {
       'out-of-reach',
     );
     expect(
-      notOfferable({ ...ok, previousAutoEnding: 'expired', secondChance: true }, context),
+      notOfferable(
+        { ...ok, previousAutoEnding: 'expired', autoOffers: 1, secondChance: true },
+        context,
+      ),
     ).toBeNull();
     expect(
-      notOfferable({ ...ok, previousAutoEnding: 'declined', secondChance: true }, context),
+      notOfferable(
+        { ...ok, previousAutoEnding: 'declined', autoOffers: 1, secondChance: true },
+        context,
+      ),
+    ).toBe('already-offered');
+    // Only one more: a second timeout on the same order ends his turns for it.
+    expect(
+      notOfferable(
+        { ...ok, previousAutoEnding: 'expired', autoOffers: 2, secondChance: true },
+        context,
+      ),
     ).toBe('already-offered');
   });
 

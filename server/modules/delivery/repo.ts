@@ -500,8 +500,8 @@ export interface CandidateRow {
 
 /**
  * W2.1's ten rules in one query, ranked by W3.2 (longest wait, then distance, then id). The
- * reach never passes the delivery radius. `secondChance` lets a partner whose automatic offer
- * timed out be asked once more (W5.4).
+ * reach never passes the delivery radius. `secondChance` lets a partner whose one automatic offer
+ * for this order timed out be asked once more, and never a third time (W5.4).
  */
 export function searchCandidates(
   ctx: DbContext,
@@ -533,9 +533,11 @@ export function searchCandidates(
                       AND a.status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP'))
       AND NOT EXISTS (SELECT 1 FROM delivery_offers f WHERE f.partner_id = p.id AND f.status = 'PENDING')
       AND NOT (p.id = ANY (${[...q.excluded]}::uuid[]))
-      AND NOT EXISTS (SELECT 1 FROM delivery_offers f WHERE f.delivery_id = ${q.deliveryId}::uuid
-                      AND f.partner_id = p.id AND f.kind = 'auto'
-                      AND NOT (${q.secondChance} AND f.ended_reason = 'expired'))
+      AND (SELECT CASE count(*) WHEN 0 THEN true
+                               WHEN 1 THEN ${q.secondChance} AND bool_and(f.ended_reason = 'expired')
+                               ELSE false END
+           FROM delivery_offers f WHERE f.delivery_id = ${q.deliveryId}::uuid
+             AND f.partner_id = p.id AND f.kind = 'auto')
       AND u.is_demo = (${q.pool} = 'DEMO')
       AND p.unseen_in_row < 2
     ORDER BY coalesce(p.waiting_since, p.online_since), "distanceM", p.id

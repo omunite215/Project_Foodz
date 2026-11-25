@@ -96,6 +96,15 @@ async function timeOut(offerId: string, seen = true) {
   return dispatch.expireOffer(offerId);
 }
 
+/** One turn of the search: who it offered, letting the offer run out; null when nobody. */
+async function offeredTo(deliveryId: string) {
+  const turn = await dispatch.searchTurn(deliveryId);
+  if (turn.kind !== 'offered') return null;
+  const offer = await offerOf(turn.offerId);
+  expect(await timeOut(turn.offerId)).toMatchObject({ outcome: 'expired' });
+  return offer.partnerId;
+}
+
 async function partnerNamed(id: string) {
   return [luis, diego, grace, omar, lena].find((partner) => partner.partnerId === id)?.name;
 }
@@ -202,6 +211,29 @@ describe('the search (W2, W3, W4)', () => {
     expect(forOlder.kind === 'offered' && (await offerOf(forOlder.offerId)).partnerId).toBe(
       grace.partnerId,
     );
+  });
+
+  it('gives a timed-out partner one more offer in a sweep, never a third, then the next order (W5.4)', async () => {
+    // QA F7 W5.4: Luis alone, the older order kept coming back to him while the newer one waited.
+    await goOnlineAt(migrator, luis, { km: 0.2 });
+    const older = await readyOrder(migrator, priya.userId, { readyMinutes: 3 });
+    const newer = await readyOrder(migrator, maya.userId, { readyMinutes: 1 });
+    const olderDelivery = await openSearchFor(older.id);
+    const newerDelivery = await openSearchFor(newer.id);
+    await migrator.delivery.update({
+      where: { id: olderDelivery },
+      data: { escalatedAt: new Date(Date.now() - 60_000) },
+    });
+
+    expect(await offeredTo(olderDelivery)).toBe(luis.partnerId);
+    expect(await offeredTo(olderDelivery)).toBe(luis.partnerId);
+    expect(await offeredTo(olderDelivery)).toBeNull();
+    expect(
+      await migrator.deliveryOffer.count({
+        where: { deliveryId: olderDelivery, partnerId: luis.partnerId },
+      }),
+    ).toBe(2);
+    expect(await offeredTo(newerDelivery)).toBe(luis.partnerId);
   });
 });
 

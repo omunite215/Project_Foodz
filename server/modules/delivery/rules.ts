@@ -109,6 +109,8 @@ export interface CandidateFacts {
   excluded: boolean;
   /** Already offered this order by the automatic rounds, and how that ended. */
   previousAutoEnding: OfferEnding | null;
+  /** How many automatic offers this order has already made him. */
+  autoOffers: number;
   /** W5.4: the sweep allows one more offer after a timeout, once everyone else has had a turn. */
   secondChance: boolean;
   isDemo: boolean;
@@ -157,8 +159,9 @@ export function notOfferable(
   if (partner.hasOpenOffer) return 'has-offer';
   if (partner.excluded) return 'excluded';
   if (
-    partner.previousAutoEnding !== null &&
-    !(partner.secondChance && partner.previousAutoEnding === 'expired')
+    partner.autoOffers > 1 ||
+    (partner.previousAutoEnding !== null &&
+      !(partner.secondChance && partner.previousAutoEnding === 'expired'))
   ) {
     return 'already-offered';
   }
