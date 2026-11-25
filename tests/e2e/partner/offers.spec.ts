@@ -97,14 +97,33 @@ async function goOnline(page: Page, context: BrowserContext) {
   });
 }
 
-async function sendOffer(board: Page, number: string, courierName: string) {
+/**
+ * Support picks the courier in the assign dialog (A37). With a job runner attached, the
+ * automatic search may first offer him an order another project marked ready: his row then reads
+ * "Has another offer open" (A37.2), so he declines that one and support refreshes the list. An
+ * automatic offer of this same order doesn't block him: support's offer replaces it (A37.3).
+ */
+async function sendOffer(board: Page, phone: Page, number: string, courierName: string) {
   const order = card(board, number);
   await expect(order).toBeVisible({ timeout: 20_000 });
   await order.getByRole('button', { name: new RegExp(`actions for order ${number}`, 'i') }).click();
   await board.getByRole('menuitem', { name: 'Assign courier' }).click();
   const dialog = board.getByRole('dialog', { name: `Assign a courier to order ${number}` });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('radio', { name: new RegExp(`^${courierName},`) }).check();
+  const choice = dialog.getByRole('radio', { name: new RegExp(`^${courierName},`) });
+  await expect(choice).toBeVisible({ timeout: 10_000 });
+  for (let attempt = 0; attempt < 3 && !(await choice.isEnabled()); attempt += 1) {
+    const other = phone.getByRole('dialog', { name: 'New order offer' });
+    if (await other.isVisible()) {
+      await other.getByRole('button', { name: 'Decline order' }).click();
+      await expect(other).toHaveCount(0);
+    }
+    await dialog.getByRole('button', { name: 'Refresh list' }).click();
+    await expect(choice)
+      .toBeEnabled({ timeout: 5_000 })
+      .catch(() => undefined);
+  }
+  await choice.check();
   await dialog.getByRole('button', { name: 'Send offer' }).click();
   await expect(dialog).toHaveCount(0);
 }
@@ -148,7 +167,7 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
 
   // Support sends the offer from the board (A37).
   const support = await staffPage(browser, STAFF.support, baseURL);
-  await sendOffer(support.page, courier.order, courier.name);
+  await sendOffer(support.page, page, courier.order, courier.name);
   await expect(
     card(support.page, courier.order)
       .getByText(new RegExp(`offered it to ${courier.short}`))

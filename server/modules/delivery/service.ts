@@ -805,7 +805,7 @@ export async function listAssignableCouriers(
     const pool = order.customerIsDemo ? 'DEMO' : 'REAL';
     const delivery = await repo.findDeliveryByOrder(ctx, orderId);
     const kitchen = await repo.findKitchen(ctx);
-    const rows = await repo.listOnlineForAssign(ctx, pool);
+    const rows = await repo.listOnlineForAssign(ctx, pool, delivery?.id ?? null);
     const offline = await repo.countApprovedOffline(ctx, pool);
     const offers = delivery ? await repo.listOffersOfDelivery(ctx, delivery.id) : [];
     const gaveBack = new Set(delivery?.excludedPartnerIds ?? []);

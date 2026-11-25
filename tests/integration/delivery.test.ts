@@ -499,6 +499,26 @@ describe('staff (A37 to A39)', () => {
     expect(row?.words).toMatch(/ · at the kitchen · waiting under 1 min$/);
   });
 
+  it("disables a courier only for another order's open offer, not this order's (A37.2, A37.3)", async () => {
+    await goOnlineAt(migrator, grace, { km: 1.4, waitingMinutes: 10 });
+    const mine = await readyOrder(migrator, priya.userId, { readyMinutes: 3 });
+    const other = await readyOrder(migrator, maya.userId, { readyMinutes: 1 });
+    const mineDelivery = await openSearchFor(mine.id);
+    const turn = await dispatch.searchTurn(mineDelivery);
+    expect(turn.kind === 'offered' && (await offerOf(turn.offerId)).partnerId).toBe(
+      grace.partnerId,
+    );
+    const rowFor = async (orderId: string) => {
+      const list = await asBrowser(morgan.browser, () =>
+        actions.assignableCouriersAction({ orderId }),
+      );
+      return list?.data?.rows.find((item) => item.partnerId === grace.partnerId);
+    };
+    // Her automatic offer is for this order: support may still pick her, replacing it (A37.3).
+    expect((await rowFor(mine.id))?.disabledReason).toBeNull();
+    expect((await rowFor(other.id))?.disabledReason).toBe('Has another offer open');
+  });
+
   it('refuses the kitchen and the demo admin', async () => {
     await goOnlineAt(migrator, diego, { km: 0.2 });
     const order = await readyOrder(migrator, priya.userId);

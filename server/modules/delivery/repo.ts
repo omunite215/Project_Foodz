@@ -840,8 +840,15 @@ export interface AssignRow {
   isDemo: boolean;
 }
 
-/** Online partners for the assign dialog (A37.2), in dispatch order. */
-export function listOnlineForAssign(ctx: DbContext, pool: DeliveryPool): Promise<AssignRow[]> {
+/**
+ * Online partners for the assign dialog (A37.2), in dispatch order. Only another order's open
+ * offer blocks a row ("Has another offer open"): a staff offer withdraws this order's (A37.3).
+ */
+export function listOnlineForAssign(
+  ctx: DbContext,
+  pool: DeliveryPool,
+  deliveryId: string | null,
+): Promise<AssignRow[]> {
   return db(ctx).$queryRaw<AssignRow[]>`
     SELECT p.id::text AS "partnerId", u.name, (u.is_demo OR u.is_sample) AS "shownToDemo",
            p.vehicle_type AS "vehicleType", p.last_point_at AS "lastPointAt",
@@ -851,7 +858,8 @@ export function listOnlineForAssign(ctx: DbContext, pool: DeliveryPool): Promise
            END AS "distanceM",
            (SELECT o.number FROM deliveries a JOIN orders o ON o.id = a.order_id
              WHERE a.partner_id = p.id AND a.status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP') LIMIT 1) AS "busyOrderNumber",
-           EXISTS (SELECT 1 FROM delivery_offers f WHERE f.partner_id = p.id AND f.status = 'PENDING') AS "hasOpenOffer"
+           EXISTS (SELECT 1 FROM delivery_offers f WHERE f.partner_id = p.id AND f.status = 'PENDING'
+                   AND f.delivery_id IS DISTINCT FROM ${deliveryId}::uuid) AS "hasOpenOffer"
     FROM delivery_partners p
     JOIN users u ON u.id = p.user_id
     CROSS JOIN site_settings k
