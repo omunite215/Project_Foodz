@@ -1452,16 +1452,22 @@ export async function getCustomerDispatch(
       : [];
     return { delivery, partner };
   });
-  const state = customerStateOf({
-    orderStatus: own.status,
-    delivery: facts.delivery
-      ? {
-          status: facts.delivery.status,
-          escalatedAt: facts.delivery.escalatedAt?.toISOString() ?? null,
-          searchStoppedAt: facts.delivery.searchStoppedAt?.toISOString() ?? null,
-        }
-      : null,
-  });
+  const state = customerStateOf(
+    {
+      orderStatus: own.status,
+      readyAt: own.readyAt?.toISOString() ?? null,
+      delivery: facts.delivery
+        ? {
+            status: facts.delivery.status,
+            escalatedAt: facts.delivery.escalatedAt?.toISOString() ?? null,
+            searchStoppedAt: facts.delivery.searchStoppedAt?.toISOString() ?? null,
+            searchStartedAt: facts.delivery.searchStartedAt?.toISOString() ?? null,
+          }
+        : null,
+    },
+    new Date(),
+    timings().startDelaySeconds,
+  );
   const partner = facts.partner;
   // The courier card while he has the order; after delivery only his first name ("Delivered by
   // Luis."), never a photo link, vehicle, plate or rating (security S8), and never a position.

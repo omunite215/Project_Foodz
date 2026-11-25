@@ -398,19 +398,38 @@ export function listedEnding(
 }
 
 /** F7 S1 to S4: the customer's state; never who was asked or what staff did (S5.4). */
-export function customerStateOf(facts: {
-  orderStatus: string;
-  delivery: {
-    status: DeliveryStatus;
-    escalatedAt: string | null;
-    searchStoppedAt: string | null;
-  } | null;
-}): CustomerDispatchView['state'] {
-  const status = facts.delivery?.status ?? null;
+export function customerStateOf(
+  facts: {
+    orderStatus: string;
+    /** When the order was marked ready; without it the first moments can't be told apart. */
+    readyAt?: string | null;
+    delivery: {
+      status: DeliveryStatus;
+      escalatedAt: string | null;
+      searchStoppedAt: string | null;
+      searchStartedAt?: string | null;
+    } | null;
+  },
+  now: Date = new Date(),
+  startDelaySeconds: number = DISPATCH_DEFAULTS.startDelaySeconds,
+): CustomerDispatchView['state'] {
+  const delivery = facts.delivery;
+  const status = delivery?.status ?? null;
   switch (facts.orderStatus) {
-    case 'READY':
+    case 'READY': {
       if (status === 'ASSIGNED' || status === 'AT_RESTAURANT') return 'assigned';
-      return facts.delivery?.escalatedAt || facts.delivery?.searchStoppedAt ? 'slow' : 'searching';
+      if (delivery?.escalatedAt || delivery?.searchStoppedAt) return 'slow';
+      // S3.1 (review): no search running past the first moments after "Mark ready" is the
+      // board's "Not looking for a courier"; the customer hears the slow line, as for a stop.
+      const justReady =
+        facts.readyAt === undefined ||
+        (facts.readyAt !== null &&
+          now.getTime() - Date.parse(facts.readyAt) < (startDelaySeconds + 10) * 1000);
+      const searching =
+        status === 'SEARCHING' &&
+        (delivery?.searchStartedAt === undefined || delivery.searchStartedAt !== null);
+      return searching || justReady ? 'searching' : 'slow';
+    }
     case 'PICKED_UP':
       return status === 'PICKED_UP' ? 'pickedUp' : 'none';
     case 'DELIVERED':

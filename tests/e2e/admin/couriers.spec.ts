@@ -97,7 +97,9 @@ test("the order detail's courier section, and the kitchen's reduced view", async
   await kitchen.close();
 });
 
-test("the customer's line while a courier is found", async ({ page, browser }) => {
+// S3.1: S1107's search never ran ("Not looking for a courier" on the board), so the customer
+// reads the slow line, not "finding a courier".
+test("the customer's line while no courier is being found", async ({ page, browser }) => {
   const staff = await browser.newPage();
   await signInStaff(staff, STAFF.support, '/admin/orders');
   const href = await orderHrefOnBoard(staff, 'S1107');
@@ -106,8 +108,14 @@ test("the customer's line while a courier is found", async ({ page, browser }) =
   await open(page, `/orders/${href?.split('/').at(-1) ?? ''}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Your food is ready' })).toBeVisible();
   await expect(
-    page.getByText("It's packed. We're finding a courier to bring it to you."),
+    page
+      .getByRole('main')
+      .getByText(
+        "It's packed, but finding a courier is taking longer than usual. We're on it and will update this page.",
+      )
+      .first(),
   ).toBeVisible();
+  await expect(page.getByText("We're finding a courier to bring it to you.")).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Your courier' })).toHaveCount(0);
   await expectNoAxeViolations(page);
 });

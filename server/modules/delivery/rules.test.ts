@@ -345,6 +345,39 @@ describe('the staff courier line state (A34.1)', () => {
   });
 });
 
+const readyAgo = (seconds: number) => new Date(now.getTime() - seconds * 1000).toISOString();
+
+describe("the customer's line when no search runs (S3.1, review)", () => {
+  it('says searching in the first moments after "Mark ready", then slow while nobody looks', () => {
+    expect(
+      customerStateOf({ orderStatus: 'READY', readyAt: readyAgo(5), delivery: null }, now),
+    ).toBe('searching');
+    // Seeded S1107: ready 16 minutes ago, no search ever ran ("Not looking for a courier").
+    expect(
+      customerStateOf({ orderStatus: 'READY', readyAt: readyAgo(16 * 60), delivery: null }, now),
+    ).toBe('slow');
+    const notStarted = {
+      status: 'SEARCHING' as const,
+      escalatedAt: null,
+      searchStoppedAt: null,
+      searchStartedAt: null,
+    };
+    expect(
+      customerStateOf({ orderStatus: 'READY', readyAt: readyAgo(60), delivery: notStarted }, now),
+    ).toBe('slow');
+    expect(
+      customerStateOf(
+        {
+          orderStatus: 'READY',
+          readyAt: readyAgo(60),
+          delivery: { ...notStarted, searchStartedAt: readyAgo(48) },
+        },
+        now,
+      ),
+    ).toBe('searching');
+  });
+});
+
 describe("the customer's courier state (S1 to S4)", () => {
   const delivery = { status: 'SEARCHING' as const, escalatedAt: null, searchStoppedAt: null };
   it('says searching, then slow after escalation, then who is coming', () => {

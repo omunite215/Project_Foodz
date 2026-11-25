@@ -931,7 +931,7 @@ export async function findKitchen(ctx: DbContext) {
 export async function findOwnOrderId(ctx: DbContext, orderId: string, userId: string) {
   const row = await db(ctx).order.findFirst({
     where: { id: orderId, userId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, readyAt: true },
   });
   return row;
 }
