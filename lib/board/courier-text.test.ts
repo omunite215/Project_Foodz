@@ -7,7 +7,9 @@ import {
   assignTags,
   cardTone,
   courierLineText,
+  courierLinesToRead,
   courierMenuFor,
+  courierReadKey,
   couriersChipText,
   deliveryChangedText,
   holdingCourier,
@@ -128,6 +130,37 @@ describe('the courier line', () => {
 });
 
 const ready = (patch: Partial<BoardCourier>) => ({ status: 'READY', courier: line(patch) });
+
+const readyCard = (patch: {
+  id?: string;
+  status?: string;
+  version?: number;
+  courier?: BoardCourier | null;
+}) => ({
+  id: 'a',
+  status: 'READY',
+  version: 4,
+  courier: null,
+  ...patch,
+});
+
+describe('reading the courier line of a card that just became Ready (A34.1)', () => {
+  const card = readyCard;
+
+  it('asks for Ready cards without a line, once per card version', () => {
+    const cards = [
+      card({}),
+      card({ id: 'b', courier: line({ state: 'starting' }) }),
+      card({ id: 'c', status: 'COOKING' }),
+      card({ id: 'd', status: 'PICKED_UP' }),
+    ];
+    expect(courierLinesToRead(cards, new Set())).toEqual(['a']);
+    const asked = new Set([courierReadKey(cards[0]!)]);
+    expect(courierLinesToRead(cards, asked)).toEqual([]);
+    // Undone and marked ready again: a new version, read again.
+    expect(courierLinesToRead([card({ version: 6 })], asked)).toEqual(['a']);
+  });
+});
 
 describe('the card menu and banners', () => {
   it('offers courier items to support and admin only, by state', () => {

@@ -60,6 +60,31 @@ export interface CourierLineText {
   state: CourierState;
 }
 
+/** The card facts the board's courier reads need. */
+interface CourierCardFacts {
+  id: string;
+  status: string;
+  version: number;
+  courier?: BoardCourier | null;
+}
+
+/** One read per card version: a card that keeps no line after its read isn't asked again. */
+export const courierReadKey = (card: CourierCardFacts): string => `${card.id}:${card.version}`;
+
+/**
+ * A34.1: Ready cards without a courier line. A card that moved to Ready, by the person's own
+ * move or by anyone's event, keeps the line it had (none), and the first delivery change can be
+ * a minute away: these are read at once, so "Finding a courier…" shows from the start.
+ */
+export function courierLinesToRead(
+  cards: readonly CourierCardFacts[],
+  asked: ReadonlySet<string>,
+): string[] {
+  return cards
+    .filter((card) => card.status === 'READY' && !card.courier && !asked.has(courierReadKey(card)))
+    .map((card) => card.id);
+}
+
 /**
  * The line as shown. Out for delivery (A34.2): the courier's name and vehicle only, neutral.
  * Never a live region; the board refreshes the seconds every 5 s (A34.3).

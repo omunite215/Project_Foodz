@@ -25,7 +25,9 @@ import { serverNow, serverOffset, TIMER_TICK_MS } from '@/lib/board/clock';
 import { connectionBanner, liveChipState } from '@/lib/board/connection';
 import {
   type CourierMenuItem,
+  courierLinesToRead,
   courierMenuFor,
+  courierReadKey,
   didNotTakeNotice,
   HELD,
   LOOKING_AGAIN,
@@ -542,6 +544,15 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     if (writer.card(event.orderId)) courierBatcher.addItem(event.orderId);
     countThrottler.maybeExecute();
   });
+  // A34.1: a card that just became Ready reads its line at once ("Finding a courier…").
+  const courierAsked = useRef(new Set<string>());
+  useEffect(() => {
+    for (const id of courierLinesToRead(cards, courierAsked.current)) {
+      const card = cards.find((item) => item.id === id);
+      if (card) courierAsked.current.add(courierReadKey(card));
+      courierBatcher.addItem(id);
+    }
+  }, [cards, courierBatcher]);
 
   // ---------------------------------------------------------------- find (A11.1)
   const showCard = useCallback(
