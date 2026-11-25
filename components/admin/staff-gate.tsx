@@ -119,6 +119,19 @@ export function StaffGate({
       description: "You don't have access to partner applications. Ask an admin if you need it.",
       action: <BackButton />,
     },
+    liveMapNoAccess: {
+      media: (
+        <Disc tone="grey">
+          <ShieldAlert className="size-8" />
+        </Disc>
+      ),
+      description: "You don't have access to the live map. Ask an admin if you need it.",
+      action: (
+        <Button asChild size="touch">
+          <Link href={BOARD_HREF}>Back to the board</Link>
+        </Button>
+      ),
+    },
     applicationNotFound: {
       illustration: 'pageEaten' as const,
       description: 'It may have been withdrawn, or the address is wrong.',

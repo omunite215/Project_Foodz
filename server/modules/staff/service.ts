@@ -70,8 +70,11 @@ export function staffShellOf(
   const partners = can(role, { partner: ['review-application'] });
   const ends = staffSessionEnd(facts.session.createdAt);
   const expires = facts.session.expiresAt < ends ? facts.session.expiresAt : ends;
+  // F8 A46.1: the live map for SUPPORT, ADMIN and the demo admin (never the kitchen).
+  const liveMap = role !== 'kitchen' && can(role, { delivery: ['track-any'] });
   const screens: StaffScreen[] = [
     ...(board ? (['orderBoard'] as const) : []),
+    ...(liveMap ? (['liveMap'] as const) : []),
     ...(partners ? (['partners'] as const) : []),
   ];
   return {
