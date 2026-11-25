@@ -244,7 +244,8 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   await expect(page.getByRole('banner').getByText('Online', { exact: true })).toBeVisible();
   await page.getByText('Dark', { exact: true }).click();
   await expect(page.locator('.partner')).toHaveAttribute('data-theme', 'dark');
-  await expectNoAxeViolations(page);
+  // F7 made Profile taller ("Offer alerts"): checked from its end, clear of the tab bar.
+  await expectNoAxeViolationsAtEnd(page);
   await page.getByText('Light', { exact: true }).click();
 
   await page.getByRole('link', { name: 'Home' }).click();
