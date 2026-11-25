@@ -1,20 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OfferDetail, PartnerDelivery } from '@/server/modules/delivery/schema';
+import type { OfferDetail } from '@/server/modules/delivery/schema';
+import type { PartnerDeliveryF8 } from '@/server/modules/tracking/schema';
 import {
   ACCEPTED_HOLD_MS,
   acceptOffer,
   adoptDispatch,
   catchUp,
+  confirmPickUp,
   declineOffer,
   dispatchStore,
   giveBackOrder,
+  handOverCode,
   GRACE_MS,
   NOTICE_MS,
   onDeliveryChanged,
   onOfferEnded,
   openOffer,
   pollCurrent,
+  reportProblem,
   resetDispatchForTests,
+  tellNobodyAnswered,
 } from './dispatch';
 
 /*
@@ -43,7 +48,7 @@ const detail: OfferDetail = {
   seen: false,
 };
 
-const delivery: PartnerDelivery = {
+const delivery: PartnerDeliveryF8 = {
   deliveryId: '0193a000-0000-7000-8000-0000000000d1',
   status: 'ASSIGNED',
   version: 4,
@@ -61,6 +66,13 @@ const delivery: PartnerDelivery = {
   },
   dropoff: null,
   canGiveBack: true,
+  stage: 'toKitchen',
+  orderReady: true,
+  route: null,
+  noAnswer: null,
+  problem: null,
+  otp: { locked: false, triesLeft: 5 },
+  notice: null,
 };
 
 type Route = (init: RequestInit | undefined) => { status: number; body: unknown } | 'network';
@@ -288,7 +300,7 @@ describe('declining and endings', () => {
 });
 
 describe('the order he holds', () => {
-  it('shows "delivered" and goes back to waiting', () => {
+  it('ends quietly on a delivered event, with nothing of the customer kept', () => {
     dispatchStore.setState((state) => ({ ...state, delivery }));
     onDeliveryChanged({
       orderId: 'o1',
@@ -297,9 +309,93 @@ describe('the order he holds', () => {
       at: new Date(NOW).toISOString(),
     });
     expect(dispatchStore.state.delivery).toBeNull();
-    expect(dispatchStore.state.notice?.words.text).toBe(
-      "Order 1042 delivered. You're waiting for orders again.",
-    );
+    expect(dispatchStore.state.notice).toBeNull();
+  });
+
+  it('says when staff confirmed it, with his pay and no staff name', () => {
+    dispatchStore.setState((state) => ({ ...state, delivery }));
+    onDeliveryChanged({
+      orderId: 'o1',
+      status: 'DELIVERED',
+      version: 9,
+      at: new Date(NOW).toISOString(),
+      notice: 'confirmed',
+    });
+    expect(dispatchStore.state.delivery).toBeNull();
+    expect(dispatchStore.state.notice).toMatchObject({
+      persistent: true,
+      words: {
+        text: 'Foodz support confirmed order 1042 as delivered. You earned $7.64.',
+        tone: 'success',
+      },
+    });
+  });
+
+  it('tells him to bring a cancelled order back, with the kitchen to call', () => {
+    dispatchStore.setState((state) => ({ ...state, delivery }));
+    onDeliveryChanged({
+      orderId: 'o1',
+      status: 'CANCELLED',
+      version: 9,
+      at: new Date(NOW).toISOString(),
+      notice: 'cancelledBringBack',
+    });
+    expect(dispatchStore.state.notice?.words).toMatchObject({
+      text: 'Order 1042 was cancelled. Bring the food back to Foodz Kitchen.',
+      icon: 'undo',
+      call: { phone: '+16175550142', address: 'Foodz Kitchen · 88 Harbor Street' },
+    });
+  });
+
+  it('picks up, refuses a moved-back order, and waits for a connection', async () => {
+    dispatchStore.setState((state) => ({ ...state, delivery }));
+    const path = `POST /api/v1/partner/deliveries/${delivery.deliveryId}/picked-up`;
+    routes[path] = () => ({
+      status: 409,
+      body: { code: 'ORDER_NOT_READY', message: 'The kitchen is still preparing order 1042.' },
+    });
+    expect(await confirmPickUp(false)).toBe('notReady');
+    routes[path] = () => 'network';
+    expect(await confirmPickUp(false)).toBe('offline');
+    routes[path] = () => ({ status: 200, body: { deliveryId: delivery.deliveryId, version: 6 } });
+    expect(await confirmPickUp(true)).toBe('done');
+    expect(calls.findLast((call) => call.path.endsWith('/picked-up'))?.body).toEqual({
+      confirmFar: true,
+    });
+  });
+
+  it('counts wrong codes from the server, locks, and delivers', async () => {
+    const held = { ...delivery, status: 'PICKED_UP' as const, stage: 'delivering' as const };
+    dispatchStore.setState((state) => ({ ...state, delivery: held }));
+    const path = `POST /api/v1/partner/deliveries/${delivery.deliveryId}/hand-over`;
+    routes[path] = () => ({ status: 200, body: { outcome: 'wrong', triesLeft: 3 } });
+    expect(await handOverCode('1111', true, false)).toEqual({ kind: 'wrong', triesLeft: 3 });
+    expect(dispatchStore.state.delivery?.otp).toEqual({ locked: false, triesLeft: 3 });
+    expect(calls.at(-1)?.body).toEqual({ code: '1111', cashCollected: true });
+    routes[path] = () => ({ status: 200, body: { outcome: 'locked' } });
+    expect(await handOverCode('2222', true, false)).toEqual({ kind: 'locked' });
+    expect(dispatchStore.state.delivery?.otp.locked).toBe(true);
+    routes[path] = () => ({
+      status: 200,
+      body: { outcome: 'delivered', payWords: 'Order 1042 delivered · You earned $7.64' },
+    });
+    expect(await handOverCode('4821', true, false)).toEqual({ kind: 'delivered', pay: '$7.64' });
+    expect(dispatchStore.state.delivery).toBeNull();
+    expect(dispatchStore.state.delivered).toEqual({ orderNumber: '1042', pay: '$7.64' });
+  });
+
+  it('reports a problem and tells Foodz nobody answered once the clock is up', async () => {
+    dispatchStore.setState((state) => ({ ...state, delivery }));
+    routes[`POST /api/v1/partner/deliveries/${delivery.deliveryId}/problem`] = () => ({
+      status: 429,
+      body: { code: 'RATE_LIMITED', message: 'Slow down' },
+    });
+    expect(await reportProblem('address')).toBe('limit');
+    routes[`POST /api/v1/partner/deliveries/${delivery.deliveryId}/no-answer-report`] = () => ({
+      status: 409,
+      body: { code: 'INVALID_STATE', message: 'Wait the full 5 minutes first.' },
+    });
+    expect(await tellNobodyAnswered()).toBe('early');
   });
 
   it('says the kitchen needs a few more minutes when it moves the order back', async () => {

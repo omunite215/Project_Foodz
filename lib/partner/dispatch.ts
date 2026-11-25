@@ -6,9 +6,13 @@ import {
   type OfferDetail,
   type OfferEndedWhy,
   type OfferGoneWhy,
-  type PartnerDelivery,
   type PartnerDispatchState,
 } from '@/server/modules/delivery/schema';
+import type {
+  HandOverResult,
+  PartnerDeliveryF8,
+  ProblemKind,
+} from '@/server/modules/tracking/schema';
 import type { DeliveryChangedEvent } from '@/lib/realtime/events';
 import { announce } from '@/lib/announce';
 import { serverOffset } from '@/lib/board/clock';
@@ -20,8 +24,8 @@ import {
   offerSoundReady,
   vibrate,
 } from './offer-sound';
+import { DELIVERY_COPY, earnedOf } from './delivery-text';
 import {
-  deliveredNotice,
   endedNotice,
   gaveBackText,
   goneNotice,
@@ -76,7 +80,11 @@ export interface DispatchState {
   card: OfferCard | null;
   lastClose: CardClose | null;
   notice: DispatchNotice | null;
-  delivery: PartnerDelivery | null;
+  delivery: PartnerDeliveryF8 | null;
+  /** F8 P41.3: his own right code; the sheet shows the pay, then Home (never the customer). */
+  delivered: { orderNumber: string; pay: string } | null;
+  /** F8 P43.4: staff asked him to wait; the waiting card says so until the clock restarts. */
+  askedToWaitAt: string | null;
   missedInRow: number;
   howOffersWork: PartnerDispatchState['howOffersWork'];
   /** Server clock minus the device's. */
@@ -95,6 +103,8 @@ const initial: DispatchState = {
   lastClose: null,
   notice: null,
   delivery: null,
+  delivered: null,
+  askedToWaitAt: null,
   missedInRow: 0,
   howOffersWork: {
     reachesKm: [2, 4, 8],
@@ -644,18 +654,18 @@ export async function pollCurrent(): Promise<void> {
 
 // ------------------------------------------------------------------ the order he holds (P29 to P31)
 
-function isDelivery(body: unknown): body is PartnerDelivery {
+function isDelivery(body: unknown): body is PartnerDeliveryF8 {
   return (
     typeof field(body, 'deliveryId') === 'string' && typeof field(body, 'orderNumber') === 'string'
   );
 }
 
-let loadingDelivery: Promise<PartnerDelivery | null | undefined> | null = null;
+let loadingDelivery: Promise<PartnerDeliveryF8 | null | undefined> | null = null;
 /** He gave the order back himself: the release that follows needs no notice. */
 let ownRelease: string | null = null;
 
 /** `GET /deliveries/current`; undefined when it couldn't be read. */
-export function loadDelivery(): Promise<PartnerDelivery | null | undefined> {
+export function loadDelivery(): Promise<PartnerDeliveryF8 | null | undefined> {
   loadingDelivery ??= (async () => {
     try {
       const answer = await request('GET', `${BASE}/deliveries/current`);
@@ -681,7 +691,11 @@ export function loadDelivery(): Promise<PartnerDelivery | null | undefined> {
       set({ delivery: next });
       setHoldingOrder(next !== null);
       if (next && get().card?.phase === 'open') closeCard('ended');
-      if (before && !next) void released(before);
+      if (before && !next) {
+        forgetMapsWarned(before.deliveryId);
+        set({ askedToWaitAt: null });
+        void released(before);
+      }
       return next;
     } finally {
       loadingDelivery = null;
@@ -691,7 +705,7 @@ export function loadDelivery(): Promise<PartnerDelivery | null | undefined> {
 }
 
 /** His order went away: why, from his state (P31). Never names staff. */
-async function released(before: PartnerDelivery) {
+async function released(before: PartnerDeliveryF8) {
   if (ownRelease === before.deliveryId) {
     ownRelease = null;
     return;
@@ -710,26 +724,232 @@ async function released(before: PartnerDelivery) {
     kind === 'takenOff' ||
     kind === 'cancelled' ||
     kind === 'handedOver' ||
-    kind === 'movedBack'
+    kind === 'movedBack' ||
+    kind === 'confirmed' ||
+    kind === 'cancelledBringBack' ||
+    kind === 'markedDelivered'
   ) {
-    showNotice(releaseNotice(kind, before.orderNumber), {
+    showNotice(releaseNotice(kind, before.orderNumber, endingExtra(before)), {
       persistent: true,
       key: typeof at === 'string' ? at : null,
     });
   }
 }
 
-/** `delivery.changed` on his channel (P31): read what he holds now. */
+/** The pay and the kitchen for F8's endings, from what he held (never the customer). */
+const endingExtra = (held: PartnerDeliveryF8) => ({
+  pay: held.payText,
+  kitchen: { phone: held.kitchen.phone, address: DELIVERY_COPY.kitchenAddress },
+});
+
+/** `delivery.changed` on his channel (P31, F8 P44.3): read what he holds now. */
 export function onDeliveryChanged(event: DeliveryChangedEvent) {
   const held = get().delivery;
+  // F8 2.10: staff finished or stopped it. One buzz, then Home with a notice that stays.
+  if (
+    held &&
+    (event.notice === 'confirmed' ||
+      event.notice === 'cancelledBringBack' ||
+      event.notice === 'markedDelivered')
+  ) {
+    ownRelease = held.deliveryId;
+    endHeld(held);
+    vibrate(CHANGE_VIBRATION);
+    showNotice(releaseNotice(event.notice, held.orderNumber, endingExtra(held)), {
+      persistent: true,
+      key: event.at,
+    });
+    return;
+  }
+  if (event.notice === 'askedToWait') {
+    vibrate(CHANGE_VIBRATION);
+    set({ askedToWaitAt: event.at });
+  }
   if (event.status === 'DELIVERED' && held) {
-    const number = held.orderNumber;
-    set({ delivery: null, movedBackAt: null });
-    setHoldingOrder(false);
-    showNotice(deliveredNotice(number));
+    // His own code (the sheet already shows it) or another device's: nothing of the
+    // customer stays, and no second notice.
+    ownRelease = held.deliveryId;
+    endHeld(held);
     return;
   }
   void loadDelivery();
+}
+
+/** The delivery ended on this phone: every trace of the customer goes (P41.3, P44.2). */
+function endHeld(held: PartnerDeliveryF8) {
+  set({ delivery: null, movedBackAt: null, askedToWaitAt: null });
+  setHoldingOrder(false);
+  forgetMapsWarned(held.deliveryId);
+}
+
+// ------------------------------------------------------------------ F8: his own steps (P38 to P43)
+
+export type StepOutcome = 'done' | 'offline' | 'gone' | 'limit' | 'failed';
+
+const WARNED_KEY = 'foodz.partner-maps-warned';
+
+/** U10: the "Open another maps app?" warning shows once per delivery on this phone. */
+export function mapsWarned(deliveryId: string): boolean {
+  try {
+    return window.localStorage.getItem(WARNED_KEY) === deliveryId;
+  } catch {
+    return false;
+  }
+}
+
+export function rememberMapsWarned(deliveryId: string) {
+  try {
+    window.localStorage.setItem(WARNED_KEY, deliveryId);
+  } catch {
+    // Blocked: the warning may show again for this delivery.
+  }
+}
+
+/** The delivery id only, gone when the delivery ends (design open item 10). */
+function forgetMapsWarned(deliveryId: string) {
+  if (!browser()) return;
+  try {
+    if (window.localStorage.getItem(WARNED_KEY) === deliveryId) {
+      window.localStorage.removeItem(WARNED_KEY);
+    }
+  } catch {
+    // Nothing stored.
+  }
+}
+
+const deliveryPath = (deliveryId: string, step: string) =>
+  `${BASE}/deliveries/${encodeURIComponent(deliveryId)}/${step}`;
+
+/** "Picked up" (P38): the server makes a repeat one pickup; the kitchen may have moved it back. */
+export async function confirmPickUp(confirmFar: boolean): Promise<StepOutcome | 'notReady'> {
+  const held = get().delivery;
+  if (!held) return 'gone';
+  if (!deviceOnline()) return 'offline';
+  const answer = await request(
+    'POST',
+    deliveryPath(held.deliveryId, 'picked-up'),
+    confirmFar ? { confirmFar: true } : {},
+  );
+  if (!answer || answer.status >= 500) return 'offline';
+  if (answer.status === 200) return 'done';
+  if (refusedSession(answer)) return 'failed';
+  if (answer.status === 429) return 'limit';
+  const code = codeOf(answer.body);
+  if (code === 'ORDER_NOT_READY') {
+    void loadDelivery();
+    return 'notReady';
+  }
+  if (code === 'NOT_ASSIGNED' || answer.status === 404) {
+    void loadDelivery();
+    return 'gone';
+  }
+  return 'failed';
+}
+
+export type HandOverOutcome =
+  | { kind: 'delivered'; pay: string }
+  | { kind: 'wrong'; triesLeft: number }
+  | { kind: 'locked' }
+  | { kind: 'cash' }
+  | { kind: 'offline' | 'gone' | 'limit' | 'failed' };
+
+function handOverResult(body: unknown): HandOverResult | null {
+  const outcome = field(body, 'outcome');
+  const payWords = field(body, 'payWords');
+  const triesLeft = field(body, 'triesLeft');
+  if (outcome === 'delivered' && typeof payWords === 'string') return { outcome, payWords };
+  if (outcome === 'wrong' && typeof triesLeft === 'number') return { outcome, triesLeft };
+  if (outcome === 'locked') return { outcome };
+  return null;
+}
+
+/** The code (P41, P42): the server counts the tries and says what happened. */
+export async function handOverCode(
+  code: string,
+  cashCollected: boolean,
+  confirmFar: boolean,
+): Promise<HandOverOutcome> {
+  const held = get().delivery;
+  if (!held) return { kind: 'gone' };
+  if (!deviceOnline()) return { kind: 'offline' };
+  const answer = await request('POST', deliveryPath(held.deliveryId, 'hand-over'), {
+    code,
+    ...(held.payment.kind === 'cash' ? { cashCollected } : {}),
+    ...(confirmFar ? { confirmFar: true } : {}),
+  });
+  if (!answer || answer.status >= 500) return { kind: 'offline' };
+  if (answer.status === 200) {
+    const result = handOverResult(answer.body);
+    const current = get().delivery;
+    if (!result || !current) return { kind: 'failed' };
+    if (result.outcome === 'delivered') {
+      const pay = earnedOf(result.payWords, current.payText);
+      ownRelease = current.deliveryId;
+      endHeld(current);
+      set({ delivered: { orderNumber: current.orderNumber, pay } });
+      return { kind: 'delivered', pay };
+    }
+    const otp =
+      result.outcome === 'locked'
+        ? { locked: true, triesLeft: 0 }
+        : { locked: false, triesLeft: result.triesLeft };
+    set({ delivery: { ...current, otp } });
+    return result.outcome === 'locked'
+      ? { kind: 'locked' }
+      : { kind: 'wrong', triesLeft: result.triesLeft };
+  }
+  if (refusedSession(answer)) return { kind: 'failed' };
+  if (answer.status === 429) return { kind: 'limit' };
+  const errorCode = codeOf(answer.body);
+  if (errorCode === 'INVALID_INPUT') return { kind: 'cash' };
+  if (errorCode === 'NOT_ASSIGNED' || answer.status === 404) {
+    void loadDelivery();
+    return { kind: 'gone' };
+  }
+  return { kind: 'failed' };
+}
+
+/** "Back to waiting", or the sheet's own 8 seconds: the delivered moment is over. */
+export function clearDelivered() {
+  set({ delivered: null });
+}
+
+/** A problem at the door (P43.1): sent at once; "isn't answering" starts the clock. */
+export async function reportProblem(kind: ProblemKind): Promise<StepOutcome> {
+  const held = get().delivery;
+  if (!held) return 'gone';
+  if (!deviceOnline()) return 'offline';
+  const answer = await request('POST', deliveryPath(held.deliveryId, 'problem'), { kind });
+  if (!answer || answer.status >= 500) return 'offline';
+  if (answer.status === 200) {
+    set({ askedToWaitAt: null });
+    await loadDelivery();
+    return 'done';
+  }
+  if (refusedSession(answer)) return 'failed';
+  if (answer.status === 429) return 'limit';
+  if (codeOf(answer.body) === 'NOT_ASSIGNED') {
+    void loadDelivery();
+    return 'gone';
+  }
+  return 'failed';
+}
+
+/** "Tell Foodz nobody answered" (P43.3), once the 5 minutes are up. */
+export async function tellNobodyAnswered(): Promise<StepOutcome | 'early'> {
+  const held = get().delivery;
+  if (!held) return 'gone';
+  if (!deviceOnline()) return 'offline';
+  const answer = await request('POST', deliveryPath(held.deliveryId, 'no-answer-report'), {});
+  if (!answer || answer.status >= 500) return 'offline';
+  if (answer.status === 200) {
+    await loadDelivery();
+    return 'done';
+  }
+  if (refusedSession(answer)) return 'failed';
+  if (answer.status === 429) return 'limit';
+  if (answer.status === 409) return 'early';
+  return 'failed';
 }
 
 /** "Can't do this delivery" (P30). */
@@ -747,8 +967,7 @@ export async function giveBackOrder(
   if (!answer) return 'offline';
   if (answer.status === 200) {
     ownRelease = delivery.deliveryId;
-    set({ delivery: null, movedBackAt: null });
-    setHoldingOrder(false);
+    endHeld(delivery);
     announce(gaveBackText(delivery.orderNumber));
     return 'done';
   }
@@ -769,9 +988,9 @@ export async function giveBackOrder(
 /** "Give back and go offline" gave it back on the server: no notice follows. */
 export function releasedByOwnChoice() {
   const delivery = get().delivery;
-  if (delivery) ownRelease = delivery.deliveryId;
-  set({ delivery: null, movedBackAt: null });
-  setHoldingOrder(false);
+  if (!delivery) return;
+  ownRelease = delivery.deliveryId;
+  endHeld(delivery);
 }
 
 // ------------------------------------------------------------------ practice offers (P34)
@@ -835,7 +1054,7 @@ export interface DispatchFacts {
   isDemo: boolean;
   dispatch: PartnerDispatchState;
   /** The server-rendered pick-up screen's data, when he holds an order (P17.6). */
-  delivery: PartnerDelivery | null;
+  delivery: PartnerDeliveryF8 | null;
   asOf: string;
 }
 

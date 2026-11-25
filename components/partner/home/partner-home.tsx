@@ -18,7 +18,7 @@ import {
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { PartnerDelivery } from '@/server/modules/delivery/schema';
+import type { PartnerDeliveryF8 } from '@/server/modules/tracking/schema';
 import type { PartnerState } from '@/server/modules/partners/schema';
 import { kitchenDistance } from '@/server/modules/partners/location';
 import { clockAt } from '@/server/modules/orders/text';
@@ -38,6 +38,7 @@ import {
   wentOffline,
 } from '@/lib/partner/dispatch';
 import { LOOKING_AFTER_MS, STALE_AFTER_MS, fixQuality } from '@/lib/partner/location-queue';
+import { keepRecent, type PartnerFix } from '@/lib/partner/moving';
 import { unlockOfferSound } from '@/lib/partner/offer-sound';
 import { deliverTitle, pickUpTitle } from '@/lib/partner/offer-text';
 import {
@@ -69,7 +70,11 @@ import {
 } from '@/lib/partner/text';
 import { channels } from '@/lib/realtime/channels';
 import { useChannelEvent } from '@/lib/realtime/client';
-import { DeliveryDock, DeliverScreen, PickUpScreen } from '../delivery/pick-up-screen';
+import { CodeSheet } from '../delivery/code-sheet';
+import { DeliverDock, DeliverScreen } from '../delivery/deliver-screen';
+import { PartnerMapCard } from '../delivery/partner-map';
+import { OpenInMapsButton, PickUpDock, PickUpScreen } from '../delivery/pick-up-screen';
+import { ProblemSheet } from '../delivery/problem-sheet';
 import { GiveBackSheet, LeavingDialog } from '../delivery/give-back-sheet';
 import { Doodle } from '../doodle';
 import { InstallCard } from '../install';
@@ -139,7 +144,7 @@ const FRESH_POINT_MS = 45_000;
 export function usePartnerSession(
   state: Home,
   asOf: string,
-  delivery: PartnerDelivery | null = null,
+  delivery: PartnerDeliveryF8 | null = null,
 ) {
   const router = useRouter();
   const sharing = useSelector(sharingStore, (value) => value);
@@ -361,7 +366,7 @@ export function PartnerHome({
   state: Home;
   asOf: string;
   /** The order he holds, read on the server so the pick-up screen is in the first HTML. */
-  delivery?: PartnerDelivery | null;
+  delivery?: PartnerDeliveryF8 | null;
 }) {
   const { sharing, online, holding: heldNow } = usePartnerSession(state, asOf, delivery);
   // Until the engine adopts the server's state, the server's copy draws the first paint.
@@ -377,6 +382,39 @@ export function PartnerHome({
   const [givingBack, setGivingBack] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const openerRef = useRef<HTMLElement | null>(null);
+  // F8: the code and problem sheets, and what they give focus back to.
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [problemsOpen, setProblemsOpen] = useState(false);
+  const enterCodeRef = useRef<HTMLButtonElement>(null);
+  const problemRef = useRef<HTMLButtonElement>(null);
+  const delivered = useSelector(dispatchStore, (value) => value.delivered);
+  const askedToWaitAt = useSelector(dispatchStore, (value) => value.askedToWaitAt);
+  const offset = useSelector(dispatchStore, (value) => value.offset);
+  const [atKitchenAtLoad] = useState(delivery?.stage === 'atKitchen');
+  // The waiting clock ticks once a second; everything else every 5 s.
+  const fastTick = useTick(holding?.noAnswer ? 1_000 : 60_000);
+  const serverNow = Math.max(now, fastTick) + offset;
+  // The last 10 s of fixes, for "moving or stopped" on the courier's map (P37.1).
+  const [fixes, setFixes] = useState<PartnerFix[]>([]);
+  const lastFix = sharing.lastFix;
+  useEffect(() => {
+    const fix = lastFix;
+    if (!fix) return undefined;
+    const timer = setTimeout(
+      () =>
+        setFixes((current) =>
+          keepRecent(current, {
+            lat: fix.lat,
+            lng: fix.lng,
+            accuracy: fix.accuracy,
+            speed: fix.speed,
+            at: fix.at,
+          }),
+        ),
+      0,
+    );
+    return () => clearTimeout(timer);
+  }, [lastFix]);
 
   // The rate limit's minutes count down silently; the button returns by itself.
   useEffect(() => {
@@ -465,15 +503,56 @@ export function PartnerHome({
   if (holding) {
     // P29.4: while he holds an order, Home always comes back to it.
     const toKitchen = position ? kitchenDistance(position, holding.kitchen.point) : null;
+    const afterPickup = holding.status === 'PICKED_UP' && holding.dropoff !== null;
+    const mapFix: PartnerFix | null = position
+      ? {
+          lat: position.lat,
+          lng: position.lng,
+          accuracy: sharing.isDemo ? 30 : (sharing.lastFix?.accuracy ?? null),
+          speed: sharing.lastFix?.speed ?? null,
+          at: sharing.lastFix?.at ?? now,
+        }
+      : null;
+    const mapCard = (
+      <PartnerMapCard
+        delivery={holding}
+        fix={mapFix}
+        fixes={fixes}
+        dark={resolved === 'dark'}
+        now={now}
+        serverNow={serverNow}
+        openInMaps={
+          <OpenInMapsButton
+            deliveryId={holding.deliveryId}
+            point={afterPickup && holding.dropoff ? holding.dropoff.point : holding.kitchen.point}
+            bicycle={bicycle}
+            customerFirst={afterPickup ? (holding.dropoff?.firstName ?? null) : null}
+          />
+        }
+        locationRow={line.kind === 'shared' ? null : <LocationLine state={line} />}
+      />
+    );
     body =
       holding.status === 'PICKED_UP' ? (
-        <DeliverScreen delivery={holding} notices={<DispatchNoticeSlot />} />
+        <DeliverScreen
+          delivery={holding}
+          notices={<DispatchNoticeSlot />}
+          mapCard={mapCard}
+          locationOff={sharing.locationOff}
+          serverNow={serverNow}
+          askedToWaitAt={askedToWaitAt}
+          onRetryLocation={() => void retryLocationWhileHolding()}
+          onOpenProblems={() => setProblemsOpen(true)}
+          problemRef={problemRef}
+        />
       ) : (
         <PickUpScreen
           delivery={holding}
           distance={toKitchen}
           locationOff={sharing.locationOff}
           notices={<DispatchNoticeSlot />}
+          mapCard={mapCard}
+          atKitchenAtLoad={atKitchenAtLoad}
           onGiveBack={() => {
             rememberOpener();
             setGivingBack(true);
@@ -607,9 +686,11 @@ export function PartnerHome({
 
   const reasonId = 'partner-dock-reason';
   const dock: ReactNode = holding ? (
-    <Dock withTabBar>
-      <DeliveryDock delivery={holding} bicycle={bicycle} />
-    </Dock>
+    holding.status === 'PICKED_UP' ? (
+      <DeliverDock buttonRef={enterCodeRef} onEnterCode={() => setCodeOpen(true)} />
+    ) : (
+      <PickUpDock delivery={holding} position={position} />
+    )
   ) : (
     <Dock
       withTabBar
@@ -699,6 +780,21 @@ export function PartnerHome({
             returnFocus={() => openerRef.current?.focus()}
           />
         </>
+      ) : null}
+      {holding || delivered ? (
+        <CodeSheet
+          open={codeOpen || delivered !== null}
+          onOpenChange={setCodeOpen}
+          position={position}
+          returnFocus={() => enterCodeRef.current?.focus()}
+        />
+      ) : null}
+      {holding ? (
+        <ProblemSheet
+          open={problemsOpen}
+          onOpenChange={setProblemsOpen}
+          returnFocus={() => problemRef.current?.focus()}
+        />
       ) : null}
       <OfferLayer />
       {sharing.suspended ? <SuspensionCover how={sharing.suspended} /> : null}

@@ -8,6 +8,8 @@ import { distanceMeters } from '@/lib/map-geometry';
  */
 
 export const MIN_MOVE_M = 25;
+/** F8 P46: while he holds an order, a point every 10 m (still at most every 4 s). */
+export const HOLDING_MOVE_M = 10;
 export const MIN_GAP_MS = 4_000;
 /**
  * Standing still sends a point this often, well inside the server's 2-minute freshness rule
@@ -87,13 +89,18 @@ export function toPoint(fix: Fix): QueuedPoint {
 }
 
 /** Whether this fix should be sent (design 6.4). */
-export function shouldQueue(fix: Fix, last: QueuedPoint | null, now: number): boolean {
+export function shouldQueue(
+  fix: Fix,
+  last: QueuedPoint | null,
+  now: number,
+  minMoveM: number = MIN_MOVE_M,
+): boolean {
   if (fix.accuracy > SEND_ACCURACY_M) return false;
   if (!last) return true;
   const gap = now - last.at;
   if (gap < MIN_GAP_MS) return false;
   if (gap >= HEARTBEAT_MS) return true;
-  return distanceMeters(last, fix) >= MIN_MOVE_M;
+  return distanceMeters(last, fix) >= minMoveM;
 }
 
 /** Drops points older than 10 minutes, then the oldest beyond 150 (P11.3). */

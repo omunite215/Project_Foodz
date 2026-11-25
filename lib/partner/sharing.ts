@@ -23,6 +23,8 @@ import {
   SEND_GAP_MS,
   SEND_TIMEOUT_MS,
   shouldQueue,
+  HOLDING_MOVE_M,
+  MIN_MOVE_M,
   TIMEOUTS_FOR_UNAVAILABLE,
   toPoint,
 } from './location-queue';
@@ -351,7 +353,8 @@ function onFix(position: GeolocationPosition) {
   timeoutsInRow = 0;
   set({ lastFix: fix });
   const now = Date.now();
-  if (shouldQueue(fix, lastQueued, now)) queuePoint(toPoint(fix), now);
+  const minMove = holdingOrder ? HOLDING_MOVE_M : MIN_MOVE_M;
+  if (shouldQueue(fix, lastQueued, now, minMove)) queuePoint(toPoint(fix), now);
 }
 
 function queuePoint(point: QueuedPoint, now: number) {

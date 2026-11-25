@@ -25,23 +25,53 @@ export type SlideState = 'ready' | 'blocked' | 'accepting' | 'waiting' | 'accept
 
 export const ACCEPT_AT = 0.8;
 
-export function SlideToAccept({
+/** The words a slider shows in each state (F7's offer, F8's pickup). */
+export interface SlideCopy {
+  slide: string;
+  tapAgain: string;
+  /** Blocked: the visible words while it can't be used. */
+  blocked: string;
+  busy: string;
+  busyOffline: string;
+}
+
+const OFFER_SLIDE: SlideCopy = {
+  slide: OFFER_COPY.slide,
+  tapAgain: OFFER_COPY.tapAgain,
+  blocked: OFFER_COPY.loading,
+  busy: OFFER_COPY.accepting,
+  busyOffline: OFFER_COPY.acceptingOffline,
+};
+
+/** The offer card's slider (F7 design 1.5). */
+export function SlideToAccept(props: Omit<Parameters<typeof SlideToConfirm>[0], 'copy'>) {
+  return <SlideToConfirm {...props} copy={OFFER_SLIDE} />;
+}
+
+/**
+ * F8 design 2.3: the same control made generic. One tap path for every caller (F7 review B1):
+ * the first tap arms it at once, a second within 3 s confirms; a keyboard or assistive
+ * activation confirms at once.
+ */
+export function SlideToConfirm({
   state,
   name,
   describedBy,
   acceptedLabel,
+  copy,
   onAccept,
   onTouch,
 }: {
   state: SlideState;
-  /** "Accept order, earn $7.64". */
+  /** "Accept order, earn $7.64"; "picked up order 1042". */
   name: string;
-  describedBy: string;
-  /** "Order 1042 is yours". */
+  describedBy?: string;
+  /** "Order 1042 is yours"; "Picked up". */
   acceptedLabel?: string;
+  copy: SlideCopy;
   onAccept: () => void;
   /** The first touch silences the offer's sound (P19.2). */
-  onTouch: () => void;
+  onTouch?: () => void;
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const handleRef = useRef<HTMLSpanElement>(null);
@@ -107,7 +137,7 @@ export function SlideToAccept({
       return;
     }
     setArmed(true);
-    announce(OFFER_COPY.tapAgain);
+    announce(copy.tapAgain);
     const handle = handleRef.current;
     if (handle && !prefersReducedMotion()) {
       gsap.fromTo(
@@ -197,20 +227,20 @@ export function SlideToAccept({
 
   const label =
     state === 'blocked'
-      ? OFFER_COPY.loading
+      ? copy.blocked
       : state === 'accepting'
-        ? OFFER_COPY.accepting
+        ? copy.busy
         : state === 'waiting'
-          ? OFFER_COPY.acceptingOffline
+          ? copy.busyOffline
           : state === 'accepted'
-            ? (acceptedLabel ?? OFFER_COPY.accepting)
+            ? (acceptedLabel ?? copy.busy)
             : armed
-              ? OFFER_COPY.tapAgain
-              : OFFER_COPY.slide;
+              ? copy.tapAgain
+              : copy.slide;
 
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (state === 'blocked') {
-      announce(OFFER_COPY.loading);
+      announce(copy.blocked);
       return;
     }
     if (!ready) return;
@@ -227,7 +257,9 @@ export function SlideToAccept({
       ref={buttonRef}
       type="button"
       // The visible words come first, so speech input finds it by what it says (WCAG 2.5.3).
-      aria-label={state === 'blocked' ? undefined : `${label}, ${name}`}
+      aria-label={
+        state === 'blocked' ? undefined : name.startsWith(label) ? name : `${label}, ${name}`
+      }
       aria-labelledby={state === 'blocked' ? labelId : undefined}
       aria-describedby={describedBy}
       aria-disabled={!ready || undefined}

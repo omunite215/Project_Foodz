@@ -9,7 +9,7 @@ import {
 import { ApplyGate } from '@/components/partner/apply-gate';
 import { PartnerHome } from '@/components/partner/home/partner-home';
 import { getActor } from '@/server/auth/session';
-import { getCurrentDelivery } from '@/server/modules/delivery/service';
+import { getCurrentDeliveryF8 } from '@/server/modules/tracking/service';
 import { deliverTitle, pickUpTitle } from '@/lib/partner/offer-text';
 import { STORE_TIME_ZONE } from '@/lib/order-text';
 import { firstParam } from '@/lib/search-params';
@@ -77,10 +77,11 @@ export default async function PartnerPage({ searchParams }: { searchParams: Sear
         <SuspendedScreen since={state.since} reason={state.reason} timeZone={STORE_TIME_ZONE} />
       );
     default: {
-      // F7 P29.5, P17.6: the pick-up screen is in the first HTML when he holds an order.
+      // F7 P29.5, P17.6: the pick-up or deliver screen is in the first HTML when he holds an
+      // order, with F8's stage, route and steps.
       const actor = state.dispatch.delivery ? await getActor() : null;
       const delivery =
-        actor?.kind === 'user' ? await getCurrentDelivery(actor).catch(() => null) : null;
+        actor?.kind === 'user' ? await getCurrentDeliveryF8(actor).catch(() => null) : null;
       return <PartnerHome state={state} asOf={new Date().toISOString()} delivery={delivery} />;
     }
   }
