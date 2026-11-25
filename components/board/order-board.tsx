@@ -28,6 +28,7 @@ import {
   courierLinesToRead,
   courierMenuFor,
   courierReadKey,
+  newerCouriersCount,
   didNotTakeNotice,
   HELD,
   LOOKING_AGAIN,
@@ -543,6 +544,15 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     setLastUpdate(event.at);
     if (writer.card(event.orderId)) courierBatcher.addItem(event.orderId);
     countThrottler.maybeExecute();
+  });
+  // A35.1: a partner went online or offline; the chip takes the count at once.
+  const couriersShownAt = useRef(0);
+  useChannelEvent(connection.channel, 'couriers.changed', (event) => {
+    setLastUpdate(event.at);
+    const next = newerCouriersCount(couriersShownAt.current, event);
+    if (!next) return;
+    couriersShownAt.current = next.at;
+    writer.updateMeta((current) => ({ ...current, couriers: next.count }));
   });
   // A34.1: a card that just became Ready reads its line at once ("Finding a courier…").
   const courierAsked = useRef(new Set<string>());

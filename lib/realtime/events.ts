@@ -120,6 +120,13 @@ export interface DeliveryChangedEvent {
   at: string;
 }
 
+/** F7 (A35.1): real couriers online and free, read at `at`; counts only, never names. */
+export interface CouriersChangedEvent {
+  online: number;
+  free: number;
+  at: string;
+}
+
 export interface RealtimeEvents {
   'notification.created': NotificationCreatedEvent;
   /**
@@ -144,6 +151,8 @@ export interface RealtimeEvents {
    * are fetched through the authorized data layer, never sent here.
    */
   'delivery.changed': DeliveryChangedEvent;
+  /** F7, on `private-ops`: a partner went online or offline; the boards' couriers chip (A35.1). */
+  'couriers.changed': CouriersChangedEvent;
   /** On `private-ops`: "86 it" from any board (design 4.3). */
   'menu.availability-changed': { dishId: string; available: boolean; at: string };
   'courier.location': {

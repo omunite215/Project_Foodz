@@ -1284,6 +1284,16 @@ export async function couriersCount(): Promise<CouriersCount> {
   return runAsSystem('couriers count', repo.countCouriers);
 }
 
+/**
+ * A35.1: a partner went online or offline. The count is read now and sent on private-ops, so
+ * every board's chip follows at once instead of at its next refresh. Best effort.
+ */
+export async function announceCouriersCount(): Promise<void> {
+  const at = new Date();
+  const count = await couriersCount();
+  await runDispatchEffects([{ kind: 'couriers', ...count, at }]);
+}
+
 const sentByOf = (
   viewer: { isDemo: boolean },
   offer: OfferRowData,

@@ -647,6 +647,15 @@ describe('going online and sharing a location (P9, P10, P16)', () => {
         data: expect.objectContaining({ online: true, reason: 'self' }),
       }),
     ]);
+    // A35.1: the boards hear the new count at once, with no names.
+    const counted = published('couriers.changed');
+    expect(counted).toEqual([
+      {
+        channel: 'private-ops',
+        data: { online: expect.any(Number), free: expect.any(Number), at: expect.any(String) },
+      },
+    ]);
+    expect((counted[0]!.data as { online: number }).online).toBeGreaterThanOrEqual(1);
 
     const verdict = await service.recordLocations(member.actor, sessionId, {
       points: [point(42.3521, -71.0469, 0)],

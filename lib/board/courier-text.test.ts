@@ -11,6 +11,7 @@ import {
   courierMenuFor,
   courierReadKey,
   couriersChipText,
+  newerCouriersCount,
   deliveryChangedText,
   holdingCourier,
   isDeliveryChangedDetails,
@@ -159,6 +160,18 @@ describe('reading the courier line of a card that just became Ready (A34.1)', ()
     expect(courierLinesToRead(cards, asked)).toEqual([]);
     // Undone and marked ready again: a new version, read again.
     expect(courierLinesToRead([card({ version: 6 })], asked)).toEqual(['a']);
+  });
+});
+
+describe('the couriers count from the ops channel (A35.1)', () => {
+  it('takes a count read later than the one shown, and skips an older one', () => {
+    const at = '2026-11-21T00:40:05.000Z';
+    expect(newerCouriersCount(0, { online: 3, free: 2, at })).toEqual({
+      count: { online: 3, free: 2 },
+      at: Date.parse(at),
+    });
+    expect(newerCouriersCount(Date.parse(at) + 1, { online: 2, free: 1, at })).toBeNull();
+    expect(newerCouriersCount(0, { online: 2, free: 1, at: 'not a time' })).toBeNull();
   });
 });
 
