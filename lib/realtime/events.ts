@@ -120,10 +120,8 @@ export interface DeliveryChangedEvent {
   at: string;
 }
 
-/** F7 (A35.1): real couriers online and free, read at `at`; counts only, never names. */
+/** F7 (A35.1): a partner went online or offline; boards read the new count themselves. */
 export interface CouriersChangedEvent {
-  online: number;
-  free: number;
   at: string;
 }
 

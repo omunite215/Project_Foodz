@@ -657,6 +657,17 @@ describe('order changes (F5 hooks) and what people see', () => {
     expect(masked?.words).not.toContain('Grace');
   });
 
+  it("reads the couriers chip's count for the board, never for a customer (A35.1)", async () => {
+    const count = () => asBrowser(alex.browser, () => board.getCouriersCount(alex.actor));
+    const before = await count();
+    await goOnlineAt(migrator, grace, { km: 1.4 });
+    await goOnlineAt(migrator, omar, { km: 0.4 });
+    const after = await count();
+    expect(after.online).toBe(before.online + 2);
+    expect(after.free).toBe(before.free + 2);
+    await expect(board.getCouriersCount(priya.actor)).rejects.toBeDefined();
+  });
+
   it('puts the courier milestones on the staff timeline, masked for the demo admin (design 2.5)', async () => {
     await goOnlineAt(migrator, grace, { km: 1.4 });
     // A sample customer, so the demo admin may open the order; Grace stays a real person.

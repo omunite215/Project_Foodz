@@ -72,7 +72,7 @@ async function runOne(effect: PartnerEffect) {
         at: effect.at.toISOString(),
       });
       // A35.1: the boards' couriers chip, within moments.
-      await announceCouriersCount();
+      await announceCouriersCount(effect.at);
       return;
     case 'status':
       await publish(channels.partner(effect.partnerId), 'partner.status-changed', {

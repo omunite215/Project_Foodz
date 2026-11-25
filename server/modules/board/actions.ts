@@ -21,6 +21,7 @@ import {
   getBoard,
   getCancelPreview,
   getBoardCards,
+  getCouriersCount,
   getStaffOrderDetail,
   listBoardDishes,
   markDelivered,
@@ -86,6 +87,12 @@ export const findOrderAction = userAction
   .metadata({ name: 'board.find', rateLimit: 'order.find', permission: READ, write: false })
   .inputSchema(findOrderInput)
   .action(async ({ parsedInput, ctx }) => findOrder(ctx.actor, parsedInput));
+
+/** F7 (A35.1): the couriers chip's count after a partner went online or offline. */
+export const couriersCountAction = userAction
+  .metadata({ name: 'board.couriers', rateLimit: 'board.read', permission: READ, write: false })
+  .inputSchema(boardInput)
+  .action(async ({ ctx }) => getCouriersCount(ctx.actor));
 
 /** The "Dish availability" sheet (design 4.2). SUPPORT sees the sold-out strip only. */
 export const boardDishesAction = userAction

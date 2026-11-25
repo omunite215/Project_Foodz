@@ -64,7 +64,7 @@ export type DispatchEffect =
       at: Date;
     }
   | { kind: 'handedOver'; orderId: string; at: Date }
-  | { kind: 'couriers'; online: number; free: number; at: Date };
+  | { kind: 'couriers'; at: Date };
 
 /** What the phone is told; an answer of its own and "too late" tell it nothing. */
 const PHONE_WHY: Partial<Record<OfferEnding, OfferEndedEvent['why']>> = {
@@ -147,11 +147,7 @@ async function runOne(effect: DispatchEffect) {
       return;
     }
     case 'couriers':
-      await publish(channels.ops, 'couriers.changed', {
-        online: effect.online,
-        free: effect.free,
-        at: effect.at.toISOString(),
-      });
+      await publish(channels.ops, 'couriers.changed', { at: effect.at.toISOString() });
       return;
     case 'assignmentEnded':
       await inngest.send(

@@ -434,6 +434,14 @@ export async function findOrder(actor: UserActor, input: unknown): Promise<FindO
   return { kind: 'offBoard', orderId: found.id, number: found.number, status: found.status };
 }
 
+/** F7 (A35.1): the couriers chip's count, read again when a partner goes online or offline. */
+export async function getCouriersCount(
+  actor: UserActor,
+): Promise<{ online: number; free: number }> {
+  await requireBoard(actor, READ, false);
+  return couriersCount();
+}
+
 /** Every dish with its availability, for the "Dish availability" sheet (design 4.2). */
 export async function listBoardDishes(actor: UserActor): Promise<{ dishes: BoardDish[] }> {
   const viewer = await requireBoard(actor, READ, false);

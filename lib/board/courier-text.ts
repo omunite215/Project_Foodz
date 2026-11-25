@@ -167,19 +167,6 @@ export function couriersChipText(count: CouriersCount): { text: string; spoken: 
   };
 }
 
-/**
- * A35.1: the count a `couriers.changed` event brings when a partner goes online or offline,
- * or null when a later read is already shown (messages can arrive out of order).
- */
-export function newerCouriersCount(
-  shownAt: number,
-  event: { online: number; free: number; at: string },
-): { count: CouriersCount; at: number } | null {
-  const at = Date.parse(event.at);
-  if (!Number.isFinite(at) || at < shownAt) return null;
-  return { count: { online: event.online, free: event.free }, at };
-}
-
 // ------------------------------------------------------------------ the offers list (2.4.1)
 
 export type OutcomeLook = 'accepted' | 'plain' | 'missed' | 'unseen' | 'open';

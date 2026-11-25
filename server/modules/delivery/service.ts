@@ -1285,13 +1285,12 @@ export async function couriersCount(): Promise<CouriersCount> {
 }
 
 /**
- * A35.1: a partner went online or offline. The count is read now and sent on private-ops, so
- * every board's chip follows at once instead of at its next refresh. Best effort.
+ * A35.1: a partner went online or offline. Every board hears it on private-ops and reads the
+ * new count through its own authorized call, so the chip follows at once instead of at the
+ * next refresh. The message carries a time only (W11.1). Best effort.
  */
-export async function announceCouriersCount(): Promise<void> {
-  const at = new Date();
-  const count = await couriersCount();
-  await runDispatchEffects([{ kind: 'couriers', ...count, at }]);
+export async function announceCouriersCount(at = new Date()): Promise<void> {
+  await runDispatchEffects([{ kind: 'couriers', at }]);
 }
 
 const sentByOf = (
