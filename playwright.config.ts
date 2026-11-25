@@ -66,10 +66,10 @@ export default defineConfig({
     // fixtures (`npm run seed:partners` first), so they run only with E2E_PARTNER=1.
     ...(process.env.E2E_PARTNER === '1'
       ? [
-          { width: 360, height: 760, name: 'partner-360' },
-          { width: 375, height: 812, name: 'partner-375' },
-        ]
-          .map(({ width, height, name }) => ({
+          ...[
+            { width: 360, height: 760, name: 'partner-360' },
+            { width: 375, height: 812, name: 'partner-375' },
+          ].map(({ width, height, name }) => ({
             name,
             testMatch: /e2e\/partner\/.*\.spec\.ts/,
             timeout: 90_000,
@@ -79,15 +79,28 @@ export default defineConfig({
               isMobile: true,
               hasTouch: true,
             },
-          }))
-          .concat([
-            {
-              name: 'partner-1440',
-              testMatch: /e2e\/partner\/.*\.spec\.ts/,
-              timeout: 90_000,
-              use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          })),
+          {
+            name: 'partner-1440',
+            testMatch: /e2e\/partner\/.*\.spec\.ts/,
+            timeout: 90_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
+          // F8: one delivery from the offer to the door, after the projects above (it reuses
+          // their couriers and orders), checking 360, 375 and 1440 px on the way.
+          {
+            name: 'partner-flows-375',
+            testMatch: /e2e\/partner-flows\/.*\.spec\.ts/,
+            dependencies: ['partner-360', 'partner-375', 'partner-1440'],
+            timeout: 420_000,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 375, height: 812 },
+              isMobile: true,
+              hasTouch: true,
             },
-          ])
+          },
+        ]
       : []),
     // The staff tools and the live order (F5). They need the seeded staff and the board's
     // fixtures (`npm run seed:board` first), so they run only with E2E_ADMIN=1.

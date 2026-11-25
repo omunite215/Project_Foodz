@@ -51,7 +51,6 @@ import {
   sortCouriers,
   sortDeliveries,
 } from '@/lib/board/tracking-text';
-import { vehicleSpoken } from '@/lib/board/courier-text';
 import { useOpsMap, useOpsMapWriter } from '@/lib/data/ops-map';
 import { STALE_FILL, STATE_FILLS } from '@/lib/map/colors';
 import { channels } from '@/lib/realtime/channels';
@@ -191,24 +190,12 @@ function CourierRow({
   const updated = staffUpdatedWords(ageSeconds(courier.at, serverNowMs));
   const chip = attentionChip(courier, serverNowMs);
   const arriving = delivery?.etaAt ? ` · arriving ${boardClock(delivery.etaAt, timeZone)}` : '';
-  const spokenArriving =
-    courier.state === 'delivering' && delivery?.etaAt
-      ? `, arriving ${boardClock(delivery.etaAt, timeZone)}`
-      : '';
-  const name = [
-    courier.fullName,
-    `${courier.words.replaceAll(' · ', ', ')}${spokenArriving}`,
-    vehicleSpoken(courier.vehicleWords),
-    updated.spoken.replace('Updated', 'updated'),
-    chip?.text,
-  ]
-    .filter(Boolean)
-    .join(', ');
   return (
     <li>
+      {/* The row's name is its text, in reading order (design "Names"). */}
+      {/* oxlint-disable-next-line jsx-a11y/control-has-associated-label */}
       <button
         type="button"
-        aria-label={name}
         data-row={courier.partnerId}
         aria-current={selected || undefined}
         onClick={(event) => onSelect(event.currentTarget)}
@@ -255,20 +242,11 @@ function DeliveryRow({
   onSelect: (button: HTMLButtonElement) => void;
 }) {
   const late = (delivery.lateMinutes ?? 0) > 0;
-  const name = [
-    `Order ${delivery.number}`,
-    lateChip(delivery.lateMinutes),
-    `${delivery.courierShortName}, ${delivery.stateWords}`,
-    delivery.etaAt ? `arriving ${boardClock(delivery.etaAt, timeZone)}` : null,
-    `${delivery.customerFirstName}, ${delivery.areaWords}`,
-  ]
-    .filter(Boolean)
-    .join(', ');
   return (
     <li>
+      {/* oxlint-disable-next-line jsx-a11y/control-has-associated-label */}
       <button
         type="button"
-        aria-label={name}
         data-row={delivery.orderId}
         aria-current={selected || undefined}
         onClick={(event) => onSelect(event.currentTarget)}
@@ -777,10 +755,16 @@ export function LiveMapPage({
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
         <TabsList className="sticky top-0 z-10 grid h-12 w-full shrink-0 grid-cols-2 rounded-none border-b border-neutral-6 bg-white p-0">
-          <TabsTrigger value="couriers" className="h-full text-button-2">
+          <TabsTrigger
+            value="couriers"
+            className="h-full text-button-2 text-neutral-3 data-[state=active]:text-neutral-1"
+          >
             Couriers · {couriers.length}
           </TabsTrigger>
-          <TabsTrigger value="deliveries" className="h-full text-button-2">
+          <TabsTrigger
+            value="deliveries"
+            className="h-full text-button-2 text-neutral-3 data-[state=active]:text-neutral-1"
+          >
             Deliveries · {deliveries.length}
           </TabsTrigger>
         </TabsList>
