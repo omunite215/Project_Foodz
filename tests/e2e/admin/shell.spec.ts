@@ -113,7 +113,7 @@ test.describe('frames (A1.6, A16.1)', () => {
     }).toPass({ timeout: 15_000 });
   });
 
-  test('support gets the sidebar listing the order board and partners', async ({
+  test('support gets the sidebar listing the order board, the live map and partners', async ({
     page,
   }, testInfo) => {
     await signInStaff(page, STAFF.support);
@@ -121,8 +121,9 @@ test.describe('frames (A1.6, A16.1)', () => {
       await page.getByRole('button', { name: 'Open menu' }).click();
     }
     const nav = page.getByRole('navigation', { name: 'Staff' });
-    // F6 A18.1: "Partners" joins the order board for SUPPORT and ADMIN.
-    await expect(nav.getByRole('link')).toHaveCount(2);
+    // F6 A18.1: "Partners" joins the order board for SUPPORT and ADMIN; F8 A46.1: "Live map".
+    await expect(nav.getByRole('link')).toHaveCount(3);
+    await expect(nav.getByRole('link', { name: 'Live map' })).toBeVisible();
     await expect(nav.getByRole('link', { name: /^Partners/ })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Order board' })).toHaveAttribute(
       'aria-current',
