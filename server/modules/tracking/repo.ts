@@ -109,6 +109,7 @@ export interface TrackedDelivery {
   arrivalToMinutes: number | null;
   placedAt: Date | null;
   pickedUpAt: Date | null;
+  deliveredAt: Date | null;
   assignedAt: Date | null;
   atRestaurantAt: Date | null;
   almostNotifiedAt: Date | null;
@@ -138,7 +139,7 @@ async function tracked(ctx: DbContext, column: 'id' | 'partner' | 'order', value
            d.route_geojson AS "routeGeojson", d.route_distance_m AS "routeDistanceM",
            d.route_duration_sec AS "routeDurationSec", d.eta_at AS "etaAt", d.eta_estimated AS "etaEstimated",
            o.arrival_to_minutes AS "arrivalToMinutes", o.placed_at AS "placedAt",
-           d.picked_up_at AS "pickedUpAt", d.assigned_at AS "assignedAt", d.at_restaurant_at AS "atRestaurantAt",
+           d.picked_up_at AS "pickedUpAt", d.delivered_at AS "deliveredAt", d.assigned_at AS "assignedAt", d.at_restaurant_at AS "atRestaurantAt",
            d.almost_notified_at AS "almostNotifiedAt", d.no_answer_since AS "noAnswerSince",
            d.no_answer_reported_at AS "noAnswerReportedAt",
            d.no_answer_wait_restarted_at AS "noAnswerWaitRestartedAt", d.problem_kind AS "problemKind",
@@ -382,6 +383,16 @@ export async function findDemoCast(ctx: DbContext) {
   return rows[0] ?? null;
 }
 
+export async function markOverride(ctx: DbContext, deliveryId: string) {
+  await db(ctx).$executeRaw`
+    UPDATE deliveries SET handover_how = 'admin-override'
+    WHERE id = ${deliveryId}::uuid AND status = 'DELIVERED' AND handover_how IS NULL`;
+}
+
+export async function setOrderArea(ctx: DbContext, orderId: string, area: string) {
+  await db(ctx).$executeRaw`UPDATE orders SET address_area = ${area} WHERE id = ${orderId}::uuid`;
+}
+
 // ------------------------------------------------------------------ small reads
 
 export async function findStorePhone(ctx: DbContext): Promise<string | null> {
@@ -414,8 +425,26 @@ export async function createDemoOrder(
   userId: string,
   home: { lat: number; lng: number; text: string; line1: string; line2: string; city: string },
 ) {
+  // Two dishes from today's menu, so the demo card and the partner's sheet look real (L10.1).
+  const dishes = await db(ctx).menuItem.findMany({
+    where: { isAvailable: true },
+    orderBy: [{ priceCents: 'asc' }, { id: 'asc' }],
+    take: 2,
+    select: { id: true, title: true, priceCents: true },
+  });
+  const subtotalCents = dishes.reduce((sum, dish) => sum + dish.priceCents, 0) || 3200;
+  const taxCents = Math.round(subtotalCents * 0.07);
   const order = await db(ctx).order.create({
     data: {
+      items: {
+        create: dishes.map((dish) => ({
+          menuItemId: dish.id,
+          title: dish.title,
+          unitPriceCents: dish.priceCents,
+          quantity: 1,
+          flavors: [],
+        })),
+      },
       userId,
       status: 'READY',
       paymentMethod: 'CARD',
@@ -430,11 +459,11 @@ export async function createDemoOrder(
       addressLat: home.lat,
       addressLng: home.lng,
       distanceKm: 4.3,
-      subtotalCents: 3200,
+      subtotalCents,
       deliveryFeeCents: 399,
-      taxCents: 224,
+      taxCents,
       tipCents: 300,
-      totalCents: 4123,
+      totalCents: subtotalCents + 399 + taxCents + 300,
       placedAt: new Date(),
       acceptedAt: new Date(),
       preparingAt: new Date(),

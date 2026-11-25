@@ -14,6 +14,7 @@ import {
 import { logger } from '@/server/logger';
 import { getCustomerDispatch } from '@/server/modules/delivery/service';
 import { getCustomerTracking } from '@/server/modules/tracking/service';
+import { cityAndZip } from '@/server/modules/delivery/text';
 import { getAddress, getAddressBook } from '@/server/modules/addresses/service';
 import { ADDRESS_LIMIT } from '@/server/modules/addresses/schema';
 import { PHONE_ERROR } from '@/server/modules/account/schema';
@@ -637,6 +638,8 @@ async function placeOrderOnce(
         addressLine1: address.line1,
         addressLine2: address.line2,
         addressCity: address.city,
+        // F8 A46: city and ZIP until the delivery's geocode names the neighborhood.
+        addressArea: cityAndZip(address.city),
         courierInstructions: address.notes,
         addressLat: address.lat,
         addressLng: address.lng,

@@ -239,6 +239,7 @@ export interface NewOrder {
   addressLine1: string;
   addressLine2: string | null;
   addressCity: string;
+  addressArea: string | null;
   courierInstructions: string | null;
   addressLat: number;
   addressLng: number;
@@ -291,6 +292,7 @@ export async function insertOrder(
       addressLine1: order.addressLine1,
       addressLine2: order.addressLine2,
       addressCity: order.addressCity,
+      addressArea: order.addressArea,
       courierInstructions: order.courierInstructions,
       addressLat: order.addressLat,
       addressLng: order.addressLng,

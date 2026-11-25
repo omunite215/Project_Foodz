@@ -296,6 +296,38 @@ describe('door problems and staff (P43, A50)', () => {
     });
   });
 
+  it('gives staff the steps and the route, never the kitchen, and tells the courier of a hand-marked delivery', async () => {
+    const { order, deliveryId } = await heldOrder();
+    await tracking.pickUp(luis.actor, deliveryId, {});
+    await tracking.refreshEstimate(deliveryId);
+    const detail = await tracking.staffTrackingDetail({ role: 'support', isDemo: false }, order.id);
+    expect(detail).toMatchObject({
+      steps: { pickedUpAt: expect.any(String) },
+      route: { estimated: true },
+      late: false,
+    });
+    expect(detail?.point).not.toBeNull();
+    expect(
+      await tracking.staffTrackingDetail({ role: 'kitchen', isDemo: false }, order.id),
+    ).toBeNull();
+    expect(
+      (await tracking.staffTrackingDetail({ role: 'admin', isDemo: true }, order.id))?.point,
+    ).toBeNull();
+    await migrator.order.update({ where: { id: order.id }, data: { status: 'DELIVERED' } });
+    await migrator.delivery.update({ where: { id: deliveryId }, data: { status: 'DELIVERED' } });
+    await tracking.notifyMarkedDelivered(order.id);
+    expect(
+      published('delivery.changed').some(
+        ([channel, , data]) =>
+          channel === channels.partner(luis.partnerId) &&
+          (data as { notice?: string }).notice === 'markedDelivered',
+      ),
+    ).toBe(true);
+    expect(
+      (await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } })).handoverHow,
+    ).toBe('admin-override');
+  });
+
   it('puts a locked code on the board, oldest first', async () => {
     const { order, deliveryId } = await heldOrder();
     await tracking.pickUp(luis.actor, deliveryId, {});
@@ -340,6 +372,7 @@ describe('the live map and the demo run (A46, A54, L10)', () => {
     const runId = started?.data?.runId ?? '';
     const prepared = await tracking.demoPrepare(runId);
     expect(prepared?.points).toBeGreaterThan(0);
+    expect(await migrator.orderItem.count({ where: { orderId: prepared?.orderId } })).toBe(2);
     const demoMap = await asBrowser(demoAdmin.browser, () => actions.opsMapAction());
     expect(demoMap?.data?.pool).toBe('DEMO');
     expect(demoMap?.data?.couriers.map((courier) => courier.fullName)).toEqual(['Jamie Courier']);

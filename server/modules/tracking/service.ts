@@ -32,7 +32,7 @@ import { deliveryCodeContext, deliveryCodeHash } from '@/server/security/code-ha
 import { decryptField, encryptField } from '@/server/security/field-encryption';
 import * as repo from './repo';
 import type { TrackedDelivery } from './repo';
-import { ridePoints, routeBetween } from './routing';
+import { neighborhoodOf, ridePoints, routeBetween } from './routing';
 import {
   almostThere,
   attentionOf,
@@ -64,6 +64,7 @@ import type {
   PartnerTrackingNotice,
   PickedUpResult,
   ProblemKind,
+  StaffTrackingDetail,
   TrackingRefusalDetails,
   TrackingRoute,
 } from './schema';
@@ -96,6 +97,10 @@ import {
 const timings = () => trackingTimings(process.env);
 const problemOf = (value: string | null | undefined): ProblemKind | null =>
   PROBLEM_KINDS.find((kind) => kind === value) ?? null;
+/** A48.2: the line carries `late` so the card can turn red. */
+const withLate = (row: TrackedDelivery, line: DeliveryLine): DeliveryLine =>
+  Object.assign(line, { late: lateAgainstPromise(row) });
+
 const problemFact = (value: string | null): { kind: ProblemKind } | null => {
   const kind = problemOf(value);
   return kind ? { kind } : null;
@@ -444,6 +449,87 @@ export async function pickUp(
   return { deliveryId: id, version: result.version, replayed: result.outcome === 'replayed' };
 }
 
+/** A51.2: ADMIN marked a held delivery delivered by hand; the courier's phone is told. */
+export async function notifyMarkedDelivered(orderId: string): Promise<void> {
+  const row = await runAsSystem('marked delivered', async (ctx) => {
+    const found = await repo.findTrackedByOrder(ctx, orderId);
+    if (found?.status === 'DELIVERED' && found.partnerId)
+      await repo.markOverride(ctx, found.deliveryId);
+    return found;
+  });
+  if (row?.status !== 'DELIVERED' || !row.partnerId) return;
+  const partnerId = row.partnerId;
+  await safely('changed', () =>
+    publishChanged(
+      { orderId, status: 'DELIVERED', version: row.version },
+      [partnerId],
+      'markedDelivered',
+    ),
+  );
+  await safely('delivered', () =>
+    inngest.send(
+      deliveryDelivered.create(
+        {
+          deliveryId: row.deliveryId,
+          orderId,
+          partnerId,
+          payCents: row.partnerFeeCents,
+          tipCents: 0,
+          cashCents: row.paymentMethod === 'CASH' ? row.totalCents : 0,
+          how: 'admin-override',
+          at: new Date().toISOString(),
+        },
+        { id: `delivery-delivered-${row.deliveryId}` },
+      ),
+    ),
+  );
+}
+
+/** A53: the detail's tracking data for SUPPORT and ADMIN (the demo admin: demo orders only). */
+export async function staffTrackingDetail(
+  viewer: { role: string; isDemo: boolean },
+  orderId: string,
+  now = new Date(),
+): Promise<StaffTrackingDetail | null> {
+  if (viewer.role === 'kitchen') return null;
+  const row = await runAsSystem('staff tracking', (ctx) => repo.findTrackedByOrder(ctx, orderId));
+  if (!row?.partnerId) return null;
+  const hidden = viewer.isDemo && !row.customerIsDemo;
+  const late = lateAgainstPromise(row);
+  return {
+    steps: {
+      assignedAt: row.assignedAt?.toISOString() ?? null,
+      atKitchenAt: row.atRestaurantAt?.toISOString() ?? null,
+      pickedUpAt: row.pickedUpAt?.toISOString() ?? null,
+      deliveredAt: row.deliveredAt?.toISOString() ?? null,
+      noAnswerSince: row.noAnswerSince?.toISOString() ?? null,
+      codeLockedAt: row.otpLockedAt?.toISOString() ?? null,
+      problem: problemFact(row.problemKind)?.kind ?? null,
+    },
+    point:
+      hidden || row.lastLat === null || row.lastLng === null || !ACTIVE.has(row.status)
+        ? null
+        : {
+            lat: roundCoordinate(row.lastLat),
+            lng: roundCoordinate(row.lastLng),
+            at: row.lastPointAt?.toISOString() ?? null,
+            freshness: freshnessOf(row.lastPointAt?.toISOString() ?? null, now),
+          },
+    route: hidden || !ACTIVE.has(row.status) ? null : routeOf(row),
+    dropoffPoint: hidden ? null : { lat: row.dropLat, lng: row.dropLng },
+    etaAt: row.etaAt?.toISOString() ?? null,
+    estimated: row.etaEstimated,
+    late,
+  };
+}
+
+/** A48.2: the estimate is more than 10 minutes past the promised window. */
+function lateAgainstPromise(row: TrackedDelivery): boolean {
+  if (!row.etaAt || !row.placedAt || row.arrivalToMinutes === null) return false;
+  const promised = row.placedAt.getTime() + row.arrivalToMinutes * 60_000;
+  return row.etaAt.getTime() - promised > 10 * 60_000;
+}
+
 /** A51.1: ADMIN's "keep the courier" pickup still ends with the customer's code. */
 export async function issueCodeForOrder(orderId: string): Promise<void> {
   const row = await runAsSystem('issue code', (ctx) => repo.findTrackedByOrder(ctx, orderId));
@@ -773,6 +859,11 @@ export async function refreshEstimate(
       : { lat: row.kitchenLat, lng: row.kitchenLng };
   const route = await routeBetween(from, to, row.vehicle ?? 'SCOOTER', { deliveryId });
   await runAsSystem('estimate', (ctx) => repo.writeRoute(ctx, deliveryId, route));
+  // A46: the neighborhood for "Priya · Downtown", once, from the drop-off's geocode.
+  if (row.addressArea === null || row.addressArea === cityAndZip(row.addressCity)) {
+    const area = await neighborhoodOf({ lat: row.dropLat, lng: row.dropLng });
+    if (area) await runAsSystem('order area', (ctx) => repo.setOrderArea(ctx, row.orderId, area));
+  }
   if (etaShiftWorthPushing(row.etaAt?.toISOString() ?? null, route.etaAt.toISOString())) {
     await safely('changed', () =>
       publishChanged(
@@ -918,23 +1009,26 @@ export async function boardTracking(
       : 0;
     lines.set(
       row.orderId,
-      deliveryLineWords({
-        ...state,
-        courierShort: shortName(viewer.isDemo ? maskName(name) : name),
-        customerFirst: firstNameOf(row.contactName),
-        distanceToDoorM: facts.distanceToDoorM,
-        arrivalClock: row.etaAt
-          ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone })
-              .format(row.etaAt)
-              .replace(' AM', ' am')
-              .replace(' PM', ' pm')
-          : null,
-        silentMinutes: silent,
-        waitedMinutes: row.noAnswerSince
-          ? Math.floor((now.getTime() - row.noAnswerSince.getTime()) / 60_000)
-          : 0,
-        problem: facts.problem?.kind ?? null,
-      }),
+      withLate(
+        row,
+        deliveryLineWords({
+          ...state,
+          courierShort: shortName(viewer.isDemo ? maskName(name) : name),
+          customerFirst: firstNameOf(row.contactName),
+          distanceToDoorM: facts.distanceToDoorM,
+          arrivalClock: row.etaAt
+            ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone })
+                .format(row.etaAt)
+                .replace(' AM', ' am')
+                .replace(' PM', ' pm')
+            : null,
+          silentMinutes: silent,
+          waitedMinutes: row.noAnswerSince
+            ? Math.floor((now.getTime() - row.noAnswerSince.getTime()) / 60_000)
+            : 0,
+          problem: facts.problem?.kind ?? null,
+        }),
+      ),
     );
   }
   const items = attentionOf(

@@ -4,7 +4,11 @@ import type {
   StaffCourierSection,
 } from '@/server/modules/delivery/schema';
 import type { CourierMilestone } from '@/server/modules/delivery/text';
-import type { AttentionItem, DeliveryLine } from '@/server/modules/tracking/schema';
+import type {
+  AttentionItem,
+  DeliveryLine,
+  StaffTrackingDetail,
+} from '@/server/modules/tracking/schema';
 import { z } from 'zod';
 import type { Cuisine, DisputeStatus, OrderStatus, PaymentStatus } from '@/server/db/enums';
 import { cleanNote } from '@/server/modules/cart/schema';
@@ -626,6 +630,8 @@ export interface DetailActions {
 interface DetailBase {
   /** F7 (A36): the courier section, shaped by role; null with no courier story to tell. */
   courierSection?: StaffCourierSection | null;
+  /** F8 (A53): steps with times, the latest point, the route and the estimate; not for the kitchen. */
+  tracking?: StaffTrackingDetail | null;
   asOf: string;
   id: string;
   number: string;

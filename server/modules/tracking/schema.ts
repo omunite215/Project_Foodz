@@ -270,8 +270,30 @@ export interface PartnerDeliveryTracking {
 }
 export type PartnerDeliveryF8 = Omit<PartnerDelivery, 'dropoff'> & PartnerDeliveryTracking;
 
+/** A53: the detail's tracking data (SUPPORT, ADMIN; the demo admin sees demo orders only). */
+export interface StaffTrackingDetail {
+  steps: {
+    assignedAt: string | null;
+    atKitchenAt: string | null;
+    pickedUpAt: string | null;
+    deliveredAt: string | null;
+    noAnswerSince: string | null;
+    codeLockedAt: string | null;
+    problem: ProblemKind | null;
+  };
+  point: { lat: number; lng: number; at: string | null; freshness: Freshness } | null;
+  route: TrackingRoute | null;
+  dropoffPoint: { lat: number; lng: number } | null;
+  etaAt: string | null;
+  estimated: boolean;
+  /** A48.2: the estimate is more than 10 minutes past the promised window. */
+  late: boolean;
+}
+
 /** A48.1: the Out-for-delivery courier line, resolved on the server. */
 export interface DeliveryLine {
+  /** A48.2: more than 10 minutes past the promised window; the card turns red. */
+  late?: boolean;
   state: 'onTheWay' | 'almost' | 'noLocation' | 'noAnswer' | 'locked' | 'problem';
   words: string;
   tone: 'neutral' | 'positive' | 'amber' | 'red';

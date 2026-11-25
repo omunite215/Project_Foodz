@@ -113,6 +113,48 @@ export async function routeBetween(
   }
 }
 
+const photonReverse = z.object({
+  features: z
+    .array(
+      z.object({
+        properties: z
+          .object({
+            district: z.string().max(80).optional(),
+            locality: z.string().max(80).optional(),
+            suburb: z.string().max(80).optional(),
+          })
+          .loose(),
+      }),
+    )
+    .max(10),
+});
+
+/** "Downtown" from the first reverse-geocode result's neighborhood, or null. */
+export function parseNeighborhood(json: unknown): string | null {
+  const parsed = photonReverse.safeParse(json);
+  const properties = parsed.success ? parsed.data.features[0]?.properties : undefined;
+  const name = (properties?.district ?? properties?.suburb ?? properties?.locality ?? '').trim();
+  return name && /^[\p{L}\p{N} .'&-]{2,60}$/u.test(name) ? name : null;
+}
+
+/** A46: Photon's reverse geocode for the drop-off (server-side only); null on any failure. */
+export async function neighborhoodOf(point: Point): Promise<string | null> {
+  const { lat, lng } = latLngSchema.parse({ lat: point.lat, lng: point.lng });
+  const url = new URL('https://photon.komoot.io/reverse');
+  url.searchParams.set('lat', lat.toFixed(5));
+  url.searchParams.set('lon', lng.toFixed(5));
+  url.searchParams.set('limit', '1');
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(ROUTING.timeoutMs),
+      headers: { 'user-agent': 'foodz-tracking/1.0' },
+    });
+    return parseNeighborhood(await response.json());
+  } catch {
+    return null;
+  }
+}
+
 /** The demo run's points along a route, one per `stepSeconds` at `speedKmh` (L10.1). */
 export function ridePoints(
   coordinates: readonly [number, number][],

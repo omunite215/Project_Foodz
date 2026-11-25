@@ -7,7 +7,7 @@ import type { OrderStatus } from '@/server/db/enums';
 import { AppError, forbidden, invalidInput, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
-import { boardTracking } from '@/server/modules/tracking/service';
+import { boardTracking, staffTrackingDetail } from '@/server/modules/tracking/service';
 import {
   courierHolding,
   courierLines,
@@ -402,7 +402,11 @@ export async function getStaffOrderDetail(
     now,
     names,
   );
-  return { ...detail, courierSection: await courierSection(viewer, found.order, now) };
+  return {
+    ...detail,
+    courierSection: await courierSection(viewer, found.order, now),
+    tracking: await staffTrackingDetail(viewer, found.order.id, now),
+  };
 }
 
 /** The refuse and cancel dialogs' opening data, shaped by role (design 3.2, 3.3). */
