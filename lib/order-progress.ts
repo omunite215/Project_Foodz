@@ -1,3 +1,4 @@
+import { atKitchenLine } from '@/lib/order-tracking';
 import type { OrderView } from '@/server/modules/orders/schema';
 import type {
   ArrivalWindow,
@@ -154,9 +155,12 @@ export function courierReadyLine(view: Pick<OrderView, 'progress'>): string | nu
     case 'slow':
       return view.progress.arrival?.kind === 'pastDue' ? FINDING : SLOW;
     case 'assigned':
-      return dispatch.courier
-        ? `It's packed. ${dispatch.courier.firstName} is on the way to pick it up.`
-        : FINDING;
+      if (!dispatch.courier) return FINDING;
+      // F8 U1: within 100 m of the kitchen, before the slide.
+      if (view.progress.tracking?.stage === 'atKitchen') {
+        return atKitchenLine(dispatch.courier.firstName);
+      }
+      return `It's packed. ${dispatch.courier.firstName} is on the way to pick it up.`;
     default:
       return null;
   }

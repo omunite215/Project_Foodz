@@ -74,6 +74,7 @@ export function OrderHero({
   headingRef,
   slow,
   now,
+  markHiddenOnPhone = false,
 }: {
   view: OrderView;
   state: OrderState;
@@ -82,6 +83,8 @@ export function OrderHero({
   /** Confirming for 30 s: say so (design 3.9). */
   slow: boolean;
   now: number;
+  /** F8 (design 1.2): on its way with tracking, phones leave the 96 px mark out. */
+  markHiddenOnPhone?: boolean;
 }) {
   // F5: in progress and delivered, the step's mark, h1 and line (design 6.3).
   const step = state === 'placed' || state === 'delivered' ? currentStep(view) : null;
@@ -93,7 +96,10 @@ export function OrderHero({
         {Mark ? (
           <span
             aria-hidden
-            className="mx-auto flex size-24 items-center justify-center rounded-full bg-brand-soft"
+            className={cn(
+              'mx-auto flex size-24 items-center justify-center rounded-full bg-brand-soft',
+              markHiddenOnPhone && 'max-md:hidden',
+            )}
           >
             <Mark className="size-10 text-brand-strong" />
           </span>
@@ -103,7 +109,10 @@ export function OrderHero({
         <h1
           ref={headingRef}
           tabIndex={-1}
-          className="mt-4 font-heading text-h4 leading-tight text-balance text-neutral-2 focus:outline-none md:text-h3"
+          className={cn(
+            'mt-4 font-heading text-h4 leading-tight text-balance text-neutral-2 focus:outline-none md:text-h3',
+            markHiddenOnPhone && 'max-md:mt-0',
+          )}
         >
           {stepHeading(step, collected)}
         </h1>
@@ -470,16 +479,25 @@ export function Receipt({ view, state }: { view: OrderView; state: OrderState })
 
 // ------------------------------------------------------------------ delivery (3.7)
 
-export function DeliveryCard({ view }: { view: OrderView }) {
+export function DeliveryCard({
+  view,
+  headingId = 'delivery-title',
+  className = 'mt-6',
+}: {
+  view: OrderView;
+  /** F8: the card is drawn once per column (one hidden by CSS), so each gets its own id. */
+  headingId?: string;
+  className?: string;
+}) {
   const { delivery, contact } = view;
   const where = delivery.label ? `${delivery.label}, ${delivery.line1}` : delivery.line1;
   const more = [delivery.line2, delivery.city].filter(Boolean).join(', ');
   return (
     <section
-      aria-labelledby="delivery-title"
-      className="mt-6 rounded-2xl border border-neutral-6 bg-white p-5 md:p-6"
+      aria-labelledby={headingId}
+      className={cn('rounded-2xl border border-neutral-6 bg-white p-5 md:p-6', className)}
     >
-      <h2 id="delivery-title" className="text-body-2 font-semibold text-neutral-1">
+      <h2 id={headingId} className="text-body-2 font-semibold text-neutral-1">
         Delivery
       </h2>
       <ul className="mt-3 space-y-2 text-body-4 text-neutral-1">

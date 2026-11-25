@@ -4,7 +4,9 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { OrderView } from '@/server/modules/orders/schema';
 import { announce } from '@/lib/announce';
 import { cancellationAnnouncement, statusAnnouncement } from '@/lib/order-progress';
+import { tracksLive } from '@/lib/order-tracking';
 import { channels } from '@/lib/realtime/channels';
+import { adoptTrackingView, forgetTracking, onCourierLocation } from '@/lib/tracking/live-point';
 import { useChannelEvent, useRealtimeStatus } from '@/lib/realtime/client';
 import { useHydrated } from '@/lib/use-hydrated';
 import { useOnline } from '@/lib/use-online';
@@ -53,6 +55,20 @@ export function useLiveOrder({
   });
   // F7 S5.1: a change of courier leaves the order's version alone; the view is read again.
   useChannelEvent(channel, 'delivery.changed', () => void refetch());
+
+  // F8 (L2): the courier's point on the order's own track channel, picked up to delivered. The
+  // view's point is adopted first; nothing of his position stays once tracking ends (S6.1).
+  const tracking = view.progress.tracking ?? null;
+  const tracked = tracksLive(tracking);
+  const trackChannel = channel && tracked ? channels.track(view.id) : null;
+  useChannelEvent(trackChannel, 'courier.location', (event) => onCourierLocation(event));
+  useEffect(() => {
+    if (tracked && tracking) {
+      adoptTrackingView(view.id, tracking.courierPoint, view.progress.asOf);
+    } else {
+      forgetTracking();
+    }
+  }, [tracked, tracking, view.id, view.progress.asOf]);
 
   // Announce what changed, once: the current status after a catch-up, never the old ones.
   useEffect(() => {
