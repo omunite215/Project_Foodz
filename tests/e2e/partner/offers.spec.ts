@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
-import { ACCOUNTS, signIn } from '../account/support';
+import { ACCOUNTS, asOwnNetwork, signIn } from '../account/support';
 import { card, codeFor, STAFF } from '../admin/support';
 import {
   expect,
@@ -62,6 +62,8 @@ test.beforeEach(() => {
 /** A staff page at desktop width: the board's own widths are covered by tests/e2e/admin. */
 async function staffPage(browser: Browser, email: string, baseURL: string | undefined) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, baseURL });
+  // Its own network, so the per-network code limit (10 in 5 minutes) is never shared.
+  await asOwnNetwork(context, baseURL);
   const page = await context.newPage();
   await open(page, `/sign-in?callbackUrl=${encodeURIComponent('/admin/orders')}`);
   await page.getByLabel('Email').fill(email);
@@ -251,6 +253,8 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(heading).toBeVisible({ timeout: 15_000 });
   await expect(heading).toBeFocused();
   await expect(page).toHaveTitle(`Pick up order ${courier.order} | Foodz Partner`);
+  // The accepted card fades out over the screen; its own rows read "you're at the kitchen" too.
+  await expect(offer).toHaveCount(0);
   await expect(page.getByText('Foodz Kitchen · 88 Harbor Street')).toBeVisible();
   await expect(page.getByText("You're at the kitchen")).toBeVisible();
   const maps = page.getByRole('link', { name: /^Open in Maps for directions to Foodz Kitchen$/ });
@@ -318,8 +322,14 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(page.getByRole('heading', { name: 'Waiting for orders' })).toBeVisible();
   // The customer's page goes back to finding a courier at once (S4.1), not at its next refresh.
   await expect(block).toHaveCount(0, { timeout: 4_000 });
+  // Finding again, or the slow line when nobody else can be asked: then the restarted search
+  // escalates at once (W5) and S3.1 applies, which depends on the other projects' couriers.
   await expect(
-    priya.getByRole('main').getByText("It's packed. We're finding a courier to bring it to you."),
+    priya
+      .getByRole('main')
+      .getByText(
+        /^It's packed(\. We're finding a courier to bring it to you\.|, but finding a courier is taking longer than usual\.)/,
+      ),
   ).toBeVisible();
 
   await page.getByRole('main').getByRole('button', { name: 'Dismiss' }).first().click();
