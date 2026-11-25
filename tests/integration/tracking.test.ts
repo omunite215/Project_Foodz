@@ -14,7 +14,7 @@ import {
   readyOrder,
   type TestPartner,
 } from './support/dispatch';
-import { type StaffMember, staffMember } from './support/staff';
+import { signedInAgo, type StaffMember, staffMember } from './support/staff';
 
 /*
  * F8's services against the real database (contract §2 to §10): the courier's steps, the code on
@@ -294,6 +294,43 @@ describe('door problems and staff (P43, A50)', () => {
       status: 'CANCELLED',
       cancelCode: 'customer-unreachable',
     });
+  });
+
+  it('refunds a paid card order brought back after pickup, once a code is checked (U6)', async () => {
+    const { order, deliveryId } = await heldOrder({ cash: false });
+    await migrator.order.update({
+      where: { id: order.id },
+      data: {
+        paymentStatus: 'PAID',
+        stripePaymentIntentId: `pi_unreachable_${order.id.slice(0, 8)}`,
+      },
+    });
+    await tracking.pickUp(luis.actor, deliveryId, {});
+    await tracking.reportProblem(luis.actor, deliveryId, { kind: 'no-answer' });
+    const held = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+    await signedInAgo(migrator, morgan.userId, 11);
+    const asked = await asBrowser(morgan.browser, () =>
+      actions.cancelUnreachableAction({ orderId: order.id, expectedVersion: held.version }),
+    );
+    expect(asked?.serverError?.code).toBe('STEP_UP_REQUIRED');
+    const code = await morgan.code();
+    const cancel = await asBrowser(morgan.browser, () =>
+      actions.cancelUnreachableAction({
+        orderId: order.id,
+        expectedVersion: held.version,
+        stepUp: { method: 'totp', code },
+      }),
+    );
+    expect(cancel?.serverError).toBeUndefined();
+    expect(await migrator.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      status: 'CANCELLED',
+      cancelCode: 'customer-unreachable',
+      autoRefundReason: 'staff-cancel',
+    });
+    const event = await migrator.orderEvent.findFirstOrThrow({
+      where: { orderId: order.id, type: 'cancelled' },
+    });
+    expect(event.data).toMatchObject({ refundAnnounced: true });
   });
 
   it('gives staff the steps and the route, never the kitchen, and tells the courier of a hand-marked delivery', async () => {

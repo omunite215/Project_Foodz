@@ -412,9 +412,20 @@ export async function findOwnOrder(ctx: DbContext, orderId: string, userId: stri
 export async function paidByCard(ctx: DbContext, orderId: string) {
   const row = await db(ctx).order.findUnique({
     where: { id: orderId },
-    select: { paymentMethod: true, paymentStatus: true, totalCents: true, refundedCents: true },
+    select: {
+      paymentMethod: true,
+      paymentStatus: true,
+      totalCents: true,
+      refundedCents: true,
+      stripePaymentIntentId: true,
+    },
   });
-  const paidCard = row?.paymentMethod === 'CARD' && row.paymentStatus === 'PAID';
+  // F5's rule: a card payment Stripe still holds money for (a sample card has no PaymentIntent).
+  const paidCard =
+    row?.paymentMethod === 'CARD' &&
+    (row.paymentStatus === 'PAID' || row.paymentStatus === 'PARTIALLY_REFUNDED') &&
+    row.stripePaymentIntentId !== null &&
+    row.totalCents > row.refundedCents;
   return { paidCard, totalCents: paidCard ? row.totalCents - row.refundedCents : 0 };
 }
 

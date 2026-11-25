@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { VehicleType } from '@/server/db/enums';
 import type { PartnerDelivery } from '@/server/modules/delivery/schema';
+import { stepUpInput } from '@/server/modules/staff/schema';
 
 /*
  * Live tracking, the courier's own steps and the delivery code (F8). Positions are the
@@ -189,10 +190,8 @@ export const cancelUnreachableInput = z
     orderId,
     expectedVersion,
     note,
-    stepUp: z
-      .string()
-      .regex(/^\d{6}$/)
-      .optional(),
+    /** F5's step-up code (authenticator or backup), for a card refund. */
+    stepUp: stepUpInput.optional(),
   })
   .strict();
 

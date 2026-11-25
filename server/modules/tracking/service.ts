@@ -25,7 +25,7 @@ import { cityAndZip, firstNameOf, shortName, courierVehicle } from '@/server/mod
 import { notify } from '@/server/modules/notifications/service';
 import { type OrderEffect, runEffects } from '@/server/modules/orders/effects';
 import { readPoint } from '@/server/modules/partners/location-store';
-import { passStepUp } from '@/server/modules/staff/service';
+import { passStepUp, stepUpFreshUntilFor } from '@/server/modules/staff/service';
 import { publish } from '@/server/realtime/pusher';
 import { redis } from '@/server/redis';
 import { deliveryCodeContext, deliveryCodeHash } from '@/server/security/code-hash';
@@ -1308,7 +1308,10 @@ export async function cancelUnreachable(
   const body = cancelUnreachableInput.parse(input);
   const viewer = await requireStaff(actor, CONFIRM, true);
   const paid = await runAsSystem('cancel check', (ctx) => repo.paidByCard(ctx, body.orderId));
-  if (paid.paidCard && !viewer.isDemo) await passStepUp(actor, body.stepUp);
+  // F5 A7.10: a card refund asks for a code unless one was checked in the last 10 minutes.
+  if (paid.paidCard && !viewer.isDemo && !(await stepUpFreshUntilFor(actor))) {
+    await passStepUp(actor, body.stepUp);
+  }
   const { row, raw } = await staffStep(actor, body.orderId, async (ctx, found) => {
     const parsed = staffOutcome.parse(
       await repo.staffCancelUnreachable(
