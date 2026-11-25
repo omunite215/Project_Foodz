@@ -1,4 +1,6 @@
+import { Client } from 'pg';
 import { signIn } from '../account/support';
+import { PARTNERS } from '../partner/support';
 import {
   ACCOUNTS,
   card,
@@ -25,6 +27,37 @@ test.beforeEach(() => {
   test.skip(!SAMPLE_PASSWORD, 'Needs the sample password (E2E_SEED_OUTPUT).');
 });
 
+/**
+ * The seed's Grace, put back just before she's needed: online about 400 m from the kitchen with
+ * her last point 3 minutes old. With a job runner attached, the auto-offline job takes the
+ * seeded Grace offline within a minute; starting her online time now gives the check 10 minutes.
+ * Going online stamps a fresh point (the database's trigger), so the old one is set after it.
+ */
+async function graceOnlineWithOldPoint() {
+  const client = new Client({
+    connectionString: process.env.DATABASE_MIGRATOR_URL ?? process.env.DATABASE_URL,
+  });
+  await client.connect();
+  try {
+    const grace = `user_id = (SELECT id FROM users WHERE email = $1)`;
+    await client.query(
+      `UPDATE delivery_partners
+       SET is_online = true, online_since = timezone('UTC', now()), offline_reason = NULL,
+           offline_at = NULL,
+           last_location = ST_SetSRID(ST_MakePoint(-71.044, 42.354), 4326)::geography
+       WHERE ${grace}`,
+      [PARTNERS.grace],
+    );
+    await client.query(
+      `UPDATE delivery_partners SET last_point_at = timezone('UTC', now()) - interval '3 minutes'
+       WHERE ${grace}`,
+      [PARTNERS.grace],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 test('support sees the courier line, the couriers count and the assign dialog', async ({
   page,
 }, testInfo) => {
@@ -47,6 +80,7 @@ test('support sees the courier line, the couriers count and the assign dialog', 
   await expect(order).toHaveAttribute('data-tone', 'late');
   await expect(order.getByText('Courier: not looking for a courier')).toBeAttached();
 
+  await graceOnlineWithOldPoint();
   await order.getByRole('button', { name: /actions for order S1107/i }).click();
   await expect(page.getByRole('menuitem', { name: 'Find a courier' })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Assign courier' }).click();
