@@ -297,12 +297,11 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
       ),
   ).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: 'Waiting for orders' })).toBeVisible();
-  // The customer's page goes back to finding a courier (S4.1).
+  // The customer's page goes back to finding a courier at once (S4.1), not at its next refresh.
+  await expect(block).toHaveCount(0, { timeout: 4_000 });
   await expect(
     priya.getByRole('main').getByText("It's packed. We're finding a courier to bring it to you."),
-  ).toBeVisible({
-    timeout: 70_000,
-  });
+  ).toBeVisible();
 
   await page.getByRole('main').getByRole('button', { name: 'Dismiss' }).first().click();
   await page.getByRole('button', { name: 'Go offline' }).click();

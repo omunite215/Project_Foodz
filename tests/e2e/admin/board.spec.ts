@@ -110,7 +110,9 @@ test.describe('the kitchen board (A2)', () => {
     await expect(moved.getByText('Moved just now')).toBeVisible({ timeout: 10_000 });
     // F7 A34.1: the courier line shows from the start, long before any offer.
     if (move.to === 'Ready') {
-      await expect(moved.getByText('Finding a courier…')).toBeVisible({ timeout: 4_000 });
+      await expect(moved.getByText('Finding a courier…', { exact: true })).toBeVisible({
+        timeout: 4_000,
+      });
     }
     await moved
       .getByRole('button', {
