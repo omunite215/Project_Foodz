@@ -172,6 +172,30 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(offer).toBeVisible();
   await expectNoAxeViolations(page);
 
+  // At 320 × 568 the whole card fits (design 1.2, review B2): the band shows its heading and
+  // kind line in full, and the payment row (Lena's order is cash) ends above Decline.
+  if (projectOf(testInfo) === 'partner-360') {
+    const before = page.viewportSize();
+    await page.setViewportSize({ width: 320, height: 568 });
+    const title = offer.getByRole('heading', { name: 'New order offer' });
+    const kindLine = offer.getByText('Foodz support picked you for this order.');
+    const band = title.locator('xpath=..');
+    const [bandBox, titleBox, kindBox] = await Promise.all([
+      band.boundingBox(),
+      title.boundingBox(),
+      kindLine.boundingBox(),
+    ]);
+    if (!bandBox || !titleBox || !kindBox) throw new Error('No band');
+    expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
+    expect(kindBox.y + kindBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
+    const payment = offer.getByText(/^Cash order · collect \$/);
+    const [paymentBox, declineTop] = [await payment.boundingBox(), await decline.boundingBox()];
+    if (!paymentBox || !declineTop) throw new Error('No payment row');
+    expect(paymentBox.y + paymentBox.height).toBeLessThanOrEqual(declineTop.y);
+    await expectNoAxeViolations(page);
+    if (before) await page.setViewportSize(before);
+  }
+
   // Each width accepts its own way: the keyboard, two taps, or a slide past 80% (P22).
   if (projectOf(testInfo) === 'partner-360') {
     await accept.focus();

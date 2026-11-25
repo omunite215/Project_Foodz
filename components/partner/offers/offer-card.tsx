@@ -96,12 +96,13 @@ function FactRow({
       <dt className={cn('text-body-5', cash ? 'text-foreground' : 'text-muted-foreground')}>
         <Icon
           className={cn(
-            'absolute top-3.5 left-4 size-5 [@media(max-height:700px)]:top-2.5',
+            'absolute top-3.5 left-4 size-5 [@media(max-height:700px)]:top-2',
             iconClassName ?? 'text-muted-foreground',
           )}
           aria-hidden
         />
-        {label}
+        {/* On short screens the icon carries the row; the label stays for screen readers. */}
+        <span className="[@media(max-height:700px)]:sr-only">{label}</span>
       </dt>
       <dd className="text-body-3 font-medium text-strong [overflow-wrap:anywhere] [@media(max-height:700px)]:text-body-4">
         {value}
@@ -274,7 +275,7 @@ export function OfferCardView({
     >
       <div
         className={cn(
-          'relative shrink-0 overflow-hidden px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4',
+          'relative shrink-0 overflow-hidden px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 [@media(max-height:700px)]:pt-[max(0.75rem,env(safe-area-inset-top))] [@media(max-height:700px)]:pb-3',
           practice ? 'bg-tag-8 text-white' : 'bg-status-online text-status-online-foreground',
         )}
       >
@@ -287,7 +288,11 @@ export function OfferCardView({
           {offerTitle(kind)}
           {practice ? null : <span className="sr-only">{OFFER_COPY.offerSuffix}</span>}
         </h2>
-        {offerKindLine(kind) ? <p className="mt-1 text-body-4">{offerKindLine(kind)}</p> : null}
+        {offerKindLine(kind) ? (
+          <p className="mt-1 text-body-4 [@media(max-height:700px)]:mt-0.5 [@media(max-height:700px)]:text-body-5">
+            {offerKindLine(kind)}
+          </p>
+        ) : null}
         <span
           data-flash=""
           aria-hidden
@@ -340,7 +345,9 @@ export function OfferCardView({
                   />
                 )}
                 {detail?.tipText ? (
-                  <p className="mt-2 text-body-4 text-muted-foreground">{detail.tipText}</p>
+                  <p className="mt-2 text-body-4 text-muted-foreground [@media(max-height:700px)]:mt-1">
+                    {detail.tipText}
+                  </p>
                 ) : null}
               </div>
             </div>
