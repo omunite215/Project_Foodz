@@ -19,6 +19,7 @@ import { postAuthEvent } from '@/lib/auth-channel';
 import { useCart, useEndCartSession } from '@/lib/data/cart';
 import { forgetEmail } from '@/lib/email-handoff';
 import { forgetDrafts } from '@/lib/form-draft';
+import { forgetApplyDrafts } from '@/lib/partner/draft';
 import { showSessionToast, SIGN_OUT_FAILED_TEXT, SIGN_OUT_OFFLINE_TEXT } from './session-toast';
 
 /** Marks the header's "Sign in" link, which takes focus after signing out on a public page. */
@@ -93,6 +94,8 @@ export function useSignOut() {
 
     endCartSession();
     forgetDrafts();
+    // F6: the unsent partner application kept on this phone goes too (security S8).
+    forgetApplyDrafts();
     forgetEmail();
     // Nothing fetched for this person stays in the tab's cache for whoever signs in next.
     queryClient.clear();

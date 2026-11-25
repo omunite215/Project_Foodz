@@ -21,6 +21,15 @@ export function isStaff(role: Role) {
   return STAFF_ROLES.includes(role);
 }
 
+/**
+ * Where a role's sign-in lands when no address was asked for: staff on their tools (F5 A1.1),
+ * partners on the partner app (F6 P7.3). Customers and applicants: null, so they go back.
+ */
+export function roleHome(role: Role): '/admin' | '/partner' | null {
+  if (isStaff(role)) return '/admin';
+  return role === 'partner' ? '/partner' : null;
+}
+
 /** Everything a signed-in actor can be allowed to do. Deny unless listed. */
 export const statements = {
   ...defaultStatements,
@@ -44,7 +53,8 @@ export const statements = {
   blog: ['create', 'update', 'publish', 'delete'],
   content: ['update', 'publish'],
   settings: ['update'],
-  partner: ['apply', 'deliver', 'review-application', 'suspend'],
+  // F6: `reinstate` gives a suspended partner access back and reopens a rejection (U27, B24).
+  partner: ['apply', 'deliver', 'review-application', 'suspend', 'reinstate'],
   delivery: ['dispatch', 'track-any'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
@@ -127,7 +137,7 @@ const admin = ac.newRole({
   blog: ['create', 'update', 'publish', 'delete'],
   content: ['update', 'publish'],
   settings: ['update'],
-  partner: ['review-application', 'suspend'],
+  partner: ['review-application', 'suspend', 'reinstate'],
   delivery: ['dispatch', 'track-any'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],

@@ -35,7 +35,14 @@ export const siteSettings = {
         { label: 'Blog', href: '/blog' },
       ],
     },
-    { title: 'Help', links: [{ label: 'Contact us', href: '/contact' }] },
+    {
+      title: 'Help',
+      links: [
+        { label: 'Contact us', href: '/contact' },
+        // F6 P1.1: the partner landing.
+        { label: 'Deliver with Foodz', href: '/deliver' },
+      ],
+    },
   ],
   seo: {
     title: 'Foodz: Korean, Thai and Vietnamese food, delivered',
@@ -195,6 +202,32 @@ const pages: { slug: string; title: string; blocks: Block[] }[] = [
       { h3: 'Do you cater for allergies?' },
       {
         p: 'Each dish lists its main ingredients. Our kitchen handles nuts, gluten, soy and shellfish, so we cannot guarantee any dish is free of them.',
+      },
+    ],
+  },
+  {
+    // F6 U6: accepted with every partner application; version 1.
+    slug: 'partner-terms',
+    title: 'Foodz Partner Terms',
+    blocks: [
+      {
+        p: 'Foodz is a demonstration platform. Deliveries made through the partner app are practice runs, and no pay is offered here.',
+      },
+      { h2: 'Who can deliver' },
+      {
+        p: "You must be 18 or older. For a scooter, motorbike or car you need a valid driver's license and a plate. We check your documents before you can go online.",
+      },
+      { h2: 'Your location' },
+      {
+        p: 'We use your location only while you are online, to offer you orders near you and, during a delivery, to show the customer where their food is. When you go offline we stop and keep no record of where you were.',
+      },
+      { h2: 'Your ID' },
+      {
+        p: 'We keep your ID number encrypted and show only its last four characters, to you and to our staff. Your photos and ID details are deleted 30 days after a rejection, at once if you withdraw, and when you delete your account.',
+      },
+      { h2: 'Suspension' },
+      {
+        p: 'We may suspend a partner account for unsafe or abusive behaviour. We tell you why when we can, and you can contact us if you think it is a mistake.',
       },
     ],
   },

@@ -55,28 +55,37 @@ const DISCS: Record<StaffTimelineType, { icon: LucideIcon; className: string }> 
   'sold-out': { icon: Ban, className: 'bg-neutral-3' },
 };
 
-function Entry({
-  entry,
-  seconds,
-  now,
-  timeZone,
-  fresh,
+/** One timeline row as drawn: a disc, the sentence, any details and text blocks, the time. */
+export interface TimelineRowData {
+  id: string;
+  icon: LucideIcon;
+  /** The disc's fill, a white icon on it. */
+  discClassName: string;
+  sentence: string;
+  details?: string | null;
+  /** Labelled text under the sentence: "Staff note:", "Message to the applicant:". */
+  blocks?: readonly { label: string; text: string }[];
+  /** ISO instant for `<time dateTime>`. */
+  at: string;
+  /** The time as shown. */
+  time: string;
+}
+
+/**
+ * One entry of a staff timeline (F5 design 5.3), shared with the partner application's history
+ * (F6 design 8.8). A new entry fades in at the end; focus never moves.
+ */
+export function TimelineRow({
+  row,
   last,
+  fresh,
 }: {
-  entry: StaffTimelineEntry;
+  row: TimelineRowData;
   last: boolean;
-  seconds: boolean;
-  now: Date;
-  timeZone: string;
   fresh: boolean;
 }) {
   const ref = useRef<HTMLLIElement>(null);
-  const disc = DISCS[entry.type];
-  const Icon = disc.icon;
-  const text = timelineText(entry);
-  const sameDay = eventTimeText(entry.at, now, timeZone).includes(':');
-  const clock = seconds ? clockWithSeconds(entry.at, timeZone) : boardClock(entry.at, timeZone);
-  const time = sameDay ? clock : `${eventTimeText(entry.at, now, timeZone)}, ${clock}`;
+  const Icon = row.icon;
 
   useMotion(
     (motion) => {
@@ -95,7 +104,7 @@ function Entry({
         aria-hidden
         className={cn(
           'relative z-10 flex size-6 items-center justify-center rounded-full',
-          disc.className,
+          row.discClassName,
         )}
       >
         <Icon className="size-3.5 text-white" strokeWidth={3} />
@@ -105,22 +114,61 @@ function Entry({
       )}
       <div className="min-w-0">
         <p className="text-body-5 font-medium text-neutral-1 [overflow-wrap:anywhere]">
-          {text.sentence}
+          {row.sentence}
         </p>
-        {text.details ? <p className="mt-0.5 text-body-5 text-neutral-3">{text.details}</p> : null}
-        {text.note ? (
-          <p className="mt-1.5 rounded-md bg-neutral-7 px-2.5 py-1.5 text-body-5 text-neutral-1 [overflow-wrap:anywhere]">
-            <span className="font-medium">Staff note:</span> {text.note}
+        {row.details ? <p className="mt-0.5 text-body-5 text-neutral-3">{row.details}</p> : null}
+        {row.blocks?.map((block) => (
+          <p
+            key={block.label}
+            className="mt-1.5 rounded-md bg-neutral-7 px-2.5 py-1.5 text-body-5 whitespace-pre-wrap text-neutral-1 [overflow-wrap:anywhere]"
+          >
+            <span className="font-medium">{block.label}</span> {block.text}
           </p>
-        ) : null}
+        ))}
       </div>
-      <time
-        dateTime={entry.at}
-        className="text-body-5 whitespace-nowrap text-neutral-3 tabular-nums"
-      >
-        {time}
+      <time dateTime={row.at} className="text-body-5 whitespace-nowrap text-neutral-3 tabular-nums">
+        {row.time}
       </time>
     </li>
+  );
+}
+
+function Entry({
+  entry,
+  seconds,
+  now,
+  timeZone,
+  fresh,
+  last,
+}: {
+  entry: StaffTimelineEntry;
+  last: boolean;
+  seconds: boolean;
+  now: Date;
+  timeZone: string;
+  fresh: boolean;
+}) {
+  const disc = DISCS[entry.type];
+  const text = timelineText(entry);
+  const sameDay = eventTimeText(entry.at, now, timeZone).includes(':');
+  const clock = seconds ? clockWithSeconds(entry.at, timeZone) : boardClock(entry.at, timeZone);
+  const time = sameDay ? clock : `${eventTimeText(entry.at, now, timeZone)}, ${clock}`;
+
+  return (
+    <TimelineRow
+      last={last}
+      fresh={fresh}
+      row={{
+        id: entry.id,
+        icon: disc.icon,
+        discClassName: disc.className,
+        sentence: text.sentence,
+        details: text.details,
+        blocks: text.note ? [{ label: 'Staff note:', text: text.note }] : [],
+        at: entry.at,
+        time,
+      }}
+    />
   );
 }
 

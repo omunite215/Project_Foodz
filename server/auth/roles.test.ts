@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { can, isRole, isStaff, type Permission, type Role, ROLES } from './roles';
+import { can, isRole, isStaff, type Permission, type Role, roleHome, ROLES } from './roles';
 
 // Each row: a permission and exactly which roles hold it. Anything not listed is denied.
 const MATRIX: [Permission, Role[]][] = [
@@ -21,6 +21,9 @@ const MATRIX: [Permission, Role[]][] = [
   [{ settings: ['update'] }, ['admin']],
   [{ partner: ['deliver'] }, ['partner']],
   [{ partner: ['review-application'] }, ['support', 'admin']],
+  [{ partner: ['suspend'] }, ['support', 'admin']],
+  [{ partner: ['reinstate'] }, ['admin']],
+  [{ partner: ['apply'] }, ['customer', 'partner']],
   [{ delivery: ['dispatch'] }, ['admin']],
   [{ support: ['decide-refund'] }, ['support', 'admin']],
   [{ support: ['ban-member'] }, ['support', 'admin']],
@@ -86,5 +89,16 @@ describe('role helpers', () => {
 
   it('treats kitchen, support, content editors and admins as staff', () => {
     expect(ROLES.filter(isStaff)).toEqual(['kitchen', 'support', 'content_editor', 'admin']);
+  });
+
+  it('gives staff and partners a home to land on, and nobody else (A1.1, P7.3)', () => {
+    expect(Object.fromEntries(ROLES.map((role) => [role, roleHome(role)]))).toEqual({
+      customer: null,
+      partner: '/partner',
+      kitchen: '/admin',
+      support: '/admin',
+      content_editor: '/admin',
+      admin: '/admin',
+    });
   });
 });

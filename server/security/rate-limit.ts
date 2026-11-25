@@ -239,7 +239,48 @@ const POLICIES = {
   'contact.submit': { points: 3, duration: 600 },
   'support.create': { points: 5, duration: 3600 },
   'delivery.otp': { points: 5, duration: 900, failClosed: true },
+  // The partner app (F6 B13), per account. Locations: one request every 2 seconds, no lockout.
   'partner.location': { points: 1, duration: 2 },
+  'partner.apply': {
+    points: 5,
+    duration: 3600,
+    message: "You've tried to send this several times. Try again in {wait}.",
+  },
+  'partner.application-edit': {
+    points: 20,
+    duration: 3600,
+    message: "You've changed your application many times this hour. Try again in {wait}.",
+  },
+  'partner.withdraw': { points: 5, duration: 3600 },
+  'partner.availability': {
+    points: 30,
+    duration: 600,
+    message: "You've switched on and off a lot. Try again in {wait}.",
+  },
+  'partner.me': { points: 60, duration: 60 },
+  // Staff review of applications (F6 B30), per account. Alerts: the 6th suspension and the
+  // 31st approval in an hour, ID images of more than 50 partners in an hour.
+  'partner.review-read': { points: 120, duration: 60 },
+  'partner.document-link': {
+    points: 60,
+    duration: 60,
+    message: 'Too many image links. Try again in {wait}.',
+  },
+  'partner.decide': {
+    points: 120,
+    duration: 3600,
+    message: "You've made a lot of decisions in the last hour. Try again in {wait}.",
+  },
+  'partner.suspend': {
+    points: 20,
+    duration: 3600,
+    message: "You've suspended 20 partners this hour. Ask an admin to take over.",
+  },
+  'partner.reinstate': {
+    points: 20,
+    duration: 3600,
+    message: "You've reinstated 20 partners this hour. Try again in {wait}.",
+  },
   'realtime.auth': { points: 60, duration: 60 },
   'upload.request': { points: 30, duration: 600 },
   // Address suggestions while typing (debounced in the browser).

@@ -20,11 +20,11 @@ export const CHECK_FAILED_TEXT =
 
 interface TurnstileOptions {
   sitekey: string;
-  action: CaptchaAction;
+  action: TurnstileAction;
   appearance: 'interaction-only';
   execution: 'execute';
   size: 'flexible' | 'compact';
-  theme: 'light';
+  theme: 'light' | 'dark';
   language: 'en';
   callback: (token: string) => void;
   'error-callback': () => boolean;
@@ -47,6 +47,9 @@ declare global {
     turnstile?: TurnstileApi;
   }
 }
+
+/** The account forms' actions, and the partner application's (F6 P5.3). */
+export type TurnstileAction = CaptchaAction | 'partner-apply';
 
 let loading: Promise<TurnstileApi> | undefined;
 
@@ -81,15 +84,21 @@ export function Turnstile({
   ref,
   action,
   onChallenge,
+  theme = 'light',
+  challengeClassName,
 }: {
   ref?: Ref<TurnstileHandle>;
   /**
    * Which form the check is for. Cloudflare signs it into the token and the server compares it,
    * so a token solved on one form can't be spent on another.
    */
-  action: CaptchaAction;
+  action: TurnstileAction;
   /** A puzzle is showing (the submit button then reads "Checking…"). */
   onChallenge?: (showing: boolean) => void;
+  /** The partner app passes its resolved theme, so the widget matches a dark screen. */
+  theme?: 'light' | 'dark';
+  /** Classes for the "One more step" line (the partner app's colours). */
+  challengeClassName?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<string | null>(null);
@@ -146,7 +155,7 @@ export function Turnstile({
                 appearance: 'interaction-only',
                 execution: 'execute',
                 size: window.innerWidth < 360 ? 'compact' : 'flexible',
-                theme: 'light',
+                theme,
                 language: 'en',
                 callback: (token) => settle(token),
                 'error-callback': () => {
@@ -182,7 +191,9 @@ export function Turnstile({
 
   return (
     <div className="mt-4">
-      {challenge ? <p className="mb-3 text-body-5 text-neutral-3">{CHALLENGE_TEXT}</p> : null}
+      {challenge ? (
+        <p className={challengeClassName ?? 'mb-3 text-body-5 text-neutral-3'}>{CHALLENGE_TEXT}</p>
+      ) : null}
       {/* Cloudflare's frame; empty unless a challenge is needed. */}
       <div ref={containerRef} className="empty:hidden" />
     </div>

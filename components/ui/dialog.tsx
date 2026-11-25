@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { usePortalContainer } from '@/components/ui/portal-container';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 
 import { Button } from '@/components/ui/button';
@@ -47,8 +48,9 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  const container = usePortalContainer();
   return (
-    <DialogPortal>
+    <DialogPortal container={container}>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"

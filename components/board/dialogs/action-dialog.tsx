@@ -31,6 +31,7 @@ export function ActionDialog({
   onCloseFocus,
   formRef,
   closeOnly = false,
+  footerNote,
   children,
 }: {
   open: boolean;
@@ -54,6 +55,8 @@ export function ActionDialog({
   formRef?: RefObject<HTMLFormElement | null>;
   /** The order changed and the action no longer applies: one "Close" button (design 3.4). */
   closeOnly?: boolean;
+  /** A line above the buttons in place of "This can't be undone." (F6: "This takes effect at once."). */
+  footerNote?: ReactNode;
   children: ReactNode;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -136,10 +139,11 @@ export function ActionDialog({
                 This can&apos;t be undone.
               </p>
             ) : null}
+            {footerNote && !irreversible && !closeOnly ? footerNote : null}
             <div
               className={cn(
                 'flex flex-col-reverse gap-3 md:flex-row md:justify-end',
-                irreversible && !closeOnly && 'mt-3',
+                (irreversible || footerNote) && !closeOnly && 'mt-3',
               )}
             >
               {closeOnly ? (

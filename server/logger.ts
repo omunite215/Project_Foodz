@@ -44,6 +44,17 @@ const SENSITIVE_KEYS = [
   'addressCity',
   'courierInstructions',
   'note',
+  // Partner applications and locations (F6 contract section 10).
+  'idNumber',
+  'points',
+  'point',
+  'accuracy',
+  'heading',
+  'speed',
+  'staffNote',
+  'applicantText',
+  'photoKey',
+  'idDocumentKey',
 ] as const;
 
 /**
@@ -56,6 +67,8 @@ export const REDACT_PATHS = [
   ...SENSITIVE_KEYS.flatMap((key) => [key, `*.${key}`]),
   'code',
   ...INPUT_CONTAINERS.map((container) => `${container}.code`),
+  // A reviewer's message or reason (F6): only in input, since errors carry a `message` of their own.
+  ...INPUT_CONTAINERS.flatMap((container) => [`${container}.message`, `${container}.reason`]),
   'headers.cookie',
   'headers.authorization',
   'req.headers.cookie',

@@ -426,7 +426,13 @@ describe('store status', () => {
             { label: 'Blog', href: '/blog' },
           ],
         },
-        { title: 'Help', links: [{ label: 'Contact us', href: '/contact' }] },
+        {
+          title: 'Help',
+          links: [
+            { label: 'Contact us', href: '/contact' },
+            { label: 'Deliver with Foodz', href: '/deliver' },
+          ],
+        },
       ],
       delivery: { promiseMinutes: 45, radiusKm: 8, baseFeeCents: 199, perKmFeeCents: 50 },
     });

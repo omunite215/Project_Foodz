@@ -187,12 +187,15 @@ export function StaffNoteField({
   error,
   onChange,
   onBlur,
+  hint = 'Only staff see this note.',
 }: {
   required: boolean;
   value: string;
   error: string | null;
   onChange: (value: string) => void;
   onBlur: () => void;
+  /** F6's reinstate and reopen say why the note is asked for. */
+  hint?: string;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -215,7 +218,7 @@ export function StaffNoteField({
       />
       <div className="mt-2 flex items-start justify-between gap-3">
         <p id={hintId} className="text-body-5 text-muted-foreground">
-          Only staff see this note.
+          {hint}
         </p>
         <span
           aria-hidden

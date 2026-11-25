@@ -1,6 +1,7 @@
 import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 import { clientIpOptInRefused, clientIpWarning } from './client-ip';
+import { hashKeyDistinct } from './security/key-checks';
 
 const bool = z
   .enum(['true', 'false', '1', '0'])
@@ -58,6 +59,10 @@ export const env = createEnv({
     FIELD_ENCRYPTION_KEY: z
       .string()
       .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64-encoded'),
+    // F6 B4: flags the same partner ID number on two applications.
+    ID_NUMBER_HASH_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, 'must be 32 bytes, base64-encoded'),
 
     SENTRY_DSN: z.url().optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -90,6 +95,9 @@ export const env = createEnv({
 });
 
 // Checked when the server starts (instrumentation.ts imports this file).
+if (!hashKeyDistinct(process.env)) {
+  throw new Error('ID_NUMBER_HASH_KEY must differ from FIELD_ENCRYPTION_KEY.');
+}
 if (clientIpOptInRefused(process.env)) {
   throw new Error('CLIENT_IP_FROM_HEADER is for tests only and is refused in production.');
 }

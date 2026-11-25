@@ -19,7 +19,10 @@ const buttonVariants = cva(
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
         link: 'text-primary underline-offset-4 hover:underline',
         // Irreversible actions. The word and icon say so too; colour is never the only cue.
-        danger: 'bg-destructive text-white hover:bg-destructive-hover',
+        danger: 'bg-destructive text-destructive-foreground hover:bg-destructive-hover',
+        // The partner app's "Go offline": stopping is the safe direction, so a dark neutral, never
+        // red (F6 design 0.5, D10). Fill, word and icon tell it from "Go online".
+        stop: 'bg-stop text-stop-foreground hover:bg-stop/90 dark:border dark:border-input',
       },
       size: {
         default:
@@ -42,6 +45,9 @@ const buttonVariants = cva(
         kitchen:
           'h-12 min-w-12 gap-2 px-5 text-button-1 has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4',
         'icon-kitchen': 'size-12',
+        // The partner app's one main action per screen (F6 design 0.5): 56 px, full width, and it
+        // grows at 200% text instead of clipping.
+        dock: 'min-h-14 h-auto w-full gap-2 rounded-xl px-5 py-3 text-body-3 font-semibold whitespace-normal',
       },
     },
     defaultVariants: {

@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../server/db/generated/client';
 import { sampleAccountsRefusal, seedDatabase } from './seeding';
+import { writePartnerFixtureImages } from './seeding/partner-images';
 
 function env(
   name: string,
@@ -35,6 +36,10 @@ async function main() {
       adminPassword: env('SEED_ADMIN_PASSWORD', { minLength: 12 }),
       demoPassword: env('DEMO_PASSWORD', { minLength: 10 }),
       samplePassword,
+      partnerKeys:
+        process.env.FIELD_ENCRYPTION_KEY && process.env.ID_NUMBER_HASH_KEY
+          ? { field: process.env.FIELD_ENCRYPTION_KEY, hash: process.env.ID_NUMBER_HASH_KEY }
+          : undefined,
     });
 
     const created = Object.entries(result.created).filter(([, n]) => n > 0);
@@ -43,6 +48,19 @@ async function main() {
         ? `Seeded: ${created.map(([name, n]) => `${n} ${name}`).join(', ')}.\n`
         : 'Seed: nothing to add, the database already has the seed data.\n',
     );
+
+    if (samplePassword && result.created.partnerFixtures) {
+      // F6: the partner fixtures' drawn photos and sample IDs.
+      try {
+        const images = await writePartnerFixtureImages();
+        if (images === null) {
+          process.stdout.write('Partner images skipped: storage is not configured.\n');
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'storage error';
+        process.stdout.write(`Partner images not written (${reason}).\n`);
+      }
+    }
 
     if (samplePassword) {
       // Reset on every run. The browser tests read it from this output (E2E_SEED_OUTPUT).

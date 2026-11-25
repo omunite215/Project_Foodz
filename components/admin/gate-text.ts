@@ -3,13 +3,23 @@
  * so the server's page metadata can use them.
  */
 
-export type GateKind = 'twoFactor' | 'noAccess' | 'nothingHere' | 'notFound';
+export type GateKind =
+  | 'twoFactor'
+  | 'noAccess'
+  | 'nothingHere'
+  | 'notFound'
+  /** F6 A18.2: KITCHEN and CONTENT_EDITOR at a Partners address. */
+  | 'partnersNoAccess'
+  /** F6 A20.1: an unknown, non-UUID or withdrawn application. */
+  | 'applicationNotFound';
 
 export const GATE_TITLES: Record<GateKind, string> = {
   twoFactor: 'Two-factor sign-in needed',
   noAccess: "You don't have access to this page",
   nothingHere: 'Nothing here yet',
   notFound: 'Order not found',
+  partnersNoAccess: "You don't have access to this page",
+  applicationNotFound: 'Application not found',
 };
 
 /** Before " | Foodz Admin". */
@@ -18,4 +28,6 @@ export const GATE_TAB_TITLES: Record<GateKind, string> = {
   noAccess: 'No access',
   nothingHere: 'Staff tools',
   notFound: 'Order not found',
+  partnersNoAccess: 'No access',
+  applicationNotFound: 'Application not found',
 };

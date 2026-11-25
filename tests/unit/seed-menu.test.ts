@@ -110,6 +110,7 @@ describe('seeded campaigns and store', () => {
       { label: 'Menu', href: '/menu' },
       { label: 'Blog', href: '/blog' },
       { label: 'Contact us', href: '/contact' },
+      { label: 'Deliver with Foodz', href: '/deliver' },
     ]);
   });
 });

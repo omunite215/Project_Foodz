@@ -33,7 +33,8 @@ export default async function VerifyEmailPage({ searchParams }: { searchParams: 
   if (status === 'confirmed' && via === 'other-account' && signedIn) {
     result = { kind: 'confirmed-other-account', accountEmail };
   } else if (status === 'confirmed' && (via === 'new-session' || signedIn)) {
-    result = { kind: 'confirmed-new-session', accountEmail };
+    // Often a phone's other browser: "Continue" still goes where they were going (F6 P1.3).
+    result = { kind: 'confirmed-new-session', accountEmail, continueTo: callbackUrl };
   } else if (status === 'confirmed') {
     result = { kind: 'confirmed-signed-out', signInHref: authPageHref('/sign-in', callbackUrl) };
   } else if (status === 'already-confirmed') {

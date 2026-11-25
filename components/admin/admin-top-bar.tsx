@@ -45,12 +45,15 @@ function SidebarToggle() {
 
 export function AdminTopBar({
   title,
+  titleAs = 'h1',
   status,
   end,
   className,
 }: {
   /** The page's h1 ("Order board", "Order 1042"); omitted where the content holds the h1. */
   title?: string;
+  /** F6's application page: "Partners" as plain text, the person's name is the h1 (A18.4). */
+  titleAs?: 'h1' | 'p';
   /** Store and live chips (hidden below `md`, where the toolbar carries the store chip). */
   status?: ReactNode;
   /** Controls before the account menu: sound, "Keep screen on". */
@@ -58,6 +61,7 @@ export function AdminTopBar({
   className?: string;
 }) {
   const shell = useStaffShell();
+  const Title = titleAs;
 
   return (
     <header
@@ -81,9 +85,9 @@ export function AdminTopBar({
         <LogoLink imageClassName="h-7" />
       ) : null}
       {title ? (
-        <h1 className="shrink-0 font-heading text-body-2 whitespace-nowrap text-neutral-2 tabular-nums md:text-title-2">
+        <Title className="shrink-0 font-heading text-body-2 whitespace-nowrap text-neutral-2 tabular-nums md:text-title-2">
           {title}
-        </h1>
+        </Title>
       ) : null}
       {status ? <div className="flex shrink-0 items-center gap-2">{status}</div> : null}
       <div className="ml-auto flex shrink-0 items-center gap-1.5 md:gap-2">

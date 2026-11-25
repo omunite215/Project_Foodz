@@ -40,6 +40,32 @@ export type AppErrorCode =
   | 'STEP_UP_REQUIRED'
   | 'STEP_UP_INVALID'
   | 'STEP_UP_LOCKED'
+  // Partner applications and the partner app (F6). `details`: PartnerRefusalDetails in
+  // partners/schema.ts.
+  | 'REAPPLY_LATER'
+  | 'APPLICATION_EXISTS'
+  | 'APPLICATION_DECIDED'
+  | 'UPLOAD_NOT_READY'
+  | 'NOT_APPROVED'
+  | 'PARTNER_SUSPENDED'
+  | 'PARTNER_ONLINE'
+  | 'NOT_ONLINE'
+  | 'OTHER_DEVICE'
+  | 'DEMO_SIMULATED_LOCATION'
+  | 'LOW_ACCURACY'
+  | 'STALE_POINT'
+  | 'FUTURE_POINT'
+  // Staff review of partner applications (F6). `details`: ReviewRefusalDetails in
+  // partners/review-schema.ts.
+  | 'APPLICATION_CHANGED'
+  | 'APPLICATION_GONE'
+  | 'ALREADY_SENT_BACK'
+  | 'ID_EXPIRED'
+  | 'ACCOUNT_BANNED'
+  | 'IMAGE_NOT_READY'
+  | 'FLAGS_NOT_CHECKED'
+  | 'DEMO_PARTNER'
+  | 'FILES_DELETED'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'

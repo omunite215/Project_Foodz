@@ -17,6 +17,7 @@ import { type ActionFailure, callAction, fieldError } from '@/lib/action-result'
 import { postAuthEvent } from '@/lib/auth-channel';
 import { forgetEmail } from '@/lib/email-handoff';
 import { forgetDrafts } from '@/lib/form-draft';
+import { forgetApplyDrafts } from '@/lib/partner/draft';
 import { useEndCartSession } from '@/lib/data/cart';
 import { authPageHref } from '@/lib/auth-links';
 import { cn } from '@/lib/utils';
@@ -88,6 +89,7 @@ function DeleteForm({ needsConfirm, methods }: { needsConfirm: boolean; methods:
     if (outcome.ok) {
       endCartSession();
       forgetDrafts();
+      forgetApplyDrafts();
       forgetEmail();
       postAuthEvent('signed-out');
       // A full load of Home: the server shows "Your account has been deleted." and nothing of

@@ -116,6 +116,7 @@ describe('seed', () => {
     expect(pages.map((page) => page.slug)).toEqual([
       'about',
       'faq',
+      'partner-terms',
       'privacy',
       'refund-policy',
       'terms',

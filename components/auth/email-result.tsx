@@ -10,11 +10,15 @@ import { SubmitButton } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
+import { confirmedContinue } from '@/lib/auth-links';
 import { cn } from '@/lib/utils';
 
 export type EmailResultCase =
-  /** Signed in by the link. `accountEmail` names the account, so an unexpected link shows. */
-  | { kind: 'confirmed-new-session'; accountEmail?: string }
+  /**
+   * Signed in by the link. `accountEmail` names the account, so an unexpected link shows;
+   * "Continue" goes where the person was going (`continueTo`, F6 P1.3).
+   */
+  | { kind: 'confirmed-new-session'; accountEmail?: string; continueTo?: string }
   /**
    * The link was for another account than the one signed in here (`via=other-account`). That
    * address is confirmed and this browser stays signed in as `accountEmail` (S2 review).
@@ -88,6 +92,9 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
   }, []);
 
   const expired = result.kind === 'expired-signed-in' || result.kind === 'expired-signed-out';
+  const next = confirmedContinue(
+    result.kind === 'confirmed-new-session' ? result.continueTo : undefined,
+  );
   const art = expired ? ILLUSTRATION.warning : ILLUSTRATION.mail;
   const title = expired
     ? 'This link has expired'
@@ -102,7 +109,7 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
         ? 'Sign in with your new email to carry on.'
         : result.kind === 'confirmed-other-account'
           ? 'That email address is confirmed. It belongs to another Foodz account, so nothing changed here.'
-          : "You're ready to order.";
+          : next.line;
   const signedInAs =
     result.kind === 'confirmed-other-account'
       ? result.accountEmail
@@ -143,7 +150,7 @@ export function EmailResult({ result }: { result: EmailResultCase }) {
       ) : null}
       {result.kind === 'confirmed-new-session' || result.kind === 'confirmed-other-account' ? (
         <Button asChild size="touch" className="mt-8 uppercase">
-          <Link href="/menu">Continue to the menu</Link>
+          <Link href={next.href}>{next.label}</Link>
         </Button>
       ) : null}
       {result.kind === 'already-confirmed' ? (

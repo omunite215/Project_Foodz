@@ -16,7 +16,13 @@ import {
 import { checkAndReencode } from './image';
 import { finalKey, quarantineKey, UPLOAD_POLICIES } from './policy';
 import { createPendingUpload, findUpload, markReady, markRejected } from './repo';
-import { requestUploadInput, uploadIdInput } from './schema';
+import {
+  requestUploadInput,
+  UPLOAD_REJECT_CODES,
+  type UploadRejectCode,
+  type UploadStatusView,
+  uploadIdInput,
+} from './schema';
 
 /*
  * Uploads in three steps:
@@ -77,29 +83,29 @@ export async function processUpload(uploadId: string): Promise<'ready' | 'reject
   if (!upload || upload.status !== 'PENDING') return 'skipped';
   const policy = UPLOAD_POLICIES[upload.purpose];
 
-  const reject = async (reason: string) => {
+  const reject = async (code: UploadRejectCode, reason: string) => {
     await deleteObject('PRIVATE', upload.key);
-    await runAsSystem('upload rejected', (ctx) => markRejected(ctx, uploadId, reason));
+    await runAsSystem('upload rejected', (ctx) => markRejected(ctx, uploadId, { code, reason }));
     return 'rejected' as const;
   };
 
   const size = await objectSize('PRIVATE', upload.key);
   if (size === null) {
     await runAsSystem('upload missing', (ctx) =>
-      markRejected(ctx, uploadId, 'The file never arrived.'),
+      markRejected(ctx, uploadId, { code: 'NOT_RECEIVED', reason: 'The file never arrived.' }),
     );
     return 'rejected';
   }
   // The upload URL fixes the size, so this only trips if the storage ignored it.
   if (size !== upload.sizeBytes || size > policy.maxBytes) {
-    return reject('The file is not the size that was announced.');
+    return reject('TOO_LARGE', `Files for this can be at most ${mb(policy.maxBytes)} MB.`);
   }
 
   const checked = await checkAndReencode(
     await readObject('PRIVATE', upload.key, policy.maxBytes),
     policy.maxDimension,
   );
-  if (!checked.ok) return reject(checked.reason);
+  if (!checked.ok) return reject(checked.code, checked.reason);
 
   const key = finalKey(upload.purpose, uploadId);
   await writeObject(policy.bucket, key, checked.data, {
@@ -119,18 +125,37 @@ export async function processUpload(uploadId: string): Promise<'ready' | 'reject
   return 'ready';
 }
 
-/** Where an upload stands, for the browser to poll. Private files get a 5-minute link. */
-export async function getUpload(actor: UserActor, input: unknown) {
+const LINK_SECONDS = 300;
+
+const isRejectCode = (value: string | null): value is UploadRejectCode =>
+  value !== null && (UPLOAD_REJECT_CODES as readonly string[]).includes(value);
+
+/**
+ * Where an upload stands, for the browser to poll (F6 design 4.4): checking, ready with a fresh
+ * 5-minute link for private files, or refused with a code. Only the person who uploaded it may
+ * ask (T4): staff reach partner files through the review page.
+ */
+export async function getUpload(actor: UserActor, input: unknown): Promise<UploadStatusView> {
   const { uploadId } = uploadIdInput.parse(input);
   const upload = await runAs(actor, (ctx) => findUpload(ctx, uploadId));
-  if (!upload) throw notFound('That upload');
+  if (!upload || upload.ownerId !== actor.userId) throw notFound('That upload');
 
-  if (upload.status !== 'READY') {
-    return { uploadId, status: upload.status, reason: upload.rejectedReason ?? undefined };
+  if (upload.status === 'PENDING') return { uploadId, status: 'CHECKING' };
+  if (upload.status === 'REJECTED') {
+    return {
+      uploadId,
+      status: 'REJECTED',
+      code: isRejectCode(upload.rejectCode) ? upload.rejectCode : 'UNREADABLE',
+      reason: upload.rejectedReason ?? 'The image could not be read. Try a different file.',
+    };
   }
-  const url =
-    upload.bucket === 'PUBLIC'
-      ? publicUrl(upload.key)
-      : await presignDownload('PRIVATE', upload.key);
-  return { uploadId, status: upload.status, url };
+  if (upload.bucket === 'PUBLIC') {
+    return { uploadId, status: 'READY', url: publicUrl(upload.key), expiresAt: null };
+  }
+  return {
+    uploadId,
+    status: 'READY',
+    url: await presignDownload('PRIVATE', upload.key, LINK_SECONDS),
+    expiresAt: new Date(Date.now() + LINK_SECONDS * 1000).toISOString(),
+  };
 }

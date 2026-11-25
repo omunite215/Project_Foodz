@@ -65,14 +65,15 @@ function withReturnPath(page: string, returnPath: unknown) {
   return path === '/' ? page : `${page}?callbackUrl=${encodeURIComponent(path)}`;
 }
 
-/** Where a confirm-email link lands: send it as `callbackURL` on sign-up, resend and change. */
 /**
- * Where a sign-in lands. Staff who asked for nowhere in particular (no `callbackUrl`, so Home)
- * go to their tools, which send them on to their screen (F5 A1.1); everyone else goes back.
+ * Where a sign-in lands. Someone who asked for nowhere in particular (no `callbackUrl`, so Home)
+ * goes to their role's home when it has one (`roleHome`): staff to their tools (F5 A1.1),
+ * partners to the partner app (F6 P7.3). Everyone else goes back.
  */
-export const signInLanding = (returnPath: string, staff: boolean): string =>
-  staff && returnPath === '/' ? '/admin' : returnPath;
+export const signInLanding = (returnPath: string, home: string | null): string =>
+  home && returnPath === '/' ? home : returnPath;
 
+/** Where a confirm-email link lands: send it as `callbackURL` on sign-up, resend and change. */
 export const verifyEmailLanding = (returnPath: unknown) =>
   withReturnPath('/verify-email', returnPath);
 

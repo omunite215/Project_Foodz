@@ -38,7 +38,57 @@ export type NotificationCreatedEvent = {
       orderNumber: string;
       status: OrderNoticeStatus;
     }
+  /**
+   * Partner news (F6 design 11): the pending screen acts on `type` without reading the text.
+   * Bodies never carry a reviewer's reason or message (design D23).
+   */
+  | { kind: 'partner'; type: PartnerNoticeType }
 );
+
+export const PARTNER_NOTICE_TYPES = [
+  'partner.application-received',
+  'partner.sent-back',
+  'partner.approved',
+  'partner.rejected',
+  'partner.reopened',
+  'partner.suspended',
+  'partner.reinstated',
+  'partner.offline-no-location',
+  'partner.offline-kitchen-closed',
+] as const;
+export type PartnerNoticeType = (typeof PARTNER_NOTICE_TYPES)[number];
+
+/** Why a partner's online state changed (F6 B10, design "[BE] needs"). */
+export type PartnerAvailabilityReason =
+  | 'self'
+  | 'no-location'
+  | 'kitchen-closed'
+  | 'other-device'
+  | 'suspended'
+  | 'signed-out'
+  | 'demo-other-visitor';
+
+/**
+ * On `private-partner-{id}`: the partner went online or offline. `changeId` matches the one in
+ * the answer to the request that caused it, so the device that asked ignores its own echo; every
+ * other device follows it. No position, no personal data, no reason text.
+ */
+export interface PartnerAvailabilityChangedEvent {
+  online: boolean;
+  reason: PartnerAvailabilityReason;
+  changeId: string;
+  at: string;
+}
+
+/**
+ * On `private-partner-{id}`: approved, suspended or reinstated. A suspension stops location at
+ * once, before anything is drawn (design 5.9). Applicants hear decisions through
+ * `notification.created`, since they aren't partners yet (B10).
+ */
+export interface PartnerStatusChangedEvent {
+  status: 'APPROVED' | 'SUSPENDED';
+  at: string;
+}
 
 export interface RealtimeEvents {
   'notification.created': NotificationCreatedEvent;
@@ -52,6 +102,8 @@ export interface RealtimeEvents {
    * (cancelled, delivered). Orders waiting for payment or failed are never published here.
    */
   'order.board-changed': OrderChangedEvent;
+  'partner.availability-changed': PartnerAvailabilityChangedEvent;
+  'partner.status-changed': PartnerStatusChangedEvent;
   /** On `private-ops`: "86 it" from any board (design 4.3). */
   'menu.availability-changed': { dishId: string; available: boolean; at: string };
   'courier.location': {

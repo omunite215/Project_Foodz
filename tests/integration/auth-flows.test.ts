@@ -282,6 +282,19 @@ describe('sign-in', () => {
     ).toBe(1);
   });
 
+  it('lands a partner who asked for nowhere on the partner app (F6 P7.3)', async () => {
+    const { email, userId } = await signUp('partner');
+    await migrator.user.update({ where: { id: userId }, data: { role: 'partner' } });
+    switchBrowser(newBrowser());
+    expect((await actions.signInAction({ email, password: PASSWORD }))?.data).toEqual({
+      status: 'signed-in',
+      redirectTo: '/partner',
+    });
+    switchBrowser(newBrowser());
+    const asked = await actions.signInAction({ email, password: PASSWORD, callbackUrl: '/menu' });
+    expect(asked?.data).toEqual({ status: 'signed-in', redirectTo: '/menu' });
+  });
+
   it('never returns a path that dot segments turn into another host (S4)', async () => {
     const { email } = await signUp();
     switchBrowser(newBrowser());
@@ -574,6 +587,32 @@ describe('confirm-email links', () => {
     expect(new URL(again.headers.get('location') ?? '', SITE).searchParams.get('status')).toBe(
       'already-confirmed',
     );
+  });
+
+  it('keeps the partner application as the way on, in this browser or another (F6 P1.3)', async () => {
+    const browser = switchBrowser(newBrowser());
+    const email = freshEmail('luis');
+    await actions.signUpAction({
+      name: 'Luis Moreno',
+      email,
+      password: PASSWORD,
+      captchaToken: 'ok',
+      callbackUrl: '/partner/apply',
+    });
+    const link = new URL(await linkIn(email, 'verify-email'));
+    expect(link.searchParams.get('callbackURL')).toBe(
+      '/verify-email?callbackUrl=%2Fpartner%2Fapply',
+    );
+    const path = link.pathname + link.search;
+
+    // The phone's mail app opens it in another browser: signed in there, the way on kept.
+    const elsewhere = new URL((await get(path, newBrowser())).headers.get('location') ?? '', SITE);
+    expect(elsewhere.pathname).toBe('/verify-email');
+    expect(elsewhere.searchParams.get('callbackUrl')).toBe('/partner/apply');
+    expect(elsewhere.searchParams.get('via')).toBe('new-session');
+
+    const same = new URL((await get(path, browser)).headers.get('location') ?? '', SITE);
+    expect(same.searchParams.get('callbackUrl')).toBe('/partner/apply');
   });
 
   it('shows the flash after confirming in the browser that signed up', async () => {

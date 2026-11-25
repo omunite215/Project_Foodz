@@ -113,13 +113,17 @@ test.describe('frames (A1.6, A16.1)', () => {
     }).toPass({ timeout: 15_000 });
   });
 
-  test('support gets the sidebar listing only the order board', async ({ page }, testInfo) => {
+  test('support gets the sidebar listing the order board and partners', async ({
+    page,
+  }, testInfo) => {
     await signInStaff(page, STAFF.support);
     if (isPhone(testInfo)) {
       await page.getByRole('button', { name: 'Open menu' }).click();
     }
     const nav = page.getByRole('navigation', { name: 'Staff' });
-    await expect(nav.getByRole('link')).toHaveCount(1);
+    // F6 A18.1: "Partners" joins the order board for SUPPORT and ADMIN.
+    await expect(nav.getByRole('link')).toHaveCount(2);
+    await expect(nav.getByRole('link', { name: /^Partners/ })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Order board' })).toHaveAttribute(
       'aria-current',
       'page',

@@ -67,6 +67,7 @@ function SessionEndingBanner({ expiresAt, timeZone }: { expiresAt: string; timeZ
  */
 export function AdminPage({
   title,
+  titleAs,
   status,
   end,
   banners,
@@ -75,6 +76,8 @@ export function AdminPage({
   mainClassName,
 }: {
   title?: string;
+  /** The top bar's title as plain text where the content holds the h1. */
+  titleAs?: 'h1' | 'p';
   status?: ReactNode;
   end?: ReactNode;
   /** The page's own banners, after demo and session ending. */
@@ -88,7 +91,7 @@ export function AdminPage({
 
   return (
     <div className={cn('flex min-h-dvh min-w-0 flex-col', className)}>
-      <AdminTopBar title={title} status={status} end={end} />
+      <AdminTopBar title={title} titleAs={titleAs} status={status} end={end} />
       <main
         id="main"
         tabIndex={-1}

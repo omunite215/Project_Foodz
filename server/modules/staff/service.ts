@@ -23,6 +23,7 @@ import {
   STEP_UP_WINDOW_MS,
   stepUpInput,
   type StaffRole,
+  type StaffScreen,
   type StaffShell,
 } from './schema';
 
@@ -65,12 +66,18 @@ export function staffShellOf(
     return { kind: 'twoFactorRequired', user };
   }
   const board = can(role, { order: ['read-any'] });
+  // F6 A18.1: SUPPORT, ADMIN and the demo admin review partners.
+  const partners = can(role, { partner: ['review-application'] });
   const ends = staffSessionEnd(facts.session.createdAt);
   const expires = facts.session.expiresAt < ends ? facts.session.expiresAt : ends;
+  const screens: StaffScreen[] = [
+    ...(board ? (['orderBoard'] as const) : []),
+    ...(partners ? (['partners'] as const) : []),
+  ];
   return {
     kind: 'staff',
     user,
-    screens: board ? ['orderBoard'] : [],
+    screens,
     home: board ? '/admin/orders' : null,
     // A content editor has no screen yet: a sidebar with no entries would look broken (D3).
     sidebar: board && role !== 'kitchen',
@@ -146,9 +153,10 @@ export function stepUpFreshUntilFor(actor: UserActor, now = new Date()): Promise
 
 // ------------------------------------------------------------------ the step-up gate (A7.10)
 
-export const stepUpRequired = () =>
+/** `action`: what the code is for, `refund` (F5) or `partner` (F6: approve, suspend, reinstate). */
+export const stepUpRequired = (action: 'refund' | 'partner' = 'refund') =>
   new AppError('STEP_UP_REQUIRED', 'Enter a code from your authenticator app to continue.', 403, {
-    details: { action: 'refund', windowMinutes: STEP_UP_WINDOW_MS / 60_000 },
+    details: { action, windowMinutes: STEP_UP_WINDOW_MS / 60_000 },
   });
 
 async function lockedError(retryAt: Date, now: Date) {
@@ -172,8 +180,13 @@ async function lockedError(retryAt: Date, now: Date) {
  * recorded on the session (`sessions.step_up_at`) and covers the next 10 minutes. Every attempt
  * is audited (`staff.step-up`).
  */
-export async function passStepUp(actor: UserActor, code: unknown, now = new Date()): Promise<void> {
-  if (code === undefined || code === null) throw stepUpRequired();
+export async function passStepUp(
+  actor: UserActor,
+  code: unknown,
+  now = new Date(),
+  action: 'refund' | 'partner' = 'refund',
+): Promise<void> {
+  if (code === undefined || code === null) throw stepUpRequired(action);
   const { method, code: value } = stepUpInput.parse(code);
   const session = await currentSession();
   if (!session || session.user.id !== actor.userId) throw unauthenticated();

@@ -23,7 +23,11 @@ export async function notify(input: NotifyInput): Promise<{ id: string }> {
   await publish(
     channels.user(saved.userId),
     'notification.created',
-    data.order ? { ...base, kind: 'order', ...data.order } : { ...base, kind: 'general' },
+    data.order
+      ? { ...base, kind: 'order', ...data.order }
+      : data.partner
+        ? { ...base, kind: 'partner', type: data.partner.type }
+        : { ...base, kind: 'general' },
   );
 
   if (data.email) {

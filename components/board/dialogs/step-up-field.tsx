@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input';
 
 export type StepUpMethod = 'totp' | 'backup';
 
+const REFUND_HINT = 'We ask for a code before giving money back, at most every 10 minutes.';
+
 export function StepUpField({
   method,
   value,
@@ -20,6 +22,7 @@ export function StepUpField({
   inputRef,
   onChange,
   onSwap,
+  hint = REFUND_HINT,
 }: {
   method: StepUpMethod;
   value: string;
@@ -29,6 +32,8 @@ export function StepUpField({
   inputRef: RefObject<HTMLInputElement | null>;
   onChange: (value: string) => void;
   onSwap: () => void;
+  /** Why a code is asked for here; the board's refund wording by default. */
+  hint?: string;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -54,7 +59,7 @@ export function StepUpField({
         className="mt-2 h-14 text-center text-title-2 font-medium tracking-[0.35em] tabular-nums md:max-w-[320px]"
       />
       <p id={hintId} className="mt-2 text-body-5 text-muted-foreground">
-        We ask for a code before giving money back, at most every 10 minutes.
+        {hint}
       </p>
       <FieldError id={errorId}>{error}</FieldError>
       <button

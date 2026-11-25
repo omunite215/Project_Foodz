@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PARTNER_NOTICE_TYPES } from '@/lib/realtime/events';
 
 /** Links point inside the site only: a path, never another host. */
 const internalPath = z
@@ -29,6 +30,11 @@ export const notifyInput = z
         orderNumber: z.string().min(1).max(20),
         status: z.enum(['accepted', 'ready', 'pickedUp', 'delivered', 'cancelled']),
       })
+      .strict()
+      .optional(),
+    /** Partner news (F6 design 11): the pending screen acts on `type` without reading text. */
+    partner: z
+      .object({ type: z.enum(PARTNER_NOTICE_TYPES) })
       .strict()
       .optional(),
   })

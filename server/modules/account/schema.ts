@@ -164,6 +164,27 @@ export interface AccountExport {
   }[];
   /** Saved cards: brand, last 4 and expiry only (F4 S6.14). */
   savedCards: { brand: string; last4: string; expires: string }[];
+  /**
+   * The partner application or partner record (F6 P15.5). Never the full ID number or the
+   * images: "To get copies of your ID details, contact us."
+   */
+  partner?: PartnerExport;
+}
+
+export interface PartnerExport {
+  status: string;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  approvedAt: string | null;
+  vehicle: string;
+  plate: string | null;
+  idDocument: string | null;
+  idNumberLast4: string | null;
+  idExpiresOn: string | null;
+  partnerTermsVersion: number | null;
+  partnerTermsAcceptedAt: string | null;
+  online: boolean;
+  note: string;
 }
 
 /** A person as staff see them; personal fields are masked for demo staff (U4). */
