@@ -391,6 +391,10 @@ describe('door problems and staff (P43, A50)', () => {
       kind: 'locked',
       words: `Order ${order.number}: the delivery code is locked after 5 wrong tries.`,
     });
+    // The live map carries the same banners and the kitchen's pin (design 3.3, 3.9).
+    const map = await asBrowser(daniel.browser, () => actions.opsMapAction());
+    expect(map?.data?.attention?.[0]).toMatchObject({ kind: 'locked', orderNumber: order.number });
+    expect(map?.data?.kitchen).toEqual({ lat: expect.any(Number), lng: expect.any(Number) });
   });
 });
 

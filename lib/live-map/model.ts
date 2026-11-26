@@ -1,4 +1,9 @@
-import type { MapState, OpsMapSnapshot } from '@/server/modules/tracking/schema';
+import type {
+  MapState,
+  OpsMapCourier,
+  OpsMapDelivery,
+  OpsMapSnapshot,
+} from '@/server/modules/tracking/schema';
 import { mapStateWords } from '@/server/modules/tracking/text';
 
 /*
@@ -41,4 +46,19 @@ export function applyPosition(data: OpsMapData, event: PositionEvent): OpsMapDat
   const couriers = [...data.couriers];
   couriers[index] = next;
   return { ...data, couriers };
+}
+
+type Point = { lat: number; lng: number };
+
+/** The camera's first view (design 3.3): the kitchen and every marker on the map. */
+export function firstViewPoints(
+  kitchen: Point | null,
+  couriers: readonly Pick<OpsMapCourier, 'point'>[],
+  deliveries: readonly Pick<OpsMapDelivery, 'dropoffPoint'>[],
+): Point[] {
+  return [
+    ...(kitchen ? [kitchen] : []),
+    ...couriers.flatMap((courier) => (courier.point ? [courier.point] : [])),
+    ...deliveries.map((delivery) => delivery.dropoffPoint),
+  ];
 }

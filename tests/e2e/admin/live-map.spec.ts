@@ -31,6 +31,8 @@ test('support sees couriers and deliveries beside the map, or one at a time on a
   const list = page.getByRole('navigation', { name: 'Couriers and deliveries' });
   await expect(list.getByRole('tab', { name: /^Couriers · \d+$/ })).toBeVisible();
   await expect(list.getByRole('tab', { name: /^Deliveries · \d+$/ })).toBeVisible();
+  // F7's sound switch, for the stuck-delivery chime (design 3.9).
+  await expect(page.getByRole('button', { name: 'Turn on sound' })).toBeVisible();
 
   if (isPhone(testInfo)) {
     // One view at a time (A55.1): the list first, then the map with its text note.
@@ -39,6 +41,7 @@ test('support sees couriers and deliveries beside the map, or one at a time on a
     await page.getByRole('radio', { name: 'Map' }).click();
     await expect(list).toBeHidden();
     await expect(page.locator('[data-map-state]')).toHaveCount(1);
+    await expect(page.locator('[data-kitchen-pin]')).toHaveCount(1);
     await expect(
       page.getByText(
         'The map shows the same couriers and deliveries as the list. Switch to the list to go through them.',
@@ -47,8 +50,10 @@ test('support sees couriers and deliveries beside the map, or one at a time on a
     await page.getByRole('radio', { name: 'List' }).click();
     await expect(list).toBeVisible();
   } else {
-    // Two columns from 1024 px (design 3.2): the list and the map at once.
+    // Two columns from 1024 px (design 3.2): the list and the map at once, with F6's kitchen
+    // pin (design 3.3).
     await expect(page.locator('[data-map-state]')).toHaveCount(1);
+    await expect(page.locator('[data-kitchen-pin]')).toHaveCount(1);
     await expect(page.getByRole('radio', { name: 'Map' })).toBeHidden();
     if (!isTablet(testInfo)) {
       await expect(page.getByRole('link', { name: 'Live map' })).toHaveAttribute(

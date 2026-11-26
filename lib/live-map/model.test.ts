@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OpsMapCourier } from '@/server/modules/tracking/schema';
-import { applyPosition, type OpsMapData } from './model';
+import { applyPosition, firstViewPoints, type OpsMapData } from './model';
 
 const luis: OpsMapCourier = {
   partnerId: 'p1',
@@ -69,5 +69,22 @@ describe('a courier moves on the live map (A46.3)', () => {
         at: '2026-11-21T00:41:00.000Z',
       }),
     ).toBeNull();
+  });
+});
+
+describe("the camera's first view (design 3.3)", () => {
+  it('fits the kitchen, every courier with a point and every drop-off', () => {
+    const kitchen = { lat: 42.3505, lng: -71.045 };
+    const points = firstViewPoints(
+      kitchen,
+      [luis, { ...luis, partnerId: 'p2', point: null }],
+      [{ dropoffPoint: { lat: 42.36, lng: -71.0547 } }],
+    );
+    expect(points).toEqual([kitchen, { lat: 42.35, lng: -71.05 }, { lat: 42.36, lng: -71.0547 }]);
+  });
+
+  it('still fits the kitchen when nobody is out', () => {
+    expect(firstViewPoints({ lat: 42.3505, lng: -71.045 }, [], [])).toHaveLength(1);
+    expect(firstViewPoints(null, [], [])).toEqual([]);
   });
 });

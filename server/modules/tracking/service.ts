@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { channels } from '@/lib/realtime/channels';
 import type { DeliveryChangedEvent } from '@/lib/realtime/events';
 import { displayPhone } from '@/lib/phone';
+import { STORE_TIME_ZONE } from '@/lib/order-text';
 import { can, type Permission } from '@/server/auth/roles';
 import { requirePermission, type UserActor } from '@/server/auth/session';
 import { type DbContext, runAs, runAsSystem } from '@/server/db/context';
@@ -1113,7 +1114,10 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
     starts: viewer.isDemo
       ? await repo.listDemoStarts(ctx, new Date(now.getTime() - 3_600_000))
       : [],
+    kitchen: await repo.findKitchenPoint(ctx),
   }));
+  // A49 (design 3.9): the stuck-delivery banners show on the live map too, from the same pool.
+  const { attention } = await boardTracking(viewer, STORE_TIME_ZONE, now);
   const byPartner = new Map(
     data.active.flatMap((row) => (row.partnerId ? [[row.partnerId, row] as const] : [])),
   );
@@ -1190,6 +1194,8 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
       number: order.number,
       readyAt: order.readyAt.toISOString(),
     })),
+    attention,
+    kitchen: data.kitchen,
     demoRun: viewer.isDemo
       ? {
           running: Boolean(data.running),

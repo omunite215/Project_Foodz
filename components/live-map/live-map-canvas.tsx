@@ -20,6 +20,7 @@ import type { MapState, OpsMapCourier, OpsMapDelivery } from '@/server/modules/t
 import { MapFrame, type MapHandle } from '@/components/map/map-frame';
 import {
   CourierDisc,
+  KitchenPin,
   LabelChip,
   mountMarker,
   type MountedMarker,
@@ -28,6 +29,7 @@ import {
 import { RouteLine } from '@/components/map/route-line';
 import { MAP_PALETTES, STALE_FILL, STATE_FILLS } from '@/lib/map/colors';
 import { createGlider, type Glider } from '@/lib/map/glide';
+import { firstViewPoints } from '@/lib/live-map/model';
 import { boundsOf, inView } from '@/lib/map/maplibre';
 import { prefersReducedMotion } from '@/lib/motion';
 import {
@@ -120,6 +122,7 @@ function CanvasLayers({
   handle,
   couriers,
   deliveries,
+  kitchen,
   serverNowMs,
   selection,
   onSelect,
@@ -127,6 +130,7 @@ function CanvasLayers({
   handle: MapHandle;
   couriers: readonly OpsMapCourier[];
   deliveries: readonly OpsMapDelivery[];
+  kitchen: { lat: number; lng: number } | null;
   serverNowMs: number;
   selection: Selection;
   onSelect: (selection: Selection) => void;
@@ -240,18 +244,31 @@ function CanvasLayers({
     }
   }, [handle, deliveries, selection]);
 
-  // The first view fits every marker, once; after that the map never moves by itself.
+  // Design 3.3: F6's kitchen pin (kept by value, so a refreshed snapshot doesn't redraw it).
+  const kitchenLat = kitchen?.lat;
+  const kitchenLng = kitchen?.lng;
+  useEffect(() => {
+    if (kitchenLat === undefined || kitchenLng === undefined) return undefined;
+    const pin = mountMarker(
+      handle,
+      { lat: kitchenLat, lng: kitchenLng },
+      <span data-kitchen-pin="">
+        <KitchenPin palette={LIGHT} />
+      </span>,
+      { anchor: 'bottom' },
+    );
+    return () => pin.remove();
+  }, [handle, kitchenLat, kitchenLng]);
+
+  // The first view fits the kitchen and every marker, once; after that the map never moves by
+  // itself.
   useEffect(() => {
     if (fitted.current) return;
-    const points = [
-      ...couriers.flatMap((courier) => (courier.point ? [courier.point] : [])),
-      ...deliveries.map((delivery) => delivery.dropoffPoint),
-    ];
-    const bounds = boundsOf(points);
+    const bounds = boundsOf(firstViewPoints(kitchen, couriers, deliveries));
     if (!bounds) return;
     fitted.current = true;
     map.fitBounds(bounds, { padding: 48, maxZoom: 15, duration: 0 });
-  }, [map, couriers, deliveries]);
+  }, [map, couriers, deliveries, kitchen]);
 
   // Selecting from the list eases to the marker, only when it's off screen.
   useEffect(() => {
@@ -316,17 +333,20 @@ function CanvasLayers({
 export function LiveMapCanvas({
   couriers,
   deliveries,
+  kitchen = null,
   serverNowMs,
   selection,
   onSelect,
 }: {
   couriers: readonly OpsMapCourier[];
   deliveries: readonly OpsMapDelivery[];
+  kitchen?: { lat: number; lng: number } | null;
   serverNowMs: number;
   selection: Selection;
   onSelect: (selection: Selection) => void;
 }) {
-  const first = couriers.find((courier) => courier.point)?.point ??
+  const first = kitchen ??
+    couriers.find((courier) => courier.point)?.point ??
     deliveries[0]?.dropoffPoint ?? { lat: 42.3505, lng: -71.045 };
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -347,6 +367,7 @@ export function LiveMapCanvas({
             handle={handle}
             couriers={couriers}
             deliveries={deliveries}
+            kitchen={kitchen}
             serverNowMs={serverNowMs}
             selection={selection}
             onSelect={onSelect}

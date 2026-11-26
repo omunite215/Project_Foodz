@@ -416,6 +416,17 @@ export async function findStorePhone(ctx: DbContext): Promise<string | null> {
   return row?.contactPhone ?? null;
 }
 
+/** The kitchen's point for the live map (design 3.3). */
+export async function findKitchenPoint(
+  ctx: DbContext,
+): Promise<{ lat: number; lng: number } | null> {
+  const row = await db(ctx).siteSettings.findUnique({
+    where: { id: 1 },
+    select: { lat: true, lng: true },
+  });
+  return row ? { lat: row.lat, lng: row.lng } : null;
+}
+
 /** The caller's own order (run as the customer). */
 export async function findOwnOrder(ctx: DbContext, orderId: string, userId: string) {
   return db(ctx).order.findFirst({ where: { id: orderId, userId }, select: { id: true } });

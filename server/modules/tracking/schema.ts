@@ -357,6 +357,10 @@ export interface OpsMapSnapshot {
   deliveries: OpsMapDelivery[];
   readyWithoutCourier: { orderId: string; number: string; readyAt: string }[];
   demoRun: DemoRunState | null;
+  /** A49 (design 3.9): the stuck deliveries, as on the board, oldest first. */
+  attention?: AttentionItem[];
+  /** Design 3.3: the kitchen's pin; null when the store has no location. */
+  kitchen?: { lat: number; lng: number } | null;
 }
 
 /** `details` per new refusal code (server/errors.ts). */

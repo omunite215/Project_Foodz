@@ -232,6 +232,8 @@ const SNAPSHOT: OpsMapSnapshot = {
     { orderId: '0193a000-0000-7000-8000-000000000201', number: '1046', readyAt: ago(360) },
   ],
   demoRun: null,
+  attention: ATTENTION.slice(0, 2),
+  kitchen: { lat: 42.3505, lng: -71.045 },
 };
 
 function WithQuery({ children, demo = false }: { children: ReactNode; demo?: boolean }) {

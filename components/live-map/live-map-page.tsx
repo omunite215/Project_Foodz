@@ -13,6 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { assignableCouriersAction, sendStaffOfferAction } from '@/server/modules/delivery/actions';
 import { startDemoDeliveryAction } from '@/server/modules/tracking/actions';
@@ -24,6 +25,8 @@ import type {
 import { MAP_STATES } from '@/server/modules/tracking/schema';
 import { AdminPage } from '@/components/admin/admin-page';
 import { orderHref } from '@/components/board/order-card';
+import { SoundButton, useSound } from '@/components/board/sound-controls';
+import { StuckBanners, useStuckChime } from '@/components/board/stuck-banners';
 import { Banner } from '@/components/admin/banners';
 import { showBoardNotice } from '@/components/admin/board-notices';
 import { LiveChip } from '@/components/admin/status-chips';
@@ -668,8 +671,14 @@ export function LiveMapPage({
   initialTab: Tab | null;
 }) {
   const hydrated = useHydrated();
+  const router = useRouter();
   const query = useOpsMap(initial);
   const data = query.data;
+  // A49 (design 3.9): the stuck-delivery banners and F7's chime, as on the board, with the
+  // board's own sound switch.
+  const sound = useSound();
+  const attention = data.attention ?? [];
+  useStuckChime(attention, sound.state === 'on');
   const writer = useOpsMapWriter();
   const serverNowMs = useServerClock(data.asOf, data.receivedAt);
   const wide = useMediaQuery('(min-width: 64rem)');
@@ -851,6 +860,7 @@ export function LiveMapPage({
     <LiveMapCanvas
       couriers={data.couriers}
       deliveries={data.deliveries}
+      kitchen={data.kitchen ?? null}
       serverNowMs={serverNowMs}
       selection={selection}
       onSelect={(next) => select(next, null)}
@@ -863,12 +873,18 @@ export function LiveMapPage({
       className="lg:h-dvh lg:min-h-0 lg:overflow-hidden"
       mainClassName="lg:min-h-0"
       status={<LiveChip state={paused ? 'reconnecting' : connected ? 'live' : 'notLive'} />}
+      end={<SoundButton state={sound.state} onToggle={() => void sound.toggle()} />}
       banners={
-        paused ? (
-          <Banner key="paused" variant="info" icon={RefreshCw}>
-            {pausedText(lastUpdate, timeZone)}
-          </Banner>
-        ) : null
+        <>
+          {paused ? (
+            <Banner key="paused" variant="info" icon={RefreshCw}>
+              {pausedText(lastUpdate, timeZone)}
+            </Banner>
+          ) : null}
+          {attention.length > 0 ? (
+            <StuckBanners items={attention} onOpen={(orderId) => router.push(orderHref(orderId))} />
+          ) : null}
+        </>
       }
     >
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-neutral-6 bg-white px-4 lg:px-6">
