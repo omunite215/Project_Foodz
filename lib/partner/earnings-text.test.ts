@@ -9,6 +9,7 @@ import {
   dayLabel,
   daysLabel,
   deliveredTodayLine,
+  deliveryPayRows,
   deliveryRowName,
   deliverySubtitle,
   durationWords,
@@ -405,5 +406,55 @@ describe('loading states (review S4, S5, P5)', () => {
     });
     expect(noEarningsCopy(false).line).toMatch(/^Go online to get your first order\./);
     expect(noEarningsCopy(false).homeAction).toBe(true);
+  });
+});
+
+const tipDetail = (orderTipCents: number) => ({
+  feeCents: 264,
+  tipCents: 0,
+  totalCents: 264,
+  orderTipCents,
+});
+
+describe('a cancellation after pickup without a tip (review P12)', () => {
+  const cancelled = {
+    kind: 'cancelledAfterPickup' as const,
+    amountCents: 264,
+    tipCents: null,
+    cashCents: null,
+  };
+
+  it('says the tip went back only when there was one', () => {
+    expect(endedWords('cancelled-after-pickup', true)).toMatch(/The tip went back/);
+    expect(endedWords('cancelled-after-pickup', false)).toBe(
+      'Cancelled after pickup. You still get the delivery fee.',
+    );
+  });
+
+  it('shows "Tip · Not paid" only for an order that had a tip', () => {
+    expect(deliveryPayRows(cancelled, tipDetail(500)).map((pay) => pay.label)).toEqual([
+      'Delivery pay',
+      'Tip',
+      'Total',
+    ]);
+    expect(deliveryPayRows(cancelled, tipDetail(0)).map((pay) => pay.label)).toEqual([
+      'Delivery pay',
+      'Total',
+    ]);
+  });
+
+  it('builds a delivery from the row, then the detail', () => {
+    const delivery = {
+      kind: 'delivery' as const,
+      amountCents: 764,
+      tipCents: 500,
+      cashCents: 5897,
+    };
+    expect(deliveryPayRows(delivery, null)).toEqual([
+      { label: 'Delivery pay', value: '$2.64' },
+      { label: 'Tip', value: '$5.00' },
+      { label: 'Total', value: '$7.64', total: true },
+      { label: 'Cash collected', value: '$58.97' },
+    ]);
   });
 });

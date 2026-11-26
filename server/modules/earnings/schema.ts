@@ -415,6 +415,8 @@ export interface EarningsDeliveryDetail {
   totalCents: number;
   cashCents: number | null;
   how: DeliveryHow;
+  /** The tip the order carried, paid or not: a cancellation after pickup says it went back. */
+  orderTipCents: number;
 }
 
 /** What the F6 home and the F8 hand-over answer gain (P51.3, P57.1). */

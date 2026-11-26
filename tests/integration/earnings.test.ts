@@ -195,6 +195,7 @@ describe("the partner's earnings (P52–P61)", () => {
       cashCents: 5_897,
       how: 'code',
       areaWords: 'Boston 02109',
+      orderTipCents: 500,
     });
     expect(detail.steps.map((step) => step.kind)).toEqual(['accepted', 'pickedUp', 'delivered']);
     expect(JSON.stringify(detail)).not.toMatch(/Faneuil|Priya|5550101/);

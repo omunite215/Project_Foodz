@@ -498,6 +498,7 @@ export async function getEarningsDelivery(
       totalCents: feeCents + tipCents,
       cashCents: cash > 0 ? cash : null,
       how,
+      orderTipCents: facts.tipCents ?? tipCents,
     };
   });
 }

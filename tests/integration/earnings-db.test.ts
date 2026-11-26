@@ -543,6 +543,10 @@ describe('who reads the ledger, with the service bypassed (E9, P60.1)', () => {
     expect(await facts(luis.actor)).toHaveLength(1);
     expect(await facts(grace.actor)).toHaveLength(0);
     expect(Object.keys((await facts(luis.actor))[0]!)).not.toContain('address_text');
+    // Review P12: the delivery's frozen tip comes too, so the sheet knows whether there was one.
+    const [tip] = await migrator.$queryRaw<{ tip_cents: number }[]>`
+      SELECT tip_cents FROM deliveries WHERE id = ${deliveryId}::uuid`;
+    expect((await facts(luis.actor))[0]).toMatchObject({ tip_cents: tip?.tip_cents });
   });
 });
 

@@ -411,6 +411,7 @@ const detail = (overrides: Partial<EarningsDeliveryDetail>): EarningsDeliveryDet
   totalCents: 764,
   cashCents: 5897,
   how: 'code',
+  orderTipCents: 500,
   ...overrides,
 });
 
@@ -431,6 +432,14 @@ export const DETAILS = {
       { kind: 'cancelled', at: at('2026-11-19', '20:31') },
     ],
   }),
+};
+
+/** S1105: cancelled after pickup on an order without a tip (review P12). */
+export const CANCELLED_NO_TIP: EarningsDeliveryDetail = {
+  ...DETAILS.cancelled,
+  deliveryId: 'delivery-no-tip',
+  orderNumber: '1105',
+  orderTipCents: 0,
 };
 
 const ratings = (overrides: Partial<PartnerRatingsSummary>): PartnerRatingsSummary => ({

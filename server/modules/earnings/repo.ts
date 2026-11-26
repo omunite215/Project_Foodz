@@ -134,6 +134,8 @@ export interface DeliveryFacts {
   endedAt: Date | null;
   status: string;
   handoverHow: string | null;
+  /** The delivery's frozen tip, paid or not (design review P12). */
+  tipCents: number | null;
 }
 
 /** What the partner may know about deliveries he was paid for (definer function, P55.2). */
@@ -145,7 +147,8 @@ export function partnerDeliveryFacts(
   return db(ctx).$queryRaw<DeliveryFacts[]>`
     SELECT delivery_id::text AS "deliveryId", order_number AS "orderNumber", address_city AS "addressCity",
            distance_km AS "distanceKm", accepted_at AS "acceptedAt", picked_up_at AS "pickedUpAt",
-           delivered_at AS "deliveredAt", ended_at AS "endedAt", status, handover_how AS "handoverHow"
+           delivered_at AS "deliveredAt", ended_at AS "endedAt", status, handover_how AS "handoverHow",
+           tip_cents AS "tipCents"
     FROM app_partner_delivery_facts(${[...ids]}::uuid[])`;
 }
 

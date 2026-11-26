@@ -21,6 +21,7 @@ import { DeliverySheet } from './delivery-sheet';
 import {
   BIG_DAY_SUMMARY,
   BUSY_WEEK,
+  CANCELLED_NO_TIP,
   CARRIED_CASH,
   DETAILS,
   DIEGO_CASH,
@@ -404,6 +405,9 @@ export const DeliveryMarkedByFoodz: Story = {
 };
 export const DeliveryCancelledAfterPickup: Story = {
   render: () => <DeliveryStory detail={DETAILS.cancelled} theme="dark" />,
+};
+export const DeliveryCancelledWithoutTip: Story = {
+  render: () => <DeliveryStory detail={CANCELLED_NO_TIP} />,
 };
 export const DeliveryNotAvailable: Story = {
   render: () => (

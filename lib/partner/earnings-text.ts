@@ -323,20 +323,54 @@ const STEP_WORDS: Record<EarningsDeliveryDetail['steps'][number]['kind'], string
 export const stepWords = (step: EarningsDeliveryDetail['steps'][number], timeZone: string) =>
   `${STEP_WORDS[step.kind]} ${clockAt(step.at, timeZone)}`;
 
-/** How it ended (design 1.8's table). */
-export function endedWords(how: DeliveryHow): string {
+/** How it ended (design 1.8's table); the tip sentence only when the order had one (P12). */
+export function endedWords(how: DeliveryHow, orderHadTip = true): string {
   switch (how) {
     case 'staff-confirmed':
       return 'Confirmed by Foodz support';
     case 'admin-override':
       return 'Marked delivered by Foodz';
     case 'cancelled-after-pickup':
-      return 'Cancelled after pickup. You still get the delivery fee. The tip went back to the customer with the refund.';
+      return orderHadTip
+        ? 'Cancelled after pickup. You still get the delivery fee. The tip went back to the customer with the refund.'
+        : 'Cancelled after pickup. You still get the delivery fee.';
     case 'code':
     case 'demo':
     default:
       return 'Delivered with the code';
   }
+}
+
+/**
+ * The sheet's pay rows (design 1.8): from the row at once, the detail's figures once read. A
+ * cancellation after pickup shows "Tip · Not paid" only when the order had a tip (review P12).
+ */
+export function deliveryPayRows(
+  row: Pick<EarningsRow, 'kind' | 'amountCents' | 'tipCents' | 'cashCents'>,
+  detail: Pick<
+    EarningsDeliveryDetail,
+    'feeCents' | 'tipCents' | 'totalCents' | 'orderTipCents'
+  > | null,
+): { label: string; value: string; total?: true }[] {
+  if (row.kind === 'cancelledAfterPickup') {
+    const fee = formatPrice(row.amountCents);
+    return [
+      { label: 'Delivery pay', value: fee },
+      ...(detail && detail.orderTipCents > 0 ? [{ label: 'Tip', value: 'Not paid' }] : []),
+      { label: 'Total', value: fee, total: true as const },
+    ];
+  }
+  const tip = row.tipCents ?? 0;
+  return [
+    { label: 'Delivery pay', value: formatPrice(detail?.feeCents ?? row.amountCents - tip) },
+    { label: 'Tip', value: formatPrice(detail?.tipCents ?? tip) },
+    {
+      label: 'Total',
+      value: formatPrice(detail?.totalCents ?? row.amountCents),
+      total: true as const,
+    },
+    ...(row.cashCents ? [{ label: 'Cash collected', value: formatPrice(row.cashCents) }] : []),
+  ];
 }
 
 export const STEPS_OFFLINE = "Steps show when you're back online.";

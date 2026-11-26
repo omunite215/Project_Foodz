@@ -4,9 +4,9 @@ import { CircleCheck, Undo2 } from 'lucide-react';
 import { Fragment } from 'react';
 import type { EarningsDeliveryDetail, EarningsRow } from '@/server/modules/earnings/schema';
 import { Button } from '@/components/ui/button';
-import { formatPrice } from '@/lib/format';
 import {
   DELIVERY_NOT_FOUND,
+  deliveryPayRows,
   deliverySubtitle,
   endedWords,
   STEPS_OFFLINE,
@@ -45,6 +45,7 @@ function practiceDetail(row: EarningsRow, date: string): EarningsDeliveryDetail 
     totalCents: row.amountCents,
     cashCents: null,
     how: 'demo',
+    orderTipCents: row.tipCents ?? 0,
   };
 }
 
@@ -77,21 +78,7 @@ export function DeliverySheet({
   const cancelled = row.kind === 'cancelledAfterPickup';
   const detail = practice ? practiceDetail(row, date) : query.data;
   const notFound = query.error instanceof EarningsReadError && query.error.status === 404;
-  const tip = row.tipCents ?? 0;
-  const fee = row.amountCents - (cancelled ? 0 : tip);
-
-  const payRows: { label: string; value: string }[] = cancelled
-    ? [
-        { label: 'Delivery pay', value: formatPrice(row.amountCents) },
-        { label: 'Tip', value: 'Not paid' },
-        { label: 'Total', value: formatPrice(row.amountCents) },
-      ]
-    : [
-        { label: 'Delivery pay', value: formatPrice(detail?.feeCents ?? fee) },
-        { label: 'Tip', value: formatPrice(detail?.tipCents ?? tip) },
-        { label: 'Total', value: formatPrice(detail?.totalCents ?? row.amountCents) },
-        ...(row.cashCents ? [{ label: 'Cash collected', value: formatPrice(row.cashCents) }] : []),
-      ];
+  const payRows = deliveryPayRows(row, detail ?? null);
 
   let steps;
   if (detail) {
@@ -150,12 +137,11 @@ export function DeliverySheet({
             wideLabels
             rows={payRows.map((pay) => ({
               label: pay.label,
-              value:
-                pay.label === 'Total' ? (
-                  <b className="font-semibold tabular-nums">{pay.value}</b>
-                ) : (
-                  <span className="tabular-nums">{pay.value}</span>
-                ),
+              value: pay.total ? (
+                <b className="font-semibold tabular-nums">{pay.value}</b>
+              ) : (
+                <span className="tabular-nums">{pay.value}</span>
+              ),
             }))}
           />
         </div>
@@ -167,7 +153,7 @@ export function DeliverySheet({
           ) : (
             <CircleCheck className="mt-0.5 size-5 shrink-0 text-success-mark" aria-hidden />
           )}
-          {endedWords(how)}
+          {endedWords(how, (detail?.orderTipCents ?? 0) > 0)}
         </p>
       ) : null}
       <Button
