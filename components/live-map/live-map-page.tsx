@@ -171,7 +171,12 @@ function attentionChip(
   serverNowMs: number,
 ): { text: string; className: string } | null {
   const seconds = ageSeconds(courier.at, serverNowMs);
-  if (courier.state === 'noAnswer') return { text: 'No answer', className: 'bg-tag-6-bg' };
+  if (courier.state === 'noAnswer') {
+    // Review P5: "No answer · 4 min".
+    const waited = ageSeconds(courier.stuckSince ?? null, serverNowMs);
+    const text = waited === null ? 'No answer' : `No answer · ${Math.floor(waited / 60)} min`;
+    return { text, className: 'bg-tag-6-bg' };
+  }
   if (courier.state === 'locked') return { text: 'Code locked', className: 'bg-tag-4-bg' };
   if (courier.state === 'problem') return { text: 'Problem', className: 'bg-tag-4-bg' };
   if (seconds !== null && isStale(freshnessFor(seconds))) {

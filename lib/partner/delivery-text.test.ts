@@ -32,6 +32,12 @@ describe('partner delivery words (F8 design 2)', () => {
       spoken: '1 minute, 1.4 km to go',
     });
     expect(routeFigure(null, true, now)).toBeNull();
+    // Review P2: within 50 m it says where he is, not "0.0 km to go".
+    expect(routeFigure({ etaAt: inMinutes(1), distanceM: 1420 }, false, now, 30)).toEqual({
+      figure: 'At the door',
+      rest: '',
+      spoken: 'At the door',
+    });
   });
 
   it('starts the slider name with its visible words', () => {

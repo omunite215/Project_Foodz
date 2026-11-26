@@ -33,6 +33,11 @@ test('support sees couriers and deliveries beside the map, or one at a time on a
   await expect(list.getByRole('tab', { name: /^Deliveries · \d+$/ })).toBeVisible();
   // F7's sound switch, for the stuck-delivery chime (design 3.9).
   await expect(page.getByRole('button', { name: 'Turn on sound' })).toBeVisible();
+  // Review S3: both tabs are 48 px targets at every width (design 3.2).
+  for (const name of [/^Couriers · \d+$/, /^Deliveries · \d+$/]) {
+    const box = await list.getByRole('tab', { name }).boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(47);
+  }
 
   if (isPhone(testInfo)) {
     // One view at a time (A55.1): the list first, then the map with its text note.

@@ -3,6 +3,7 @@ import type { DeliveryLine } from '@/server/modules/tracking/schema';
 import {
   attentionListLine,
   attentionLook,
+  confirmOutcome,
   deliveryLineSpoken,
   deliveryTone,
   demoRunningText,
@@ -83,8 +84,12 @@ describe('stuck deliveries (A49, A50)', () => {
         since: '',
         minutes: 6,
         words: '',
+        customerFirst: 'Priya',
       }),
-    ).toBe("Order 1042 · isn't answering · 6 min");
+    ).toBe("Order 1042 · Priya isn't answering · 6 min");
+    expect(confirmOutcome('1042', 'Luis', 'Priya')).toBe(
+      "Order 1042 will be marked delivered. We'll tell Luis and Priya.",
+    );
   });
 });
 

@@ -236,7 +236,7 @@ export function ConfirmHandoverDialog({
               }}
             </form.Field>
           ) : null}
-          <OutcomeBox lines={[confirmOutcome(card.number, courierFirst)]} />
+          <OutcomeBox lines={[confirmOutcome(card.number, courierFirst, card.firstName)]} />
         </>
       )}
     </ActionDialog>

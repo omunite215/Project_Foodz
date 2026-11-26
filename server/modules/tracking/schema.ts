@@ -310,6 +310,8 @@ export interface AttentionItem {
   since: string;
   minutes: number;
   words: string;
+  /** For the stacked banner's line, "Order 1042 · Priya isn't answering · 6 min". */
+  customerFirst?: string;
 }
 
 export interface OpsMapCourier {
@@ -328,6 +330,8 @@ export interface OpsMapCourier {
   at: string | null;
   freshness: Freshness;
   phone: { e164: string; display: string } | null;
+  /** Since when he's been waiting at the door (the "No answer · 4 min" chip). */
+  stuckSince?: string | null;
 }
 
 export interface OpsMapDelivery {

@@ -233,8 +233,8 @@ export function TrackingDetail({
           <ol className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-body-5 text-neutral-1 tabular-nums">
             {steps.map((step, index) => (
               <li key={step} className="flex items-center gap-2">
-                {index > 0 ? <span aria-hidden>·</span> : null}
                 {step}
+                {index < steps.length - 1 ? <span aria-hidden>·</span> : null}
               </li>
             ))}
           </ol>

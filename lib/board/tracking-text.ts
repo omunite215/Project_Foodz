@@ -91,7 +91,11 @@ const KIND_WORDS: Record<AttentionItem['kind'], string> = {
 /** A49.3: the stacked banner's list line, "Order 1042 · Priya isn't answering · 6 min". */
 export function attentionListLine(item: AttentionItem): string {
   const minutes = `${item.minutes} min`;
-  return `Order ${item.orderNumber} · ${KIND_WORDS[item.kind]} · ${minutes}`;
+  const what =
+    item.kind === 'no-answer' && item.customerFirst
+      ? `${item.customerFirst} ${KIND_WORDS[item.kind]}`
+      : KIND_WORDS[item.kind];
+  return `Order ${item.orderNumber} · ${what} · ${minutes}`;
 }
 
 export const attentionStackText = (count: number) => `${count} deliveries need attention.`;
@@ -111,8 +115,12 @@ export const CONFIRM_REASON_LABELS: Record<ConfirmReason, string> = {
 };
 
 export const confirmTitle = (orderNumber: string) => `Confirm hand-over of order ${orderNumber}?`;
-export const confirmOutcome = (orderNumber: string, courierFirst: string) =>
-  `Order ${orderNumber} will be marked delivered. We'll tell ${courierFirst} and the customer.`;
+export const confirmOutcome = (
+  orderNumber: string,
+  courierFirst: string,
+  customerFirst: string | null = null,
+) =>
+  `Order ${orderNumber} will be marked delivered. We'll tell ${courierFirst} and ${customerFirst ?? 'the customer'}.`;
 export const confirmedAnnouncement = (orderNumber: string) =>
   `Order ${orderNumber} marked delivered.`;
 export const askedToWaitNotice = (courierShort: string, customerFirst: string | null) =>

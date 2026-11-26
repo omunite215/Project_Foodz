@@ -1123,19 +1123,21 @@ export async function boardTracking(
   const byOrder = new Map(rows.map((row) => [row.orderId, row]));
   const attention = items.map((item): AttentionItem => {
     const row = byOrder.get(item.orderId);
+    const customerFirst = firstNameOf(row?.contactName ?? 'The customer');
     return {
       orderId: item.orderId,
       orderNumber: item.orderNumber,
       kind: item.kind,
       since: item.since,
       minutes: item.minutes,
+      customerFirst,
       words: attentionWords({
         kind: item.kind,
         orderNumber: item.orderNumber,
         courierFirst: firstNameOf(
           viewer.isDemo ? maskName(row?.partnerName ?? 'Courier') : (row?.partnerName ?? 'Courier'),
         ),
-        customerFirst: firstNameOf(row?.contactName ?? 'The customer'),
+        customerFirst,
         minutes: item.minutes,
         problem: problemOf(row?.problemKind),
       }),
@@ -1208,6 +1210,7 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
           viewer.isDemo || !courier.phone
             ? null
             : { e164: courier.phone, display: displayPhone(courier.phone).display },
+        stuckSince: state === 'noAnswer' ? (row?.noAnswerSince?.toISOString() ?? null) : null,
       };
     }),
     deliveries: data.active.map((row) => {
@@ -1221,7 +1224,7 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
         courierShortName: shortName(
           viewer.isDemo ? maskName(row.partnerName ?? 'Courier') : (row.partnerName ?? 'Courier'),
         ),
-        stateWords: mapStateWords(mapStateFor(row, false), row.orderNumber, null),
+        stateWords: mapStateWords(mapStateFor(row, false), null, null),
         etaAt: row.etaAt?.toISOString() ?? null,
         lateMinutes:
           row.etaAt && promised !== null
@@ -1247,7 +1250,10 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
     demoRun: viewer.isDemo
       ? {
           running: Boolean(data.running),
-          orderNumber: null,
+          orderNumber: data.running
+            ? (data.active.find((row) => row.orderId === data.running?.orderId)?.orderNumber ??
+              null)
+            : null,
           endsAt: data.running?.endsAt.toISOString() ?? null,
           runsLeft: Math.max(0, 6 - data.starts.length),
           nextAt: verdict.ok ? null : verdict.why === 'limit' ? verdict.nextAt : null,

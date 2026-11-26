@@ -81,6 +81,9 @@ export interface RouteFigure {
 }
 
 /** "4 min to the kitchen" / "4 min · 1.4 km to go" (P48.2's spoken forms too). */
+/** Within this many metres of the drop-off, the figure reads "At the door". */
+export const AT_DOOR_M = 50;
+
 export function routeFigure(
   route: Pick<TrackingRoute, 'etaAt' | 'distanceM'> | null,
   toKitchen: boolean,
@@ -96,6 +99,10 @@ export function routeFigure(
       rest: ' to the kitchen',
       spoken: `${spokenMinutes} to the kitchen`,
     };
+  }
+  // Review P2: at the door, not "1 min · 0.0 km to go".
+  if (distanceM !== null && distanceM <= AT_DOOR_M) {
+    return { figure: 'At the door', rest: '', spoken: 'At the door' };
   }
   const km = distanceM === null ? null : kmText(distanceM);
   return {
