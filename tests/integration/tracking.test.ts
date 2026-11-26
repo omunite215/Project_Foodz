@@ -156,6 +156,8 @@ describe("the courier's steps (P37 to P42)", () => {
     expect(await tracking.handOver(luis.actor, deliveryId, { code, cashCollected: true })).toEqual({
       outcome: 'delivered',
       payWords: `Order ${order.number} delivered · You earned $7.64`,
+      // F9 P51.3: today's figures, read in the hand-over's own transaction.
+      today: { earnedCents: 764, deliveries: 1 },
     });
     expect(sent('delivery.delivered')).toHaveLength(1);
     expect(await tracking.getCustomerTracking(priya.actor, order.id)).toBeNull();
