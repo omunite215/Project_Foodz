@@ -18,7 +18,8 @@ import {
  * actions are in admin-flows/partner-money.spec.ts.
  *
  * Needs, in this order before the session: the seed with sample accounts, `npm run
- * seed:partners`, then `npm run seed:earnings` (Diego owes $142.70, Luis is owed $67.05,
+ * seed:partners`, then `npm run seed:earnings -- --at=2026-11-20T19:46:00-05:00` (the story's T,
+ * as the report spec uses: Diego owes $142.70, Luis is owed $118.38 before order 1042,
  * Grace has 8 ratings), and E2E_ADMIN=1.
  */
 
@@ -27,6 +28,18 @@ test.beforeEach(() => {
 });
 
 const APPROVED = '/admin/partners?tab=approved';
+
+/** The fixtures' week: T's Monday to Sunday (seed:earnings --at=T, as the report spec). */
+const WEEK = { from: '2026-11-16', to: '2026-11-22' };
+
+/** The ledger opens on the real current week; the fixtures sit in T's week, so open that one. */
+async function showFixtureWeek(page: Page) {
+  const url = new URL(page.url());
+  url.searchParams.set('from', WEEK.from);
+  url.searchParams.set('to', WEEK.to);
+  await page.goto(url.pathname + url.search);
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 20_000 });
+}
 
 /** Diego's row (1024 and up) or card (below). */
 function partnerRow(page: Page, testInfo: TestInfo, name: string) {
@@ -74,6 +87,8 @@ test('the list: rating, this week and cash, "Owes cash" and the row menu', async
   await expect(page.getByRole('link', { name: 'Luis Moreno', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Owes cash' }).click();
   await expect(page).not.toHaveURL(/owes=1/);
+  // The whole list is back before a row's menu opens (the rows re-render as it lands).
+  await expect(page.getByRole('link', { name: 'Luis Moreno', exact: true }).first()).toBeVisible();
 
   // The row menu: record cash for Diego; Lena holds nothing, so the menu says so.
   await page.getByRole('button', { name: 'More actions for Diego Alvarez' }).click();
@@ -105,6 +120,7 @@ test('the partner page: Earnings first, then Ratings and Application', async ({
   await expect(page.getByRole('button', { name: 'Adjust earnings' })).toHaveCount(0);
   await expect(page.getByText(/^This week · Mon, /)).toBeVisible();
   await expect(page.getByText('No payouts yet.')).toBeVisible();
+  await showFixtureWeek(page);
   await expect(page.getByRole('heading', { name: 'Entries' })).toBeVisible();
   if (isPhone(testInfo)) {
     await expect(page.getByText('Cash collected').first()).toBeVisible();
@@ -142,8 +158,10 @@ test("Luis's ledger at 1280: every entry, the balance after it, who recorded it"
   await page.setViewportSize({ width: 1280, height: 800 });
   await signInStaff(page, STAFF.support, APPROVED);
   await openPartner(page, 'Luis Moreno');
-  await expect(page.getByText('Foodz owes Luis $67.05')).toBeVisible();
-  await expect(page.getByText("Holding $58.97 in customers' cash")).toBeVisible();
+  await showFixtureWeek(page);
+  await expect(page.getByText('Foodz owes Luis $118.38')).toBeVisible();
+  // He handed in the cash he collected on Wednesday, so there's no holding line.
+  await expect(page.getByText(/^Holding $/)).toHaveCount(0);
   const table = page.getByRole('table', { name: /^Luis Moreno's entries, / });
   await expect(table.getByRole('cell', { name: 'Foodz (automatic)' }).first()).toBeVisible();
   await expect(table.getByRole('cell', { name: 'Morgan Diaz (Support)' }).first()).toBeVisible();
@@ -153,11 +171,11 @@ test("Luis's ledger at 1280: every entry, the balance after it, who recorded it"
   await expectNoAxeViolations(page);
 
   // The range: an end before the start is refused under its field.
-  await page.getByLabel('From').fill('2026-11-22');
-  await page.getByLabel('To').fill('2026-11-16');
+  await page.getByRole('textbox', { name: 'From', exact: true }).fill('2026-11-22');
+  await page.getByRole('textbox', { name: 'To', exact: true }).fill('2026-11-16');
   await page.getByRole('button', { name: 'Show', exact: true }).click();
   await expect(page.getByText("The end date can't be before the start.")).toBeVisible();
-  await expect(page.getByLabel('To')).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'To', exact: true })).toBeFocused();
 });
 
 test("Grace's ratings, then an order's customer feedback", async ({ page }, testInfo) => {
@@ -192,7 +210,9 @@ test("Grace's ratings, then an order's customer feedback", async ({ page }, test
 
 test('the demo admin: real partners keep their money hidden', async ({ page }, testInfo) => {
   await signInDemoAdmin(page, APPROVED);
-  await expect(page.getByText('Hidden for demo staff').first()).toBeVisible();
+  await expect(
+    page.getByText('Hidden for demo staff').filter({ visible: true }).first(),
+  ).toBeVisible();
   // A real partner's page: the sections are there, the figures aren't.
   const real = isPhone(testInfo)
     ? page.getByRole('listitem').filter({ hasText: 'Hidden for demo staff' }).first()

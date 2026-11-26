@@ -21,9 +21,16 @@ import {
 
 test.describe.configure({ mode: 'serial' });
 
+const EARNINGS_AT = process.env.E2E_EARNINGS_AT ?? '2026-11-20T19:46:00-05:00';
+
 test.beforeAll(() => {
   execSync('npm run seed:partners', { stdio: 'ignore', env: process.env, timeout: 120_000 });
-  execSync('npm run seed:earnings', { stdio: 'ignore', env: process.env, timeout: 180_000 });
+  // The story's T, the same one the report and partner-page specs read (E2E_EARNINGS_AT).
+  execSync(`npm run seed:earnings -- --at=${EARNINGS_AT}`, {
+    stdio: 'ignore',
+    env: process.env,
+    timeout: 180_000,
+  });
 });
 
 test.beforeEach(() => {
@@ -93,7 +100,7 @@ test('SUPPORT records cash Diego hands in', async ({ page }) => {
   await amount.fill('142.70');
   await dialog.getByRole('button', { name: 'Record $142.70' }).click();
 
-  await expect(page.getByText('Recorded $142.70 in cash from Diego A.')).toBeVisible({
+  await expect(page.getByText('Recorded $142.70 in cash from Diego A.').first()).toBeVisible({
     timeout: 15_000,
   });
   await expect(dialog).toBeHidden();
@@ -110,7 +117,7 @@ test('ADMIN adjusts Luis, then records the payout that clears the balance', asyn
   );
   await signInAdmin(page, secret ?? '', APPROVED);
   await openPartner(page, 'Luis Moreno');
-  await expect(page.getByText('Foodz owes Luis $67.05')).toBeVisible();
+  await expect(page.getByText('Foodz owes Luis $118.38')).toBeVisible();
 
   // Adjust: add $3.00 for waiting, with a message Luis reads exactly as typed.
   await page.getByRole('button', { name: 'Adjust earnings' }).click();
@@ -127,27 +134,27 @@ test('ADMIN adjusts Luis, then records the payout that clears the balance', asyn
       'Luis will see: Foodz added $3.00: Waited 20 min at the kitchen for order 1050.',
     ),
   ).toBeVisible();
-  await expect(adjust.getByText('After this, Foodz will owe Luis $70.05.')).toBeVisible();
+  await expect(adjust.getByText('After this, Foodz will owe Luis $121.38.')).toBeVisible();
   await submitWithStepUp(adjust, /^Add \$3\.00$/, secret ?? '');
-  await expect(page.getByText("Added $3.00 to Luis M.'s earnings.")).toBeVisible({
+  await expect(page.getByText("Added $3.00 to Luis M.'s earnings.").first()).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByText('Foodz owes Luis $70.05')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Foodz owes Luis $121.38')).toBeVisible({ timeout: 15_000 });
 
   // Payout: records a payment made elsewhere, never twice.
   await page.getByRole('button', { name: 'Record payout' }).click();
   const payout = page.getByRole('dialog', { name: 'Record a payout to Luis Moreno' });
   await expect(payout).toBeVisible();
-  await expect(payout.getByLabel('Amount')).toHaveValue('70.05');
+  await expect(payout.getByLabel('Amount')).toHaveValue('121.38');
   await payout.getByRole('radio', { name: 'Bank transfer' }).check();
   await payout.getByLabel('Reference (optional)').fill('Transfer 88213');
   await expect(
-    payout.getByText('Luis will see: Foodz paid you $70.05 · Bank transfer'),
+    payout.getByText('Luis will see: Foodz paid you $121.38 · Bank transfer'),
   ).toBeVisible();
   await expect(payout).toHaveCSS('opacity', '1');
   await expectNoAxeViolations(page);
-  await submitWithStepUp(payout, /^Record \$70\.05 payout$/, secret ?? '');
-  await expect(page.getByText('Recorded a payout of $70.05 to Luis M.')).toBeVisible({
+  await submitWithStepUp(payout, /^Record \$121\.38 payout$/, secret ?? '');
+  await expect(page.getByText('Recorded a payout of $121.38 to Luis M.').first()).toBeVisible({
     timeout: 15_000,
   });
   // The button gives way to its line; focus went to the balance (design 3.9).
@@ -182,7 +189,7 @@ test('SUPPORT excludes a rating with a reason, then includes it again', async ({
   await expectNoAxeViolations(page);
   await dialog.getByRole('button', { name: 'Exclude', exact: true }).click();
 
-  await expect(page.getByText("Rating excluded from Grace O.'s average.")).toBeVisible({
+  await expect(page.getByText("Rating excluded from Grace O.'s average.").first()).toBeVisible({
     timeout: 15_000,
   });
   await expect(
@@ -193,7 +200,9 @@ test('SUPPORT excludes a rating with a reason, then includes it again', async ({
 
   // Include again acts at once and keeps focus on the row's button (A58.3).
   await include.click();
-  await expect(page.getByText("Rating counts toward Grace O.'s average again.")).toBeVisible({
+  await expect(
+    page.getByText("Rating counts toward Grace O.'s average again.").first(),
+  ).toBeVisible({
     timeout: 15_000,
   });
   await expect(

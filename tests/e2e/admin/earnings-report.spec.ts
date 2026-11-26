@@ -177,8 +177,14 @@ test('ADMIN reads the week: summary, rows, totals and the sidebar entry', async 
   await expectFigures(page, testInfo, 'Luis Moreno', LUIS);
   await expectFigures(page, testInfo, 'Diego Alvarez', DIEGO);
   // The totals never net the balances (conflict 8).
-  await expect(page.getByText(/^Totals · \d+ partners?$/)).toBeVisible();
-  await expect(page.getByText(/^Owed to Foodz \$/).first()).toBeVisible();
+  // Table and cards both exist; only one shows at a width.
+  await expect(page.getByText(/^Totals · \d+ partners?$/).filter({ visible: true })).toBeVisible();
+  await expect(
+    page
+      .getByText(/^Owed to Foodz \$/)
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible();
 
   if (!isPhone(testInfo)) {
     await expect(regionOf(page)).toBeVisible();
@@ -253,13 +259,16 @@ test('ADMIN changes range, filter and sort in the address', async ({ page }, tes
 
     // The custom dates check before they change anything.
     await page.getByRole('button', { name: /^Custom/ }).click();
-    await expect(page.getByLabel('From')).toBeFocused();
-    await page.getByLabel('From').fill(WEEK.to);
-    await page.getByLabel('To').fill(WEEK.from);
+    await expect(page.getByRole('textbox', { name: 'From', exact: true })).toBeFocused();
+    await page.getByRole('textbox', { name: 'From', exact: true }).fill(WEEK.to);
+    await page.getByRole('textbox', { name: 'To', exact: true }).fill(WEEK.from);
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(page.getByText("The end date can't be before the start.")).toBeVisible();
-    await expect(page.getByLabel('To')).toBeFocused();
-    await expect(page.getByLabel('To')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByRole('textbox', { name: 'To', exact: true })).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'To', exact: true })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
 
     await page
       .getByRole('group', { name: 'Range' })
@@ -359,7 +368,9 @@ test('the demo admin: demo partners in full, real money hidden', async ({ page }
   await signInDemoAdmin(page, REPORT_URL);
   await expect(page).toHaveTitle('Earnings and payouts | Foodz Admin');
   await expect(page.getByText('Totals cover demo partners only.')).toBeVisible();
-  await expect(page.getByText('Hidden for demo staff').first()).toBeVisible();
+  await expect(
+    page.getByText('Hidden for demo staff').filter({ visible: true }).first(),
+  ).toBeVisible();
   // No real partner's figures reach the page (A66.1).
   await expect(page.getByText('Owes $142.70')).toHaveCount(0);
   await expect(page.getByText('Foodz owes $118.38')).toHaveCount(0);
