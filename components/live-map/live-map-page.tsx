@@ -11,6 +11,7 @@ import {
   Play,
   RefreshCw,
   Truck,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -24,6 +25,7 @@ import type {
 } from '@/server/modules/tracking/schema';
 import { MAP_STATES } from '@/server/modules/tracking/schema';
 import { AdminPage } from '@/components/admin/admin-page';
+import { DeliveryLineView } from '@/components/board/courier-parts';
 import { orderHref } from '@/components/board/order-card';
 import { SoundButton, useSound } from '@/components/board/sound-controls';
 import { StuckBanners, useStuckChime } from '@/components/board/stuck-banners';
@@ -36,7 +38,13 @@ import { CourierDisc } from '@/components/map/markers';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { callAction } from '@/lib/action-result';
@@ -460,9 +468,13 @@ function Panel({
           >
             Order {delivery.number}
           </h2>
-          <p className="text-body-4 text-neutral-3">
-            {delivery.courierShortName} · {delivery.stateWords}
-          </p>
+          {delivery.line ? (
+            <DeliveryLineView line={delivery.line} vehicleWords={null} />
+          ) : (
+            <p className="text-body-4 text-neutral-3">
+              {delivery.courierShortName} · {delivery.stateWords}
+            </p>
+          )}
         </div>
         <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-body-4">
           <dt className="text-neutral-3">Arriving</dt>
@@ -508,18 +520,27 @@ function Panel({
         <p className="text-body-4 text-neutral-3">{courier.vehicleWords}</p>
       </div>
       <div>
-        <p className="flex items-center gap-2 text-body-4 font-medium text-neutral-1">
-          <span
-            aria-hidden
-            className="size-3 rounded-full"
-            style={{
-              background: isStale(freshnessFor(ageSeconds(courier.at, serverNowMs)))
-                ? STALE_FILL
-                : STATE_FILLS[courier.state],
-            }}
+        {/* Review S2 (design 3.5): on its way, the board's line, same component and tone. */}
+        {delivery?.line ? (
+          <DeliveryLineView
+            line={delivery.line}
+            vehicleWords={courier.vehicleWords}
+            className="mt-0"
           />
-          {courier.words}
-        </p>
+        ) : (
+          <p className="flex items-center gap-2 text-body-4 font-medium text-neutral-1">
+            <span
+              aria-hidden
+              className="size-3 rounded-full"
+              style={{
+                background: isStale(freshnessFor(ageSeconds(courier.at, serverNowMs)))
+                  ? STALE_FILL
+                  : STATE_FILLS[courier.state],
+              }}
+            />
+            {courier.words}
+          </p>
+        )}
         <p className="text-body-5 text-neutral-3">
           <span aria-hidden>{updated.text}</span>
           <span className="sr-only">{updated.spoken}</span>
@@ -763,7 +784,7 @@ export function LiveMapPage({
         }}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <TabsList className="sticky top-0 z-10 grid h-12 w-full shrink-0 grid-cols-2 rounded-none border-b border-neutral-6 bg-white p-0">
+        <TabsList className="sticky top-0 z-10 grid h-12 w-full group-data-horizontal/tabs:h-12 shrink-0 grid-cols-2 rounded-none border-b border-neutral-6 bg-white p-0">
           <TabsTrigger
             value="couriers"
             className="h-full text-button-2 text-neutral-3 data-[state=active]:text-neutral-1"
@@ -985,6 +1006,19 @@ export function LiveMapPage({
               {selection?.kind === 'delivery' ? 'Delivery' : 'Courier'}
             </SheetTitle>
             <SheetDescription className="sr-only">Details and actions</SheetDescription>
+            {/* Review S4 (design 3.2): a handle and a visible Close. */}
+            <div className="sticky top-0 z-10 flex h-14 shrink-0 items-start justify-end bg-white px-2 pt-2">
+              <span
+                aria-hidden
+                data-sheet-handle=""
+                className="absolute top-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-neutral-5"
+              />
+              <SheetClose asChild>
+                <Button type="button" variant="ghost" size="icon-kitchen" aria-label="Close">
+                  <X className="size-5" aria-hidden />
+                </Button>
+              </SheetClose>
+            </div>
             {panel}
           </SheetContent>
         </Sheet>

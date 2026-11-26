@@ -49,6 +49,15 @@ describe('stuck deliveries (A49, A50)', () => {
       'askToWait',
       'cancelUnreachable',
     ]);
+    // Asked to wait: nothing while the new 5 minutes run, the same three once they're up.
+    expect(stuckActionsFor(card(line({ state: 'askedToWait', tone: 'amber' })), 'full')).toEqual(
+      [],
+    );
+    expect(stuckActionsFor(card(line({ state: 'askedToWait', tone: 'red' })), 'full')).toEqual([
+      'confirmHandover',
+      'askToWait',
+      'cancelUnreachable',
+    ]);
     expect(stuckActionsFor(card(line({ state: 'locked', tone: 'red' })), 'full')).toEqual([
       'confirmHandover',
       'cancelUnreachable',

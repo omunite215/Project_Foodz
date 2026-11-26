@@ -29,7 +29,7 @@ import {
 import { RouteLine } from '@/components/map/route-line';
 import { MAP_PALETTES, STALE_FILL, STATE_FILLS } from '@/lib/map/colors';
 import { createGlider, type Glider } from '@/lib/map/glide';
-import { firstViewPoints } from '@/lib/live-map/model';
+import { firstViewPoints, hiddenLabels, stackOrder } from '@/lib/live-map/model';
 import { boundsOf, inView } from '@/lib/map/maplibre';
 import { prefersReducedMotion } from '@/lib/motion';
 import {
@@ -98,25 +98,12 @@ interface CourierMarker {
   at: string | null;
 }
 
-/** Labels that would overlap hide; the selected one first, then in list order (A46.6). */
-function placeLabels(markers: readonly HTMLElement[]) {
-  const kept: DOMRect[] = [];
-  for (const marker of markers) {
-    const label = marker.querySelector<HTMLElement>('[data-label]');
-    if (!label) continue;
-    label.style.visibility = 'visible';
-    const box = label.getBoundingClientRect();
-    const clash = kept.some(
-      (other) =>
-        box.left < other.right &&
-        box.right > other.left &&
-        box.top < other.bottom &&
-        box.bottom > other.top,
-    );
-    if (clash && marker.dataset.selected !== 'true') label.style.visibility = 'hidden';
-    else kept.push(box);
-  }
-}
+const rectOf = (box: DOMRect) => ({
+  left: box.left,
+  top: box.top,
+  right: box.right,
+  bottom: box.bottom,
+});
 
 function CanvasLayers({
   handle,
@@ -144,11 +131,34 @@ function CanvasLayers({
     latest.current = { onSelect };
   });
 
+  // Review S5 (design 3.3): couriers above drop-off pins, the selected one on top; courier
+  // labels and drop-off chips in one collision set, where the marker on top keeps its label.
   const relabel = () => {
-    const selectedFirst = [...courierMarkers.current.entries()]
-      .toSorted(([a], [b]) => Number(b === selection?.id) - Number(a === selection?.id))
-      .map(([, marker]) => marker.mounted.element);
-    placeLabels(selectedFirst);
+    const order = stackOrder(
+      selection,
+      [...courierMarkers.current.keys()],
+      [...pinMarkers.current.keys()],
+    );
+    const placed = order.flatMap((item) => {
+      const element =
+        item.kind === 'courier'
+          ? courierMarkers.current.get(item.id)?.mounted.element
+          : pinMarkers.current.get(item.id)?.element;
+      return element ? [{ item, element }] : [];
+    });
+    const labels = placed.flatMap(({ item, element }, index) => {
+      element.style.zIndex = String(placed.length - index);
+      const label = element.querySelector<HTMLElement>('[data-label]');
+      if (!label) return [];
+      label.style.visibility = 'visible';
+      const box = label.getBoundingClientRect();
+      const keep = selection?.kind === item.kind && selection.id === item.id;
+      return [{ label, box: { id: `${item.kind}:${item.id}`, ...rectOf(box), keep } }];
+    });
+    const hidden = hiddenLabels(labels.map(({ box }) => box));
+    for (const { label, box } of labels) {
+      label.style.visibility = hidden.has(box.id) ? 'hidden' : 'visible';
+    }
   };
 
   // Couriers: placed, glided to new points, restyled, removed when they go offline.
@@ -222,7 +232,7 @@ function CanvasLayers({
             glyphColor={LIGHT.doorGlyph}
             width={selected ? 32 : 24}
           />
-          <span className="absolute top-0.5 left-full ml-1">
+          <span data-label="" className="absolute top-0.5 left-full ml-1">
             <LabelChip text={delivery.number} palette={LIGHT} />
           </span>
         </span>
@@ -242,6 +252,9 @@ function CanvasLayers({
       pin.remove();
       pinMarkers.current.delete(id);
     }
+    const timer = setTimeout(relabel, 50);
+    return () => clearTimeout(timer);
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [handle, deliveries, selection]);
 
   // Design 3.3: F6's kitchen pin (kept by value, so a refreshed snapshot doesn't redraw it).

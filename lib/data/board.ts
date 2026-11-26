@@ -264,9 +264,12 @@ function writer(client: DbClient, queryClient: QueryClient) {
         const next =
           fresh.version >= held.version
             ? fresh
-            : Object.assign(structuredClone(held), { courier: fresh.courier ?? null });
-        // F8 (A48): these cards come without the delivery line, which the next full read
-        // brings (at once on the first change, then at most every 5 s); keep the held one.
+            : Object.assign(structuredClone(held), {
+                courier: fresh.courier ?? null,
+                ...(fresh.delivery === undefined ? {} : { delivery: fresh.delivery }),
+              });
+        // F8 (A48): staff cards bring their delivery line; a card without one (the kitchen's
+        // view) keeps the held one.
         if (next.delivery === undefined && held.delivery !== undefined) {
           Object.assign(next, { delivery: held.delivery });
         }

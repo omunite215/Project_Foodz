@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OpsMapCourier } from '@/server/modules/tracking/schema';
-import { applyPosition, firstViewPoints, type OpsMapData } from './model';
+import { applyPosition, firstViewPoints, hiddenLabels, type OpsMapData, stackOrder } from './model';
 
 const luis: OpsMapCourier = {
   partnerId: 'p1',
@@ -86,5 +86,28 @@ describe("the camera's first view (design 3.3)", () => {
   it('still fits the kitchen when nobody is out', () => {
     expect(firstViewPoints({ lat: 42.3505, lng: -71.045 }, [], [])).toHaveLength(1);
     expect(firstViewPoints(null, [], [])).toEqual([]);
+  });
+});
+
+describe('stacking at the door (review S5, design 3.3)', () => {
+  it('draws couriers above drop-off pins, the selected one on top', () => {
+    expect(stackOrder({ kind: 'courier', id: 'grace' }, ['luis', 'grace'], ['1042'])).toEqual([
+      { kind: 'courier', id: 'grace' },
+      { kind: 'courier', id: 'luis' },
+      { kind: 'delivery', id: '1042' },
+    ]);
+    expect(stackOrder({ kind: 'delivery', id: '1043' }, ['luis'], ['1042', '1043'])).toEqual([
+      { kind: 'courier', id: 'luis' },
+      { kind: 'delivery', id: '1043' },
+      { kind: 'delivery', id: '1042' },
+    ]);
+  });
+
+  it("hides a drop-off chip under a courier's label, and keeps the selected one", () => {
+    const label = { id: 'courier:luis', left: 40, top: 10, right: 200, bottom: 34, keep: false };
+    const chip = { id: 'delivery:1042', left: 30, top: 20, right: 80, bottom: 44, keep: false };
+    const far = { id: 'delivery:1043', left: 400, top: 20, right: 450, bottom: 44, keep: false };
+    expect(hiddenLabels([label, chip, far])).toEqual(new Set(['delivery:1042']));
+    expect(hiddenLabels([label, { ...chip, keep: true }])).toEqual(new Set());
   });
 });

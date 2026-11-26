@@ -178,6 +178,9 @@ describe('the board and the map (A46, A48, A49)', () => {
     [{ lastPointAt: ago(720) }, 'noLocation', 'red'],
     [{ noAnswerSince: ago(120) }, 'noAnswer', 'amber'],
     [{ noAnswerSince: ago(320) }, 'noAnswer', 'red'],
+    [{ noAnswerSince: ago(60), waitRestartedAt: ago(60) }, 'askedToWait', 'amber'],
+    [{ noAnswerSince: ago(320), waitRestartedAt: ago(320) }, 'askedToWait', 'red'],
+    [{ noAnswerSince: ago(60), waitRestartedAt: ago(900) }, 'noAnswer', 'amber'],
     [{ lockedAt: ago(30) }, 'locked', 'red'],
     [{ problem: { kind: 'address' as const, at: ago(30) } }, 'problem', 'amber'],
   ])('reads %j as %s (%s)', (change, state, tone) => {

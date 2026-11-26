@@ -806,6 +806,11 @@ export function StaffOrderDetailView({
             now={courierNow}
             timeZone={timeZone}
             level={level}
+            deliveryLine={
+              detail.courierSection.view === 'full' && !cancelledText
+                ? (detail.tracking?.line ?? null)
+                : null
+            }
             tracking={
               detail.tracking && detail.courierSection.view === 'full' ? (
                 <TrackingDetail

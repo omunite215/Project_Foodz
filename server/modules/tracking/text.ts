@@ -20,6 +20,7 @@ const ICONS: Record<DeliveryLine['state'], DeliveryLine['icon']> = {
   almost: 'pin',
   noLocation: 'signal-off',
   noAnswer: 'door',
+  askedToWait: 'hourglass',
   locked: 'lock',
   problem: 'alert',
 };
@@ -49,6 +50,9 @@ export function deliveryLineWords(facts: {
       break;
     case 'noAnswer':
       words = `${who} · ${facts.customerFirst} isn't answering · ${facts.waitedMinutes} min`;
+      break;
+    case 'askedToWait':
+      words = `${who} · ${facts.customerFirst} isn't answering · asked to wait · ${facts.waitedMinutes} min`;
       break;
     case 'locked':
       words = `${who} · code locked`;

@@ -62,3 +62,56 @@ export function firstViewPoints(
     ...deliveries.map((delivery) => delivery.dropoffPoint),
   ];
 }
+
+// ------------------------------------------------------------------ stacking and labels (3.3)
+
+export type Stacked = { kind: 'courier' | 'delivery'; id: string };
+
+/**
+ * Top first (review S5): the selected courier, the other couriers, then the drop-off pins (the
+ * selected one first). Couriers sit above pins, so a pin never hides a state at the door, and
+ * the label that wins a clash belongs to the marker drawn on top.
+ */
+export function stackOrder(
+  selection: Stacked | null,
+  courierIds: readonly string[],
+  pinIds: readonly string[],
+): Stacked[] {
+  const first = (kind: Stacked['kind'], ids: readonly string[]) =>
+    ids
+      .toSorted(
+        (a, b) =>
+          Number(selection?.kind === kind && b === selection.id) -
+          Number(selection?.kind === kind && a === selection.id),
+      )
+      .map((id) => ({ kind, id }));
+  return [...first('courier', courierIds), ...first('delivery', pinIds)];
+}
+
+export interface LabelBox {
+  id: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  /** The selected marker's label always shows. */
+  keep: boolean;
+}
+
+/** Labels (courier chips and drop-off chips alike) that would overlap one drawn above them. */
+export function hiddenLabels(boxes: readonly LabelBox[]): Set<string> {
+  const kept: LabelBox[] = [];
+  const hidden = new Set<string>();
+  for (const box of boxes) {
+    const clash = kept.some(
+      (other) =>
+        box.left < other.right &&
+        box.right > other.left &&
+        box.top < other.bottom &&
+        box.bottom > other.top,
+    );
+    if (clash && !box.keep) hidden.add(box.id);
+    else kept.push(box);
+  }
+  return hidden;
+}

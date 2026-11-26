@@ -25,6 +25,7 @@ describe('the Out-for-delivery line (A48.1)', () => {
     ['almost', 'Luis M. · arriving now'],
     ['noLocation', 'Luis M. · no location for 3 min'],
     ['noAnswer', "Luis M. · Priya isn't answering · 2 min"],
+    ['askedToWait', "Luis M. · Priya isn't answering · asked to wait · 2 min"],
     ['locked', 'Luis M. · code locked'],
   ] as const)('words %s', (state, words) => {
     expect(deliveryLineWords({ ...line, state }).words).toBe(words);
@@ -37,6 +38,7 @@ describe('the Out-for-delivery line (A48.1)', () => {
       icon: 'alert',
     });
     expect(deliveryLineWords({ ...line, state: 'almost' }).spoken).toBe('Luis M., arriving now');
+    expect(deliveryLineWords({ ...line, state: 'askedToWait' }).icon).toBe('hourglass');
   });
 });
 

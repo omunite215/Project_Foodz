@@ -198,6 +198,48 @@ describe('the location pipeline (L1 to L3)', () => {
     expect(await migrator.deliveryLocation.count({ where: { deliveryId } })).toBe(1);
   });
 
+  it('keeps one clock for the customer and staff when a phone repeats its fix (review S7)', async () => {
+    const { order, deliveryId } = await heldOrder();
+    await tracking.pickUp(luis.actor, deliveryId, {});
+    await redis.del(`partner:loc:${luis.partnerId}`);
+    const { onlineSessionId } = await migrator.deliveryPartner.findUniqueOrThrow({
+      where: { id: luis.partnerId },
+      select: { onlineSessionId: true },
+    });
+    const partners = await import('@/server/modules/partners/service');
+    const start = Date.now();
+    const at = (seconds: number) => new Date(start + seconds * 1000);
+    const send = (seconds: number) =>
+      partners.recordLocations(
+        luis.actor,
+        onlineSessionId,
+        {
+          points: [
+            { lat: 42.3521, lng: -71.0469, accuracy: 15, recordedAt: at(seconds).toISOString() },
+          ],
+        },
+        at(seconds),
+      );
+    // He stands still and the phone repeats the same fix every 15 s for 3 minutes.
+    for (let seconds = 0; seconds <= 180; seconds += 15) await send(seconds);
+    const capped = at(120).toISOString();
+    expect((await tracking.getCustomerTracking(priya.actor, order.id))?.courierPoint?.at).toBe(
+      capped,
+    );
+    const map = await asBrowser(daniel.browser, () => tracking.getOpsMap(daniel.actor, at(180)));
+    expect(map.couriers.find((courier) => courier.partnerId === luis.partnerId)).toMatchObject({
+      at: capped,
+      freshness: 'hollow',
+    });
+    const board = await tracking.boardTracking({ isDemo: false }, 'America/New_York', at(250));
+    expect(board.lines.get(order.id)).toMatchObject({ state: 'noLocation', tone: 'amber' });
+    expect(
+      published('courier.position')
+        .map(([, , data]) => (data as { at: string }).at)
+        .every((value) => value <= capped),
+    ).toBe(true);
+  });
+
   it('stores a straight-line estimate, flagged as estimated', async () => {
     const { deliveryId } = await heldOrder();
     const result = await tracking.refreshEstimate(deliveryId);
@@ -266,6 +308,14 @@ describe('door problems and staff (P43, A50)', () => {
         where: { action: 'tracking.handover-confirmed', targetId: order.id },
       }),
     ).toBe(1);
+    // Review S10: staff steps name the person (design 3.13).
+    const { getStaffOrderDetail } = await import('@/server/modules/board/service');
+    const detail = await asBrowser(morgan.browser, () =>
+      getStaffOrderDetail(morgan.actor, order.id),
+    );
+    expect(
+      (detail?.timeline ?? []).flatMap((entry) => (entry.type === 'courier' ? [entry.words] : [])),
+    ).toContain('Hand-over confirmed by Morgan Diaz (Support): Customer confirmed by phone');
     expect(
       published('delivery.changed').some(
         ([channel, , data]) =>
@@ -290,6 +340,24 @@ describe('door problems and staff (P43, A50)', () => {
       kind: 'askedToWait',
       orderNumber: order.number,
     });
+    // Review S1: the card the change named comes back with its "asked to wait" line, so the
+    // board reads it within 2 s, not at the next full read.
+    const { boardCardsAction } = await import('@/server/modules/board/actions');
+    const cards = await asBrowser(morgan.browser, () => boardCardsAction({ orderIds: [order.id] }));
+    expect(cards?.data?.cards[0]?.delivery).toMatchObject({
+      state: 'askedToWait',
+      tone: 'amber',
+      icon: 'hourglass',
+      words: expect.stringMatching(/^Luis M\. · \S+ isn't answering · asked to wait · 0 min$/),
+    });
+    // Review S10: the timeline names who asked (design 3.13).
+    const { getStaffOrderDetail } = await import('@/server/modules/board/service');
+    const detail = await asBrowser(morgan.browser, () =>
+      getStaffOrderDetail(morgan.actor, order.id),
+    );
+    expect(
+      (detail?.timeline ?? []).flatMap((entry) => (entry.type === 'courier' ? [entry.words] : [])),
+    ).toContain('Morgan Diaz (Support) asked Luis Moreno to wait 5 more minutes');
     await migrator.$executeRaw`UPDATE deliveries SET no_answer_since = app_now() - interval '6 minutes' WHERE id = ${deliveryId}::uuid`;
     const cancel = await asBrowser(morgan.browser, () =>
       actions.cancelUnreachableAction({ orderId: order.id, expectedVersion: second.version }),

@@ -8,6 +8,7 @@ import { AppError, forbidden, invalidInput, unauthenticated } from '@/server/err
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
 import { boardTracking, staffTrackingDetail } from '@/server/modules/tracking/service';
+import { STORE_TIME_ZONE } from '@/lib/order-text';
 import {
   courierHolding,
   courierLines,
@@ -351,7 +352,19 @@ export async function getBoardCards(
       }
     }
     return { asOf: now.toISOString(), cards: sortCards(cards), gone };
-  }).then(async (result) => ({ ...result, cards: await withCouriers(viewer, result.cards, now) }));
+  }).then(async (result) => {
+    const cards = await withCouriers(viewer, result.cards, now);
+    if (isKitchenView(viewer.role)) return { ...result, cards };
+    // F8 (A48, design 3.8): the Out-for-delivery line comes with the card a change named, so
+    // "asked to wait" or a lock reads on the card within 2 s, not at the next full read.
+    const tracking = await boardTracking(viewer, STORE_TIME_ZONE, now);
+    return {
+      ...result,
+      cards: cards.map((card) =>
+        Object.assign(card, { delivery: tracking.lines.get(card.id) ?? null }),
+      ),
+    };
+  });
 }
 
 async function readOrder(actor: UserActor, orderId: string) {

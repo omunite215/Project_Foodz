@@ -45,7 +45,7 @@ export function stuckActionsFor(
   const line = card.delivery;
   if (view !== 'full' || card.status !== 'PICKED_UP' || !line) return [];
   if (line.state === 'locked') return ['confirmHandover', 'cancelUnreachable'];
-  if (line.state === 'noAnswer' && line.tone === 'red') {
+  if ((line.state === 'noAnswer' || line.state === 'askedToWait') && line.tone === 'red') {
     return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   }
   if (line.state === 'problem') return ['cancelUnreachable'];

@@ -196,7 +196,7 @@ export function TrackingDetail({
             <span>Map © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors</span>
             <Link
               href={mapHref}
-              aria-label={courierName ? `Open ${courierName} on the live map` : undefined}
+              aria-label={courierName ? `Open on the live map, ${courierName}` : undefined}
               className="inline-flex min-h-11 items-center text-body-5 text-neutral-1 underline underline-offset-4"
             >
               Open on the live map
