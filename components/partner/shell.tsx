@@ -8,12 +8,13 @@ import {
   type LucideIcon,
   Navigation,
   NavigationOff,
+  Wallet,
   X,
 } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { type ReactNode, useId, useRef } from 'react';
+import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 import { SignOutDialog, useSignOut } from '@/components/layout/sign-out';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,11 +51,21 @@ export function PartnerFrame({
   children: ReactNode;
   mainClassName?: string;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  usePartnerStickyTop(rootRef);
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background md:border-x md:border-border">
+    <div
+      ref={rootRef}
+      className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background md:border-x md:border-border"
+    >
       {header}
       {pinned ? (
-        <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20">{pinned}</div>
+        <div
+          data-partner-pinned=""
+          className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20"
+        >
+          {pinned}
+        </div>
       ) : null}
       <main
         id="main"
@@ -71,6 +82,41 @@ export function PartnerFrame({
       ) : null}
     </div>
   );
+}
+
+/**
+ * `--partner-sticky-top` (F9 design 1.7): the header's height plus the pinned banner's when it
+ * shows, so a day header sticks under both and never hides beneath the banner.
+ */
+function usePartnerStickyTop(rootRef: React.RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || typeof ResizeObserver === 'undefined') return undefined;
+    const update = () => {
+      const header = root.querySelector<HTMLElement>(':scope > header');
+      const pinned = root.querySelector<HTMLElement>(':scope > [data-partner-pinned]');
+      const top = (header?.offsetHeight ?? 0) + (pinned?.offsetHeight ?? 0);
+      root.style.setProperty('--partner-sticky-top', `${top}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    const watch = () => {
+      observer.disconnect();
+      for (const element of root.querySelectorAll(
+        ':scope > header, :scope > [data-partner-pinned]',
+      )) {
+        observer.observe(element);
+      }
+      update();
+    };
+    watch();
+    const mutations = new MutationObserver(watch);
+    mutations.observe(root, { childList: true });
+    return () => {
+      observer.disconnect();
+      mutations.disconnect();
+    };
+  }, [rootRef]);
 }
 
 // ------------------------------------------------------------------ dock (design 2.4)
@@ -192,15 +238,18 @@ export function DockButton({
 
 // ------------------------------------------------------------------ tab bar
 
-export function PartnerTabBar({ current }: { current: 'home' | 'profile' }) {
-  const tabs: { key: 'home' | 'profile'; label: string; href: Route; icon: LucideIcon }[] = [
+export type PartnerTab = 'home' | 'earnings' | 'profile';
+
+export function PartnerTabBar({ current }: { current: PartnerTab }) {
+  const tabs: { key: PartnerTab; label: string; href: Route; icon: LucideIcon }[] = [
     { key: 'home', label: 'Home', href: '/partner', icon: House },
+    { key: 'earnings', label: 'Earnings', href: '/partner/earnings', icon: Wallet },
     { key: 'profile', label: 'Profile', href: '/partner/profile', icon: CircleUserRound },
   ];
   return (
     <nav
       aria-label="Partner"
-      className="grid h-16 grid-cols-2 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] box-content"
+      className="grid h-16 grid-cols-3 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] box-content"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
