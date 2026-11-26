@@ -935,7 +935,7 @@ function ResultsTable({
 }
 
 /** A 2 px bar sweeping the table's top edge while a sort or filter loads (static, reduced). */
-function BusyBar() {
+export function BusyBar() {
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   useEffect(() => {
