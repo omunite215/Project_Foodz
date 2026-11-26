@@ -500,8 +500,8 @@ export interface CandidateRow {
 
 /**
  * W2.1's ten rules in one query, ranked by W3.2 (longest wait, then distance, then id). The
- * reach never passes the delivery radius. `secondChance` lets a partner whose automatic offer
- * timed out be asked once more (W5.4).
+ * reach never passes the delivery radius. `secondChance` lets a partner whose one automatic offer
+ * for this order timed out be asked once more, and never a third time (W5.4).
  */
 export function searchCandidates(
   ctx: DbContext,
@@ -533,9 +533,11 @@ export function searchCandidates(
                       AND a.status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP'))
       AND NOT EXISTS (SELECT 1 FROM delivery_offers f WHERE f.partner_id = p.id AND f.status = 'PENDING')
       AND NOT (p.id = ANY (${[...q.excluded]}::uuid[]))
-      AND NOT EXISTS (SELECT 1 FROM delivery_offers f WHERE f.delivery_id = ${q.deliveryId}::uuid
-                      AND f.partner_id = p.id AND f.kind = 'auto'
-                      AND NOT (${q.secondChance} AND f.ended_reason = 'expired'))
+      AND (SELECT CASE count(*) WHEN 0 THEN true
+                               WHEN 1 THEN ${q.secondChance} AND bool_and(f.ended_reason = 'expired')
+                               ELSE false END
+           FROM delivery_offers f WHERE f.delivery_id = ${q.deliveryId}::uuid
+             AND f.partner_id = p.id AND f.kind = 'auto')
       AND u.is_demo = (${q.pool} = 'DEMO')
       AND p.unseen_in_row < 2
     ORDER BY coalesce(p.waiting_since, p.online_since), "distanceM", p.id
@@ -838,8 +840,15 @@ export interface AssignRow {
   isDemo: boolean;
 }
 
-/** Online partners for the assign dialog (A37.2), in dispatch order. */
-export function listOnlineForAssign(ctx: DbContext, pool: DeliveryPool): Promise<AssignRow[]> {
+/**
+ * Online partners for the assign dialog (A37.2), in dispatch order. Only another order's open
+ * offer blocks a row ("Has another offer open"): a staff offer withdraws this order's (A37.3).
+ */
+export function listOnlineForAssign(
+  ctx: DbContext,
+  pool: DeliveryPool,
+  deliveryId: string | null,
+): Promise<AssignRow[]> {
   return db(ctx).$queryRaw<AssignRow[]>`
     SELECT p.id::text AS "partnerId", u.name, (u.is_demo OR u.is_sample) AS "shownToDemo",
            p.vehicle_type AS "vehicleType", p.last_point_at AS "lastPointAt",
@@ -849,7 +858,8 @@ export function listOnlineForAssign(ctx: DbContext, pool: DeliveryPool): Promise
            END AS "distanceM",
            (SELECT o.number FROM deliveries a JOIN orders o ON o.id = a.order_id
              WHERE a.partner_id = p.id AND a.status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP') LIMIT 1) AS "busyOrderNumber",
-           EXISTS (SELECT 1 FROM delivery_offers f WHERE f.partner_id = p.id AND f.status = 'PENDING') AS "hasOpenOffer"
+           EXISTS (SELECT 1 FROM delivery_offers f WHERE f.partner_id = p.id AND f.status = 'PENDING'
+                   AND f.delivery_id IS DISTINCT FROM ${deliveryId}::uuid) AS "hasOpenOffer"
     FROM delivery_partners p
     JOIN users u ON u.id = p.user_id
     CROSS JOIN site_settings k
@@ -929,7 +939,7 @@ export async function findKitchen(ctx: DbContext) {
 export async function findOwnOrderId(ctx: DbContext, orderId: string, userId: string) {
   const row = await db(ctx).order.findFirst({
     where: { id: orderId, userId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, readyAt: true },
   });
   return row;
 }

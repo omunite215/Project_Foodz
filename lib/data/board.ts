@@ -2,7 +2,11 @@ import { queryCollectionOptions } from '@tanstack/query-db-collection';
 import { collectionOptions, type DbClient, useDbClient, useLiveQuery } from '@tanstack/react-db';
 import { type QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLayoutEffect, useMemo } from 'react';
-import { boardCardsAction, boardSnapshotAction } from '@/server/modules/board/actions';
+import {
+  boardCardsAction,
+  boardSnapshotAction,
+  couriersCountAction,
+} from '@/server/modules/board/actions';
 import {
   BOARD_REFRESH_MS,
   type BoardCard,
@@ -270,6 +274,17 @@ function writer(client: DbClient, queryClient: QueryClient) {
       }
       if (after.length) void target.utils.writeUpsert(after);
       return { before, after };
+    },
+
+    /** F7 (A35.1): the couriers chip's count, read again after a partner went online or offline. */
+    async refreshCouriersCount(): Promise<void> {
+      const outcome = await callAction(() => couriersCountAction({}));
+      if (!outcome.ok) {
+        reportFailure(outcome.error);
+        return;
+      }
+      const meta = metaNow();
+      if (meta) queryClient.setQueryData(BOARD_META_KEY, { ...meta, couriers: outcome.data });
     },
 
     /** A fresh copy now (reconnects, polling, Find), with what it changed (A12.3). */

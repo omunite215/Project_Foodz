@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
-import { ACCOUNTS, signIn } from '../account/support';
+import { ACCOUNTS, asOwnNetwork, signIn } from '../account/support';
 import { card, codeFor, STAFF } from '../admin/support';
 import {
   expect,
@@ -62,6 +62,8 @@ test.beforeEach(() => {
 /** A staff page at desktop width: the board's own widths are covered by tests/e2e/admin. */
 async function staffPage(browser: Browser, email: string, baseURL: string | undefined) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, baseURL });
+  // Its own network, so the per-network code limit (10 in 5 minutes) is never shared.
+  await asOwnNetwork(context, baseURL);
   const page = await context.newPage();
   await open(page, `/sign-in?callbackUrl=${encodeURIComponent('/admin/orders')}`);
   await page.getByLabel('Email').fill(email);
@@ -97,14 +99,33 @@ async function goOnline(page: Page, context: BrowserContext) {
   });
 }
 
-async function sendOffer(board: Page, number: string, courierName: string) {
+/**
+ * Support picks the courier in the assign dialog (A37). With a job runner attached, the
+ * automatic search may first offer him an order another project marked ready: his row then reads
+ * "Has another offer open" (A37.2), so he declines that one and support refreshes the list. An
+ * automatic offer of this same order doesn't block him: support's offer replaces it (A37.3).
+ */
+async function sendOffer(board: Page, phone: Page, number: string, courierName: string) {
   const order = card(board, number);
   await expect(order).toBeVisible({ timeout: 20_000 });
   await order.getByRole('button', { name: new RegExp(`actions for order ${number}`, 'i') }).click();
   await board.getByRole('menuitem', { name: 'Assign courier' }).click();
   const dialog = board.getByRole('dialog', { name: `Assign a courier to order ${number}` });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('radio', { name: new RegExp(`^${courierName},`) }).check();
+  const choice = dialog.getByRole('radio', { name: new RegExp(`^${courierName},`) });
+  await expect(choice).toBeVisible({ timeout: 10_000 });
+  for (let attempt = 0; attempt < 3 && !(await choice.isEnabled()); attempt += 1) {
+    const other = phone.getByRole('dialog', { name: 'New order offer' });
+    if (await other.isVisible()) {
+      await other.getByRole('button', { name: 'Decline order' }).click();
+      await expect(other).toHaveCount(0);
+    }
+    await dialog.getByRole('button', { name: 'Refresh list' }).click();
+    await expect(choice)
+      .toBeEnabled({ timeout: 5_000 })
+      .catch(() => undefined);
+  }
+  await choice.check();
   await dialog.getByRole('button', { name: 'Send offer' }).click();
   await expect(dialog).toHaveCount(0);
 }
@@ -148,7 +169,7 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
 
   // Support sends the offer from the board (A37).
   const support = await staffPage(browser, STAFF.support, baseURL);
-  await sendOffer(support.page, courier.order, courier.name);
+  await sendOffer(support.page, page, courier.order, courier.name);
   await expect(
     card(support.page, courier.order)
       .getByText(new RegExp(`offered it to ${courier.short}`))
@@ -172,26 +193,36 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(offer).toBeVisible();
   await expectNoAxeViolations(page);
 
-  // At 320 × 568 the whole card fits (design 1.2, review B2): the band shows its heading and
-  // kind line in full, and the payment row (Lena's order is cash) ends above Decline.
+  // On short and common phones the band shows its heading and kind line in full, and the payment
+  // row (Lena's order is cash) ends above Decline (design 1.2, review B2 and S5).
   if (projectOf(testInfo) === 'partner-360') {
     const before = page.viewportSize();
+    for (const size of [
+      { width: 320, height: 568 },
+      { width: 375, height: 812 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      const title = offer.getByRole('heading', { name: 'New order offer' });
+      const kindLine = offer.getByText('Foodz support picked you for this order.');
+      const band = title.locator('xpath=..');
+      const [bandBox, titleBox, kindBox] = await Promise.all([
+        band.boundingBox(),
+        title.boundingBox(),
+        kindLine.boundingBox(),
+      ]);
+      if (!bandBox || !titleBox || !kindBox) throw new Error('No band');
+      expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
+      expect(kindBox.y + kindBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
+      const payment = offer.getByText(/^Cash order · collect \$/);
+      const [paymentBox, declineTop] = [await payment.boundingBox(), await decline.boundingBox()];
+      if (!paymentBox || !declineTop) throw new Error('No payment row');
+      expect(
+        paymentBox.y + paymentBox.height,
+        `${size.width} × ${size.height}`,
+      ).toBeLessThanOrEqual(declineTop.y);
+    }
     await page.setViewportSize({ width: 320, height: 568 });
-    const title = offer.getByRole('heading', { name: 'New order offer' });
-    const kindLine = offer.getByText('Foodz support picked you for this order.');
-    const band = title.locator('xpath=..');
-    const [bandBox, titleBox, kindBox] = await Promise.all([
-      band.boundingBox(),
-      title.boundingBox(),
-      kindLine.boundingBox(),
-    ]);
-    if (!bandBox || !titleBox || !kindBox) throw new Error('No band');
-    expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
-    expect(kindBox.y + kindBox.height).toBeLessThanOrEqual(bandBox.y + bandBox.height);
-    const payment = offer.getByText(/^Cash order · collect \$/);
-    const [paymentBox, declineTop] = [await payment.boundingBox(), await decline.boundingBox()];
-    if (!paymentBox || !declineTop) throw new Error('No payment row');
-    expect(paymentBox.y + paymentBox.height).toBeLessThanOrEqual(declineTop.y);
     await expectNoAxeViolations(page);
     if (before) await page.setViewportSize(before);
   }
@@ -222,6 +253,8 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   await expect(heading).toBeVisible({ timeout: 15_000 });
   await expect(heading).toBeFocused();
   await expect(page).toHaveTitle(`Pick up order ${courier.order} | Foodz Partner`);
+  // The accepted card fades out over the screen; its own rows read "you're at the kitchen" too.
+  await expect(offer).toHaveCount(0);
   await expect(page.getByText('Foodz Kitchen · 88 Harbor Street')).toBeVisible();
   await expect(page.getByText("You're at the kitchen", { exact: true })).toBeVisible();
   // F8 2.2: "Open in Maps" sits in the map card (the slider holds the dock), until he's at the
@@ -293,12 +326,17 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
       ),
   ).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: 'Waiting for orders' })).toBeVisible();
-  // The customer's page goes back to finding a courier (S4.1).
+  // The customer's page goes back to finding a courier at once (S4.1), not at its next refresh.
+  await expect(block).toHaveCount(0, { timeout: 4_000 });
+  // Finding again, or the slow line when nobody else can be asked: then the restarted search
+  // escalates at once (W5) and S3.1 applies, which depends on the other projects' couriers.
   await expect(
-    priya.getByRole('main').getByText("It's packed. We're finding a courier to bring it to you."),
-  ).toBeVisible({
-    timeout: 70_000,
-  });
+    priya
+      .getByRole('main')
+      .getByText(
+        /^It's packed(\. We're finding a courier to bring it to you\.|, but finding a courier is taking longer than usual\.)/,
+      ),
+  ).toBeVisible();
 
   await page.getByRole('main').getByRole('button', { name: 'Dismiss' }).first().click();
   await page.getByRole('button', { name: 'Go offline' }).click();

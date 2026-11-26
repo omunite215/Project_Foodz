@@ -804,7 +804,9 @@ export async function setAvailability(
       if (!body.giveBack || held.status === 'PICKED_UP') {
         throw refuse(
           'PARTNER_BUSY',
-          `You're on order ${held.orderNumber}. Give it back or finish it before going offline.`,
+          held.status === 'PICKED_UP'
+            ? `You're delivering order ${held.orderNumber}. Finish it before going offline.`
+            : `You're on order ${held.orderNumber}. Give it back or finish it before going offline.`,
           409,
           { orderNumber: held.orderNumber },
         );

@@ -109,6 +109,8 @@ export interface CandidateFacts {
   excluded: boolean;
   /** Already offered this order by the automatic rounds, and how that ended. */
   previousAutoEnding: OfferEnding | null;
+  /** How many automatic offers this order has already made him. */
+  autoOffers: number;
   /** W5.4: the sweep allows one more offer after a timeout, once everyone else has had a turn. */
   secondChance: boolean;
   isDemo: boolean;
@@ -157,8 +159,9 @@ export function notOfferable(
   if (partner.hasOpenOffer) return 'has-offer';
   if (partner.excluded) return 'excluded';
   if (
-    partner.previousAutoEnding !== null &&
-    !(partner.secondChance && partner.previousAutoEnding === 'expired')
+    partner.autoOffers > 1 ||
+    (partner.previousAutoEnding !== null &&
+      !(partner.secondChance && partner.previousAutoEnding === 'expired'))
   ) {
     return 'already-offered';
   }
@@ -368,20 +371,65 @@ export function courierStateOf(
   return 'between';
 }
 
+/**
+ * The ending the offers list words (A36.2, design 2.4.1). An offer that expired although the
+ * partner pressed Accept within its time (offline, reported after the end, P28.2) was answered
+ * too late, not missed: the press time decides, not only the stored end reason.
+ */
+export function listedEnding(
+  offer: {
+    status: string;
+    endedReason: OfferEnding | null;
+    pressedAt: Date | null;
+    expiresAt: Date;
+  },
+  graceSeconds: number = DISPATCH_DEFAULTS.graceSeconds,
+): OfferEnding | 'open' {
+  if (offer.status === 'PENDING') return 'open';
+  const ending = offer.endedReason ?? 'expired';
+  if (
+    ending === 'expired' &&
+    offer.pressedAt !== null &&
+    offer.pressedAt.getTime() <= offer.expiresAt.getTime() + graceSeconds * 1000
+  ) {
+    return 'too-late';
+  }
+  return ending;
+}
+
 /** F7 S1 to S4: the customer's state; never who was asked or what staff did (S5.4). */
-export function customerStateOf(facts: {
-  orderStatus: string;
-  delivery: {
-    status: DeliveryStatus;
-    escalatedAt: string | null;
-    searchStoppedAt: string | null;
-  } | null;
-}): CustomerDispatchView['state'] {
-  const status = facts.delivery?.status ?? null;
+export function customerStateOf(
+  facts: {
+    orderStatus: string;
+    /** When the order was marked ready; without it the first moments can't be told apart. */
+    readyAt?: string | null;
+    delivery: {
+      status: DeliveryStatus;
+      escalatedAt: string | null;
+      searchStoppedAt: string | null;
+      searchStartedAt?: string | null;
+    } | null;
+  },
+  now: Date = new Date(),
+  startDelaySeconds: number = DISPATCH_DEFAULTS.startDelaySeconds,
+): CustomerDispatchView['state'] {
+  const delivery = facts.delivery;
+  const status = delivery?.status ?? null;
   switch (facts.orderStatus) {
-    case 'READY':
+    case 'READY': {
       if (status === 'ASSIGNED' || status === 'AT_RESTAURANT') return 'assigned';
-      return facts.delivery?.escalatedAt || facts.delivery?.searchStoppedAt ? 'slow' : 'searching';
+      if (delivery?.escalatedAt || delivery?.searchStoppedAt) return 'slow';
+      // S3.1 (review): no search running past the first moments after "Mark ready" is the
+      // board's "Not looking for a courier"; the customer hears the slow line, as for a stop.
+      const justReady =
+        facts.readyAt === undefined ||
+        (facts.readyAt !== null &&
+          now.getTime() - Date.parse(facts.readyAt) < (startDelaySeconds + 10) * 1000);
+      const searching =
+        status === 'SEARCHING' &&
+        (delivery?.searchStartedAt === undefined || delivery.searchStartedAt !== null);
+      return searching || justReady ? 'searching' : 'slow';
+    }
     case 'PICKED_UP':
       return status === 'PICKED_UP' ? 'pickedUp' : 'none';
     case 'DELIVERED':

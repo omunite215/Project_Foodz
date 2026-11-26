@@ -8,6 +8,7 @@ import { tracksLive } from '@/lib/order-tracking';
 import { channels } from '@/lib/realtime/channels';
 import { adoptTrackingView, forgetTracking, onCourierLocation } from '@/lib/tracking/live-point';
 import { useChannelEvent, useRealtimeStatus } from '@/lib/realtime/client';
+import { oneReadAtATime } from '@/lib/one-read-at-a-time';
 import { useHydrated } from '@/lib/use-hydrated';
 import { useOnline } from '@/lib/use-online';
 import type { LiveLine } from './order-progress';
@@ -47,14 +48,21 @@ export function useLiveOrder({
   const version = useRef(view.progress.version);
   const shown = useRef(view);
 
-  const refresh = useEffectEvent(() => void refetch());
+  // F7 S4.1: one read at a time. Messages during a read ask for one more after it, so a burst
+  // never queues reads in front of the one that matters.
+  const readLatest = useEffectEvent(() => refetch());
+  const reader = useRef<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    reader.current = oneReadAtATime(() => readLatest());
+  }, []);
+  const refresh = useEffectEvent(() => void reader.current?.());
 
   // Events older than what the page shows are ignored (S3.7).
   useChannelEvent(channel, 'order.status-changed', (event) => {
-    if (event.version > version.current) void refetch();
+    if (event.version > version.current) void reader.current?.();
   });
   // F7 S5.1: a change of courier leaves the order's version alone; the view is read again.
-  useChannelEvent(channel, 'delivery.changed', () => void refetch());
+  useChannelEvent(channel, 'delivery.changed', () => void reader.current?.());
 
   // F8 (L2): the courier's point on the order's own track channel, picked up to delivered. The
   // view's point is adopted first; nothing of his position stays once tracking ends (S6.1).

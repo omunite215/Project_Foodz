@@ -99,6 +99,9 @@ export function HowOffersWorkSheet({
 export function HowOffersWorkLink() {
   const [open, setOpen] = useState(false);
   const linkRef = useRef<HTMLButtonElement>(null);
+  // An offer closes the sheet for good: it never comes back over "Go offline" afterwards (P19.1).
+  const offerOpen = useSelector(dispatchStore, (state) => state.card !== null);
+  if (open && offerOpen) setOpen(false);
   return (
     <>
       <button

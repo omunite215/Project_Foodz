@@ -96,6 +96,15 @@ async function timeOut(offerId: string, seen = true) {
   return dispatch.expireOffer(offerId);
 }
 
+/** One turn of the search: who it offered, letting the offer run out; null when nobody. */
+async function offeredTo(deliveryId: string) {
+  const turn = await dispatch.searchTurn(deliveryId);
+  if (turn.kind !== 'offered') return null;
+  const offer = await offerOf(turn.offerId);
+  expect(await timeOut(turn.offerId)).toMatchObject({ outcome: 'expired' });
+  return offer.partnerId;
+}
+
 async function partnerNamed(id: string) {
   return [luis, diego, grace, omar, lena].find((partner) => partner.partnerId === id)?.name;
 }
@@ -202,6 +211,29 @@ describe('the search (W2, W3, W4)', () => {
     expect(forOlder.kind === 'offered' && (await offerOf(forOlder.offerId)).partnerId).toBe(
       grace.partnerId,
     );
+  });
+
+  it('gives a timed-out partner one more offer in a sweep, never a third, then the next order (W5.4)', async () => {
+    // QA F7 W5.4: Luis alone, the older order kept coming back to him while the newer one waited.
+    await goOnlineAt(migrator, luis, { km: 0.2 });
+    const older = await readyOrder(migrator, priya.userId, { readyMinutes: 3 });
+    const newer = await readyOrder(migrator, maya.userId, { readyMinutes: 1 });
+    const olderDelivery = await openSearchFor(older.id);
+    const newerDelivery = await openSearchFor(newer.id);
+    await migrator.delivery.update({
+      where: { id: olderDelivery },
+      data: { escalatedAt: new Date(Date.now() - 60_000) },
+    });
+
+    expect(await offeredTo(olderDelivery)).toBe(luis.partnerId);
+    expect(await offeredTo(olderDelivery)).toBe(luis.partnerId);
+    expect(await offeredTo(olderDelivery)).toBeNull();
+    expect(
+      await migrator.deliveryOffer.count({
+        where: { deliveryId: olderDelivery, partnerId: luis.partnerId },
+      }),
+    ).toBe(2);
+    expect(await offeredTo(newerDelivery)).toBe(luis.partnerId);
   });
 });
 
@@ -467,6 +499,26 @@ describe('staff (A37 to A39)', () => {
     expect(row?.words).toMatch(/ · at the kitchen · waiting under 1 min$/);
   });
 
+  it("disables a courier only for another order's open offer, not this order's (A37.2, A37.3)", async () => {
+    await goOnlineAt(migrator, grace, { km: 1.4, waitingMinutes: 10 });
+    const mine = await readyOrder(migrator, priya.userId, { readyMinutes: 3 });
+    const other = await readyOrder(migrator, maya.userId, { readyMinutes: 1 });
+    const mineDelivery = await openSearchFor(mine.id);
+    const turn = await dispatch.searchTurn(mineDelivery);
+    expect(turn.kind === 'offered' && (await offerOf(turn.offerId)).partnerId).toBe(
+      grace.partnerId,
+    );
+    const rowFor = async (orderId: string) => {
+      const list = await asBrowser(morgan.browser, () =>
+        actions.assignableCouriersAction({ orderId }),
+      );
+      return list?.data?.rows.find((item) => item.partnerId === grace.partnerId);
+    };
+    // Her automatic offer is for this order: support may still pick her, replacing it (A37.3).
+    expect((await rowFor(mine.id))?.disabledReason).toBeNull();
+    expect((await rowFor(other.id))?.disabledReason).toBe('Has another offer open');
+  });
+
   it('refuses the kitchen and the demo admin', async () => {
     await goOnlineAt(migrator, diego, { km: 0.2 });
     const order = await readyOrder(migrator, priya.userId);
@@ -625,6 +677,17 @@ describe('order changes (F5 hooks) and what people see', () => {
     expect(masked?.words).not.toContain('Grace');
   });
 
+  it("reads the couriers chip's count for the board, never for a customer (A35.1)", async () => {
+    const count = () => asBrowser(alex.browser, () => board.getCouriersCount(alex.actor));
+    const before = await count();
+    await goOnlineAt(migrator, grace, { km: 1.4 });
+    await goOnlineAt(migrator, omar, { km: 0.4 });
+    const after = await count();
+    expect(after.online).toBe(before.online + 2);
+    expect(after.free).toBe(before.free + 2);
+    await expect(board.getCouriersCount(priya.actor)).rejects.toBeDefined();
+  });
+
   it('puts the courier milestones on the staff timeline, masked for the demo admin (design 2.5)', async () => {
     await goOnlineAt(migrator, grace, { km: 1.4 });
     // A sample customer, so the demo admin may open the order; Grace stays a real person.
@@ -661,6 +724,17 @@ describe('order changes (F5 hooks) and what people see', () => {
     const masked = await words(demoAdmin);
     expect(masked).toHaveLength(3);
     expect(masked.join(' ')).not.toContain('Grace');
+
+    // A36.4: the kitchen reads "Grace O.", and the full name is nowhere in its data.
+    expect(await words(alex)).toEqual([
+      'Looking for a courier · Foodz (automatic)',
+      'Grace O. accepted · 1.4 km from the kitchen',
+      'Morgan Diaz (Support) took it off Grace O. · Courier is too far away',
+    ]);
+    const kitchenDetail = await asBrowser(alex.browser, () =>
+      board.getStaffOrderDetail(alex.actor, order.id),
+    );
+    expect(JSON.stringify(kitchenDetail)).not.toContain('Okafor');
   });
 
   it("never shows a real courier's plate to the demo admin (S1)", async () => {

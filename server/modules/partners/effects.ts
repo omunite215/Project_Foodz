@@ -11,6 +11,7 @@ import {
   partnerWentOnline,
 } from '@/server/jobs/partner-events';
 import { logger } from '@/server/logger';
+import { announceCouriersCount } from '@/server/modules/delivery/service';
 import { notify } from '@/server/modules/notifications/service';
 import { publish } from '@/server/realtime/pusher';
 import { deleteObject } from '@/server/storage/s3';
@@ -70,6 +71,8 @@ async function runOne(effect: PartnerEffect) {
         changeId: effect.changeId,
         at: effect.at.toISOString(),
       });
+      // A35.1: the boards' couriers chip, within moments.
+      await announceCouriersCount(effect.at);
       return;
     case 'status':
       await publish(channels.partner(effect.partnerId), 'partner.status-changed', {

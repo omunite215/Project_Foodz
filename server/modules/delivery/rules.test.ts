@@ -8,6 +8,7 @@ import {
   type CourierLineInput,
   courierStateOf,
   customerStateOf,
+  listedEnding,
   dispatchOverridesRefused,
   dispatchTimingWarning,
   dispatchTimings,
@@ -44,6 +45,7 @@ describe('who may be offered (W2)', () => {
     hasOpenOffer: false,
     excluded: false,
     previousAutoEnding: null,
+    autoOffers: 0,
     secondChance: false,
     isDemo: false,
     unseenInRow: 0,
@@ -82,10 +84,23 @@ describe('who may be offered (W2)', () => {
       'out-of-reach',
     );
     expect(
-      notOfferable({ ...ok, previousAutoEnding: 'expired', secondChance: true }, context),
+      notOfferable(
+        { ...ok, previousAutoEnding: 'expired', autoOffers: 1, secondChance: true },
+        context,
+      ),
     ).toBeNull();
     expect(
-      notOfferable({ ...ok, previousAutoEnding: 'declined', secondChance: true }, context),
+      notOfferable(
+        { ...ok, previousAutoEnding: 'declined', autoOffers: 1, secondChance: true },
+        context,
+      ),
+    ).toBe('already-offered');
+    // Only one more: a second timeout on the same order ends his turns for it.
+    expect(
+      notOfferable(
+        { ...ok, previousAutoEnding: 'expired', autoOffers: 2, secondChance: true },
+        context,
+      ),
     ).toBe('already-offered');
   });
 
@@ -330,6 +345,39 @@ describe('the staff courier line state (A34.1)', () => {
   });
 });
 
+const readyAgo = (seconds: number) => new Date(now.getTime() - seconds * 1000).toISOString();
+
+describe("the customer's line when no search runs (S3.1, review)", () => {
+  it('says searching in the first moments after "Mark ready", then slow while nobody looks', () => {
+    expect(
+      customerStateOf({ orderStatus: 'READY', readyAt: readyAgo(5), delivery: null }, now),
+    ).toBe('searching');
+    // Seeded S1107: ready 16 minutes ago, no search ever ran ("Not looking for a courier").
+    expect(
+      customerStateOf({ orderStatus: 'READY', readyAt: readyAgo(16 * 60), delivery: null }, now),
+    ).toBe('slow');
+    const notStarted = {
+      status: 'SEARCHING' as const,
+      escalatedAt: null,
+      searchStoppedAt: null,
+      searchStartedAt: null,
+    };
+    expect(
+      customerStateOf({ orderStatus: 'READY', readyAt: readyAgo(60), delivery: notStarted }, now),
+    ).toBe('slow');
+    expect(
+      customerStateOf(
+        {
+          orderStatus: 'READY',
+          readyAt: readyAgo(60),
+          delivery: { ...notStarted, searchStartedAt: readyAgo(48) },
+        },
+        now,
+      ),
+    ).toBe('searching');
+  });
+});
+
 describe("the customer's courier state (S1 to S4)", () => {
   const delivery = { status: 'SEARCHING' as const, escalatedAt: null, searchStoppedAt: null };
   it('says searching, then slow after escalation, then who is coming', () => {
@@ -348,5 +396,40 @@ describe("the customer's courier state (S1 to S4)", () => {
       customerStateOf({ orderStatus: 'PICKED_UP', delivery: { ...delivery, status: 'CANCELLED' } }),
     ).toBe('none');
     expect(customerStateOf({ orderStatus: 'PREPARING', delivery })).toBe('none');
+  });
+});
+
+describe('the offers list ending (A36.2, review S6)', () => {
+  const expiresAt = new Date('2026-11-21T03:50:30.000Z');
+  const offer = (patch: Partial<Parameters<typeof listedEnding>[0]>) => ({
+    status: 'EXPIRED',
+    endedReason: 'expired' as const,
+    pressedAt: null,
+    expiresAt,
+    ...patch,
+  });
+
+  it('reads an offline press in time, reported after the end, as answered too late', () => {
+    expect(listedEnding(offer({ pressedAt: new Date('2026-11-21T03:50:12.000Z') }))).toBe(
+      'too-late',
+    );
+    // Pressed in the 2-second grace still counts as in time.
+    expect(listedEnding(offer({ pressedAt: new Date('2026-11-21T03:50:31.500Z') }))).toBe(
+      'too-late',
+    );
+  });
+
+  it('keeps a real miss, a press after the end, and every other ending as they are', () => {
+    expect(listedEnding(offer({}))).toBe('expired');
+    expect(listedEnding(offer({ pressedAt: new Date('2026-11-21T03:50:40.000Z') }))).toBe(
+      'expired',
+    );
+    expect(
+      listedEnding(
+        offer({ endedReason: 'declined', pressedAt: new Date('2026-11-21T03:50:10.000Z') }),
+      ),
+    ).toBe('declined');
+    expect(listedEnding(offer({ status: 'PENDING', endedReason: null }))).toBe('open');
+    expect(listedEnding(offer({ endedReason: null }))).toBe('expired');
   });
 });

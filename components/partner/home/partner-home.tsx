@@ -211,6 +211,14 @@ export function usePartnerSession(
     return () => clearInterval(timer);
   }, [online, hasDelivery]);
 
+  // When the order ends, a fresh server read replaces the page's copy of it, drop-off address
+  // included, so nothing of the customer stays in the open page (P29.7).
+  const heldBefore = useRef(hasDelivery);
+  useEffect(() => {
+    if (heldBefore.current && !hasDelivery) router.refresh();
+    heldBefore.current = hasDelivery;
+  }, [hasDelivery, router]);
+
   // Back in the app: catch up at once (P28.3, P28.5).
   useEffect(() => {
     const onVisible = () => {

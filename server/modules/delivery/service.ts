@@ -23,6 +23,7 @@ import {
   courierStateOf,
   customerStateOf,
   dispatchTimings,
+  listedEnding,
   offerPay,
   reachesToTry,
   reachMeters,
@@ -384,7 +385,9 @@ export async function markOfferSeen(
   if (practice) return { seenAt: practice.seenAt ?? new Date().toISOString() };
   const result = seenOutcome.parse(await runAs(actor, (ctx) => repo.markOfferSeen(ctx, offerId)));
   if (result.outcome === 'not-found') throw offerNotFound();
-  return { seenAt: new Date(result.seenAt).toISOString() };
+  // The database keeps UTC without a zone (`app_now()`), so its JSON text has none: read it as UTC.
+  const zoned = /(?:Z|[+-]\d\d:?\d\d)$/.test(result.seenAt) ? result.seenAt : `${result.seenAt}Z`;
+  return { seenAt: new Date(zoned).toISOString() };
 }
 
 /** `POST /api/v1/partner/offers/{id}/accept` (P22, W6): atomic in the database. */
@@ -821,7 +824,7 @@ export async function listAssignableCouriers(
     const pool = order.customerIsDemo ? 'DEMO' : 'REAL';
     const delivery = await repo.findDeliveryByOrder(ctx, orderId);
     const kitchen = await repo.findKitchen(ctx);
-    const rows = await repo.listOnlineForAssign(ctx, pool);
+    const rows = await repo.listOnlineForAssign(ctx, pool, delivery?.id ?? null);
     const offline = await repo.countApprovedOffline(ctx, pool);
     const offers = delivery ? await repo.listOffersOfDelivery(ctx, delivery.id) : [];
     const gaveBack = new Set(delivery?.excludedPartnerIds ?? []);
@@ -1300,6 +1303,15 @@ export async function couriersCount(): Promise<CouriersCount> {
   return runAsSystem('couriers count', repo.countCouriers);
 }
 
+/**
+ * A35.1: a partner went online or offline. Every board hears it on private-ops and reads the
+ * new count through its own authorized call, so the chip follows at once instead of at the
+ * next refresh. The message carries a time only (W11.1). Best effort.
+ */
+export async function announceCouriersCount(at = new Date()): Promise<void> {
+  await runDispatchEffects([{ kind: 'couriers', at }]);
+}
+
 const sentByOf = (
   viewer: { isDemo: boolean },
   offer: OfferRowData,
@@ -1361,8 +1373,7 @@ export async function courierSection(
     delivery.searchStoppedAt === null;
   const offers: OfferRow[] = data.offers.map((offer) => {
     const partner = partners.get(offer.partnerId);
-    const ending: OfferEnding | 'open' =
-      offer.status === 'PENDING' ? 'open' : (offer.endedReason ?? 'expired');
+    const ending: OfferEnding | 'open' = listedEnding(offer, timings().graceSeconds);
     const answered =
       (ending === 'accepted' || ending === 'declined') && offer.respondedAt
         ? Math.max(0, Math.round((offer.respondedAt.getTime() - offer.createdAt.getTime()) / 1000))
@@ -1423,19 +1434,23 @@ export async function courierSection(
   };
 }
 
-/** Full names for the staff timeline (design 2.5), masked for the demo admin (A36.5). */
+/**
+ * The couriers the staff timeline names (design 2.5): full names for SUPPORT and ADMIN, masked
+ * for the demo admin (A36.5), and only the first name and last initial for KITCHEN (A36.4), so
+ * a full name never reaches the tablet.
+ */
 export async function courierNames(
-  viewer: { isDemo: boolean },
+  viewer: { isDemo: boolean; role: UserActor['role'] },
   partnerIds: readonly string[],
 ): Promise<Map<string, string>> {
   const unique = [...new Set(partnerIds)];
   if (unique.length === 0) return new Map();
   const partners = await runAsSystem('courier names', (ctx) => repo.listCourierFacts(ctx, unique));
   return new Map(
-    partners.map((partner) => [
-      partner.partnerId,
-      nameFor(viewer, partner.name, partner.shownToDemo),
-    ]),
+    partners.map((partner) => {
+      const name = nameFor(viewer, partner.name, partner.shownToDemo);
+      return [partner.partnerId, viewer.role === 'kitchen' ? shortName(name) : name];
+    }),
   );
 }
 
@@ -1465,16 +1480,22 @@ export async function getCustomerDispatch(
       : [];
     return { delivery, partner };
   });
-  const state = customerStateOf({
-    orderStatus: own.status,
-    delivery: facts.delivery
-      ? {
-          status: facts.delivery.status,
-          escalatedAt: facts.delivery.escalatedAt?.toISOString() ?? null,
-          searchStoppedAt: facts.delivery.searchStoppedAt?.toISOString() ?? null,
-        }
-      : null,
-  });
+  const state = customerStateOf(
+    {
+      orderStatus: own.status,
+      readyAt: own.readyAt?.toISOString() ?? null,
+      delivery: facts.delivery
+        ? {
+            status: facts.delivery.status,
+            escalatedAt: facts.delivery.escalatedAt?.toISOString() ?? null,
+            searchStoppedAt: facts.delivery.searchStoppedAt?.toISOString() ?? null,
+            searchStartedAt: facts.delivery.searchStartedAt?.toISOString() ?? null,
+          }
+        : null,
+    },
+    new Date(),
+    timings().startDelaySeconds,
+  );
   const partner = facts.partner;
   // The courier card while he has the order; after delivery only his first name ("Delivered by
   // Luis."), never a photo link, vehicle, plate or rating (security S8), and never a position.

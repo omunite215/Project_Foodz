@@ -108,6 +108,12 @@ test.describe('the kitchen board (A2)', () => {
     const moved = card(page, move.number);
     if (!isPhone(testInfo)) await expect(moved).toHaveCSS('outline-style', 'solid');
     await expect(moved.getByText('Moved just now')).toBeVisible({ timeout: 10_000 });
+    // F7 A34.1: the courier line shows from the start, long before any offer.
+    if (move.to === 'Ready') {
+      await expect(moved.getByText('Finding a courier…', { exact: true })).toBeVisible({
+        timeout: 4_000,
+      });
+    }
     await moved
       .getByRole('button', {
         name: new RegExp(`^Undo, move order ${move.number} back to ${move.from}`),
