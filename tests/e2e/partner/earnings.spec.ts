@@ -185,7 +185,8 @@ test('Earnings in the dark theme, and Home links to it', async ({ page, context,
   await signInReady(page, LUIS, '/partner');
   const summary = await summaryOf(page);
   // P51.3: "Today · $19.57 · 3 deliveries" under the status, linking to Earnings.
-  const line = page.getByRole('link', { name: /^Today · .*, see earnings$/ });
+  // Review P1: no stray space before the comma.
+  const line = page.getByRole('link', { name: /^Today · .*[^ ], see earnings$/ });
   await expect(line).toBeVisible();
   const words =
     summary.today.deliveries === 0 && summary.today.earnedCents === 0

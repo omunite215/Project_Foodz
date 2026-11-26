@@ -33,18 +33,17 @@ export function TodayLink({ partnerId, initial }: { partnerId: string; initial: 
   return <TodayLinkView today={today} />;
 }
 
-/** The line itself (also for stories): the words, the icon and a spoken ", see earnings". */
+/** The line itself (also for stories): the words, the icon, and ", see earnings" in its name. */
 export function TodayLinkView({ today }: { today: TodayLine }) {
   return (
     <Link
       href="/partner/earnings"
+      // One name, the visible words first (a hidden suffix would be read after a stray space).
+      aria-label={`${todayLine(today)}, see earnings`}
       className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-left text-body-4 font-medium text-strong tabular-nums hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
     >
       <Wallet className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-      <span>
-        {todayLine(today)}
-        <span className="sr-only">, see earnings</span>
-      </span>
+      <span>{todayLine(today)}</span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
     </Link>
   );

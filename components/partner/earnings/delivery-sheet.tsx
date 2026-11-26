@@ -147,6 +147,7 @@ export function DeliverySheet({
       {notFound ? null : (
         <div className="mt-4">
           <DetailRows
+            wideLabels
             rows={payRows.map((pay) => ({
               label: pay.label,
               value:

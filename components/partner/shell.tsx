@@ -606,9 +606,12 @@ export function IconDisc({
 export function DetailRows({
   title,
   rows,
+  wideLabels = false,
 }: {
   title?: string;
   rows: readonly { label: string; value: ReactNode }[];
+  /** Labels up to two words ("Cash collected") on one line from 360 px (F9 review P9). */
+  wideLabels?: boolean;
 }) {
   const id = useId();
   return (
@@ -627,7 +630,14 @@ export function DetailRows({
             key={row.label}
             className="flex min-h-14 flex-col justify-center gap-0.5 px-4 py-3 min-[360px]:flex-row min-[360px]:items-center min-[360px]:justify-start min-[360px]:gap-3"
           >
-            <dt className="w-20 shrink-0 text-body-5 text-muted-foreground">{row.label}</dt>
+            <dt
+              className={cn(
+                'shrink-0 text-body-5 text-muted-foreground',
+                wideLabels ? 'w-28' : 'w-20',
+              )}
+            >
+              {row.label}
+            </dt>
             <dd className="min-w-0 text-body-4 text-strong [overflow-wrap:anywhere]">
               {row.value}
             </dd>
