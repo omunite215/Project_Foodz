@@ -188,6 +188,19 @@ test('ADMIN reads the week: summary, rows, totals and the sidebar entry', async 
 
   if (!isPhone(testInfo)) {
     await expect(regionOf(page)).toBeVisible();
+    // Review S6: every header's sort button stays inside its own column.
+    const overflows = await page.locator('thead th').evaluateAll((cells) =>
+      cells.flatMap((cell) => {
+        const button = cell.querySelector('button');
+        if (!button) return [];
+        const outer = cell.getBoundingClientRect();
+        const inner = button.getBoundingClientRect();
+        return inner.right > outer.right + 0.5 || inner.left < outer.left - 0.5
+          ? [cell.textContent ?? '']
+          : [];
+      }),
+    );
+    expect(overflows).toEqual([]);
     await expect(page.getByRole('columnheader', { name: 'Partner' })).toHaveAttribute(
       'aria-sort',
       'ascending',

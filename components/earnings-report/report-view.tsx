@@ -850,13 +850,17 @@ function SortHeader({
     <button
       type="button"
       onClick={() => navigate(withSort(query, sort))}
+      // Exactly its cell's width (review S6): the label and its icon wrap inside it, never into
+      // the next column; the inner padding is smaller than the cell's so long words fit.
       className={cn(
-        '-mx-3 inline-flex min-h-11 items-end gap-1.5 px-3 py-1 hover:text-neutral-1 focus-visible:-outline-offset-2',
+        '-mx-3 flex min-h-11 w-[calc(100%+1.5rem)] min-w-0 items-end px-1 py-1 whitespace-normal hover:text-neutral-1 focus-visible:-outline-offset-2',
         numeric ? 'justify-end text-right' : 'text-left',
       )}
     >
-      <span>{COLUMN_LABELS[sort]}</span>
-      <Icon className="mb-0.5 size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0">
+        {COLUMN_LABELS[sort]}
+        <Icon className="ml-1 inline-block size-3.5 shrink-0 align-[-2px]" aria-hidden />
+      </span>
     </button>
   );
 }
