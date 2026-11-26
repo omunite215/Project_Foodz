@@ -37,6 +37,12 @@ const SENSITIVE_KEYS = [
   'clientSecret',
   'contactName',
   'kitchenNote',
+  // F9: a customer's rating comment, staff notes, the partner's message and a payout reference.
+  'comment',
+  'staffNote',
+  'excludedNote',
+  'partnerMessage',
+  'reference',
   // The delivery address and notes kept on an order.
   'addressLabel',
   'addressLine1',
