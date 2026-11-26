@@ -520,7 +520,9 @@ export function timelineOf(
             ...base,
             type: 'delivered',
             reason: oneOf(HANDOVER_REASONS, data.reason),
-            note,
+            // F8 (A47, gate S12): a staff hand-over's note is about the door or the customer,
+            // which the kitchen never sees.
+            note: kitchen && data.actor === 'staff' ? null : note,
             cashCollectedCents: kitchen ? null : count(data.cashCollectedCents),
           },
         ];
