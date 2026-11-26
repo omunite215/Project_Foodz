@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { type ReactNode, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { isStars, type OrderRatingView } from '@/server/modules/ratings/schema';
+import { Providers } from '@/components/providers';
 import type { ActionOutcome } from '@/lib/action-result';
 import { OrderNoticeCard } from './order-notices';
 import { OrderRow } from './order-row';
@@ -109,35 +110,34 @@ function Card({ rating, client = echo }: { rating: OrderRatingView; client?: Rat
   );
 }
 
-/** The card in the order page's column at 375 (327 inside), 1024 (two columns) and 1440. */
+/** The order page's column: 600 px at most, full width minus 24 px a side below that. */
 function Widths({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start gap-8 bg-neutral-8 p-4">
-      {[
-        { label: '375', width: 'w-[327px]' },
-        { label: '1024, left column', width: 'w-[496px]' },
-        { label: '1440', width: 'w-[600px]' },
-      ].map((frame) => (
-        <figure key={frame.label} className={frame.width}>
-          <figcaption className="mb-2 text-caption text-neutral-3">{frame.label}</figcaption>
-          {children}
-        </figure>
-      ))}
+    <div className="min-h-dvh bg-neutral-8 px-6 py-6">
+      <div className="mx-auto max-w-[600px]">{children}</div>
     </div>
   );
 }
 
+const VIEWPORTS = {
+  w375: { name: '375 phone', styles: { width: '375px', height: '667px' } },
+  w1024: { name: '1024 tablet', styles: { width: '1024px', height: '768px' } },
+  w1280: { name: '1280 laptop', styles: { width: '1280px', height: '800px' } },
+  w1440: { name: '1440 desktop', styles: { width: '1440px', height: '900px' } },
+};
+
+const at = (value: keyof typeof VIEWPORTS) => ({ viewport: { value, isRotated: false } });
+
 const meta = {
   title: 'Orders/Rating card',
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', viewport: { options: VIEWPORTS } },
+  globals: at('w375'),
 } satisfies Meta;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The first frame's card, so a play function acts on one copy. */
-const firstCard = (canvasElement: HTMLElement) =>
-  within(canvasElement.querySelector('figure') ?? canvasElement);
+const firstCard = (canvasElement: HTMLElement) => within(canvasElement);
 
 export const Fresh: Story = {
   render: () => (
@@ -199,7 +199,8 @@ export const WithComment: Story = {
   ),
   play: async ({ canvasElement }) => {
     const card = firstCard(canvasElement);
-    await userEvent.click(card.getByRole('button', { name: 'Add a comment about Pad Thai' }));
+    const padThai = card.getAllByRole('listitem')[1]!;
+    await userEvent.click(within(padThai).getByRole('button', { name: /^Add a comment/ }));
     const field = card.getByLabelText('Comment about Pad Thai (optional)');
     await expect(field).toHaveFocus();
     await userEvent.click(field);
@@ -406,55 +407,58 @@ export const Demo: Story = {
 
 const NOW = new Date('2026-11-21T00:30:00.000Z');
 
-export const OrdersListRows: Story = {
-  render: () => (
-    <div className="flex flex-wrap items-start gap-8 bg-neutral-8 p-4">
-      {[
-        { label: '375', width: 'w-[343px]' },
-        { label: '1280', width: 'w-[1136px]' },
-      ].map((frame) => (
-        <figure key={frame.label} className={frame.width}>
-          <figcaption className="mb-2 text-caption text-neutral-3">{frame.label}</figcaption>
-          <ul className="space-y-3">
-            <li>
-              <OrderRow
-                order={orderSummaryFixture({
-                  status: 'DELIVERED',
-                  statusWord: 'delivered',
-                  reorderable: true,
-                  rating: 'rate',
-                })}
-                now={NOW}
-                timeZone="America/New_York"
-              />
-            </li>
-            <li>
-              <OrderRow
-                order={orderSummaryFixture({
-                  id: '8b0a1c2e-4d5f-4a6b-8c9d-0e1f2a3b4c5d',
-                  number: '1038',
-                  status: 'DELIVERED',
-                  statusWord: 'delivered',
-                  reorderable: true,
-                  rating: 'rated',
-                })}
-                now={NOW}
-                timeZone="America/New_York"
-              />
-            </li>
-          </ul>
-        </figure>
-      ))}
+const rows = (
+  <Providers>
+    <div className="min-h-dvh bg-neutral-8 px-4 py-6 md:px-12 xl:px-[72px]">
+      <ul className="mx-auto max-w-[1136px] space-y-3">
+        <li>
+          <OrderRow
+            order={orderSummaryFixture({
+              status: 'DELIVERED',
+              statusWord: 'delivered',
+              reorderable: true,
+              rating: 'rate',
+            })}
+            now={NOW}
+            timeZone="America/New_York"
+          />
+        </li>
+        <li>
+          <OrderRow
+            order={orderSummaryFixture({
+              id: '8b0a1c2e-4d5f-4a6b-8c9d-0e1f2a3b4c5d',
+              number: '1038',
+              status: 'DELIVERED',
+              statusWord: 'delivered',
+              reorderable: true,
+              rating: 'rated',
+            })}
+            now={NOW}
+            timeZone="America/New_York"
+          />
+        </li>
+      </ul>
     </div>
-  ),
+  </Providers>
+);
+
+/** "Rate" and "Order again" share the row's last line at 375 (design 2.13). */
+export const OrdersListRows: Story = {
+  render: () => rows,
   play: async ({ canvasElement }) => {
-    const first = within(canvasElement.querySelector('figure') ?? canvasElement);
-    await expect(first.getByRole('link', { name: 'Rate order 1042' })).toHaveAttribute(
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Rate order 1042' })).toHaveAttribute(
       'href',
       `/orders/${ORDER_ID}#rate`,
     );
-    await expect(first.getByText(/· Rated/)).toBeVisible();
+    await expect(canvas.getAllByText(/· Rated/)[0]).toBeVisible();
   },
+};
+
+/** From 1280 they stack in the action column, "Rate" above "Order again". */
+export const OrdersListRowsAt1280: Story = {
+  ...OrdersListRows,
+  globals: at('w1280'),
 };
 
 export const ReminderNotice: Story = {
@@ -482,3 +486,8 @@ export const ReminderNotice: Story = {
     );
   },
 };
+
+export const FreshAt1024: Story = { ...Fresh, globals: at('w1024') };
+export const FreshAt1440: Story = { ...Fresh, globals: at('w1440') };
+export const RatedAt1440: Story = { ...Rated, globals: at('w1440') };
+export const EditingAt1024: Story = { ...Editing, globals: at('w1024') };
