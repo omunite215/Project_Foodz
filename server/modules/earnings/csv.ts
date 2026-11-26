@@ -4,6 +4,10 @@
  * integer maths, and a guard so a text cell can't run as a formula when the file is opened.
  */
 
+import type { VehicleType } from '@/server/db/enums';
+import { VEHICLE_WORDS } from '@/server/modules/partners/text';
+import type { ReportFigures } from './schema';
+
 const BOM = '﻿';
 
 /** A cell the writer leaves exactly as given (amounts and counts); never prefixed. */
@@ -55,4 +59,32 @@ export function csvLine(cells: readonly CsvCell[]): string {
 /** The whole file: BOM, header, rows, CRLF after every line. */
 export function toCsv(header: readonly string[], rows: readonly (readonly CsvCell[])[]): string {
   return `${BOM}${[csvLine(header), ...rows.map(csvLine)].join('\r\n')}\r\n`;
+}
+
+/**
+ * One report row (A64.1): the partner, the vehicle in the screens' words ("Bicycle or e-bike",
+ * never the enum, review P6), the range and the figures.
+ */
+export function reportCsvRow(
+  row: { partnerId: string; name: string; vehicle: VehicleType },
+  range: { from: string; to: string },
+  figures: ReportFigures,
+): CsvCell[] {
+  return [
+    row.partnerId,
+    row.name,
+    VEHICLE_WORDS[row.vehicle] ?? row.vehicle,
+    range.from,
+    range.to,
+    count(figures.deliveries),
+    money(figures.deliveryPayCents),
+    money(figures.tipsCents),
+    money(figures.adjustmentsCents),
+    money(figures.earnedCents),
+    money(figures.cashCollectedCents),
+    money(figures.cashHandedInCents),
+    money(figures.paidOutCents),
+    money(figures.openingCents),
+    money(figures.closingCents),
+  ];
 }

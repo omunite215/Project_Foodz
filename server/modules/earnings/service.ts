@@ -10,7 +10,7 @@ import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
 import { cityAndZip, firstNameOf } from '@/server/modules/delivery/text';
 import { passStepUp, stepUpFreshUntilFor } from '@/server/modules/staff/service';
-import { type CsvCell, count, money as moneyCell, toCsv } from './csv';
+import { type CsvCell, money as moneyCell, reportCsvRow, toCsv } from './csv';
 import { announceEarnings, notifyPartnerOfEntry } from './effects';
 import * as repo from './repo';
 import {
@@ -1185,27 +1185,7 @@ export async function exportEarningsReport(actor: UserActor, input: unknown): Pr
   return runAs(actor, async (ctx) => {
     const { filtered } = await reportData(ctx, viewer, query);
     const rows: CsvCell[][] = filtered.flatMap((row) =>
-      row.figures
-        ? [
-            [
-              row.partnerId,
-              row.name,
-              row.vehicle,
-              query.from,
-              query.to,
-              count(row.figures.deliveries),
-              moneyCell(row.figures.deliveryPayCents),
-              moneyCell(row.figures.tipsCents),
-              moneyCell(row.figures.adjustmentsCents),
-              moneyCell(row.figures.earnedCents),
-              moneyCell(row.figures.cashCollectedCents),
-              moneyCell(row.figures.cashHandedInCents),
-              moneyCell(row.figures.paidOutCents),
-              moneyCell(row.figures.openingCents),
-              moneyCell(row.figures.closingCents),
-            ],
-          ]
-        : [],
+      row.figures ? [reportCsvRow(row, query, row.figures)] : [],
     );
     await audit(ctx, {
       action: 'report.exported',

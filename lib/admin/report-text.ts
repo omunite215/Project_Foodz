@@ -149,14 +149,21 @@ export const partnerCount = (count: number) => `${count} ${count === 1 ? 'partne
 export const resultCountWords = (count: number) =>
   count === 0 ? 'No partners' : partnerCount(count);
 
-/** "Totals · 2 partners". */
-export const totalsLabel = (count: number) => `Totals · ${partnerCount(count)}`;
+/**
+ * "Totals · 2 partners"; for the demo admin, whose totals cover demo partners only while the
+ * table also lists masked real ones, "Totals · demo partners" (review P4).
+ */
+export const totalsLabel = (count: number, demoOnly = false) =>
+  demoOnly ? 'Totals · demo partners' : `Totals · ${partnerCount(count)}`;
+
+/** An amount that never reads "-$0.00": a negative zero is zero (review P4). */
+export const moneyText = (cents: number) => formatPrice(cents === 0 ? 0 : cents);
 
 /** The split balance totals, never netted (conflict 8): two lines each. */
 export function totalsBalanceLines(split: ReportTotals['closing']): [string, string] {
   return [
-    `Foodz owes ${formatPrice(split.foodzOwesCents)}`,
-    `Owed to Foodz ${formatPrice(split.owedToFoodzCents)}`,
+    `Foodz owes ${moneyText(split.foodzOwesCents)}`,
+    `Owed to Foodz ${moneyText(split.owedToFoodzCents)}`,
   ];
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centsToDecimal, count, money, textCell, toCsv } from './csv';
+import { centsToDecimal, count, csvLine, money, reportCsvRow, textCell, toCsv } from './csv';
 import {
   addDays,
   balanceState,
@@ -596,5 +596,31 @@ describe('the CSV writer (A64, B11)', () => {
       [['Diego', money(-14_270), count(3)]],
     );
     expect(file).toBe('﻿Partner,Closing balance,Deliveries\r\nDiego,-142.70,3\r\n');
+  });
+});
+
+describe('the report CSV row (A64.1, review P6)', () => {
+  it('writes the vehicle in the screens words, never the enum', () => {
+    const line = csvLine(
+      reportCsvRow(
+        { partnerId: 'p1', name: 'Luis Moreno', vehicle: 'BICYCLE' },
+        { from: '2026-11-16', to: '2026-11-22' },
+        {
+          deliveries: 17,
+          deliveryPayCents: 8_388,
+          tipsCents: 3_450,
+          adjustmentsCents: 0,
+          earnedCents: 11_838,
+          cashCollectedCents: 8_495,
+          cashHandedInCents: 8_495,
+          paidOutCents: 9_640,
+          openingCents: 9_640,
+          closingCents: 11_838,
+        },
+      ),
+    );
+    expect(line).toBe(
+      'p1,Luis Moreno,Bicycle or e-bike,2026-11-16,2026-11-22,17,83.88,34.50,0.00,118.38,84.95,84.95,96.40,96.40,118.38',
+    );
   });
 });

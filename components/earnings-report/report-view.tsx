@@ -76,6 +76,7 @@ import {
   REPORT_COPY,
   tableCaption,
   totalsBalanceLines,
+  moneyText,
   totalsLabel,
 } from '@/lib/admin/report-text';
 import { formatPrice } from '@/lib/format';
@@ -526,7 +527,7 @@ function SummaryTiles({ summary }: { summary: EarningsReport['summary'] }) {
         >
           <dt className="text-body-5 text-neutral-3">{tile.label}</dt>
           <dd className="mt-1 text-body-2 font-semibold text-neutral-1 tabular-nums">
-            {formatPrice(tile.cents)}
+            {moneyText(tile.cents)}
           </dd>
           <dd className="text-body-5 text-neutral-3 tabular-nums">{partnerCount(tile.partners)}</dd>
         </div>
@@ -994,7 +995,7 @@ function ReportTable({
                     STICKY,
                   )}
                 >
-                  {totalsLabel(result.totals.partners)}
+                  {totalsLabel(result.totals.partners, result.totalsCoverDemoOnly)}
                 </th>
                 {MONEY_COLUMNS.map((column) => (
                   <td
@@ -1078,7 +1079,9 @@ function ReportCards({ result, skeleton }: { result: EarningsReport; skeleton: b
         </li>
       ))}
       <li className="rounded-2xl border border-neutral-6 bg-neutral-8 p-4">
-        <p className="text-body-3 font-semibold text-neutral-1">{totalsLabel(totals.partners)}</p>
+        <p className="text-body-3 font-semibold text-neutral-1">
+          {totalsLabel(totals.partners, result.totalsCoverDemoOnly)}
+        </p>
         <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-body-5 tabular-nums">
           {MONEY_COLUMNS.map((column) => (
             <div key={column} className="contents">

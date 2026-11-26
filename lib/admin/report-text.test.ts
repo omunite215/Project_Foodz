@@ -6,6 +6,7 @@ import {
   csvNameSuffix,
   customLinkText,
   emptyRangeText,
+  moneyText,
   partnerCount,
   rangeButtonText,
   rangeCaption,
@@ -133,5 +134,21 @@ describe('the CSV and the empty range', () => {
     expect(emptyRangeText('2026-11-20', '2026-11-20')).toBe(
       'No partner had entries or a balance on Nov 20.',
     );
+  });
+});
+
+describe('the demo admin summary and totals (review P4)', () => {
+  it('never shows a negative zero', () => {
+    expect(moneyText(-0)).toBe('$0.00');
+    expect(moneyText(14_270)).toBe('$142.70');
+    expect(totalsBalanceLines({ foodzOwesCents: -0, owedToFoodzCents: -0 })).toEqual([
+      'Foodz owes $0.00',
+      'Owed to Foodz $0.00',
+    ]);
+  });
+
+  it('labels demo-only totals as such', () => {
+    expect(totalsLabel(7, true)).toBe('Totals · demo partners');
+    expect(totalsLabel(2)).toBe('Totals · 2 partners');
   });
 });
