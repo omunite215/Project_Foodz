@@ -1,4 +1,5 @@
 import { distanceMeters, type Point } from '@/lib/map-geometry';
+import { ageSeconds, freshnessFor, isStale } from '@/lib/tracking/freshness';
 
 /*
  * Moving or stopped (F8 P37.1): the courier's map takes no touch while he moves. Moving is a
@@ -28,4 +29,18 @@ export function isMoving(fixes: readonly PartnerFix[], now: number): boolean {
 export function keepRecent(fixes: readonly PartnerFix[], next: PartnerFix): PartnerFix[] {
   if (fixes.at(-1)?.at === next.at) return [...fixes];
   return [...fixes.filter((fix) => next.at - fix.at <= WINDOW_MS), next];
+}
+
+/**
+ * F8 review S8 (design 0's map table): his own map goes gray and dashed by the same rule as the
+ * customer's, from the server's last accepted point (or going online, before the first one).
+ */
+export function ownMapStale(
+  lastAcceptedAt: string | null,
+  onlineSince: string | null,
+  serverNowMs: number,
+): boolean {
+  const since = lastAcceptedAt ?? onlineSince;
+  if (!since) return false;
+  return isStale(freshnessFor(ageSeconds(since, serverNowMs)));
 }

@@ -292,17 +292,24 @@ export interface StaffTrackingDetail {
   estimated: boolean;
   /** A48.2: the estimate is more than 10 minutes past the promised window. */
   late: boolean;
+  /** A48.1 (design 3.12): the Out-for-delivery line, while the order is on its way. */
+  line?: DeliveryLine | null;
 }
 
 /** A48.1: the Out-for-delivery courier line, resolved on the server. */
 export interface DeliveryLine {
   /** A48.2: more than 10 minutes past the promised window; the card turns red. */
   late?: boolean;
-  state: 'onTheWay' | 'almost' | 'noLocation' | 'noAnswer' | 'locked' | 'problem';
+  state: 'onTheWay' | 'almost' | 'noLocation' | 'noAnswer' | 'askedToWait' | 'locked' | 'problem';
   words: string;
   tone: 'neutral' | 'positive' | 'amber' | 'red';
-  icon: 'truck' | 'pin' | 'signal-off' | 'door' | 'lock' | 'alert';
+  icon: 'truck' | 'pin' | 'signal-off' | 'door' | 'hourglass' | 'lock' | 'alert';
   spoken: string;
+  /**
+   * When the line turns by time alone (no location at 2 minutes, red at 10, the no-answer wait
+   * running out), so the board reads it again then rather than at its next 30 s refresh (QA).
+   */
+  changesAt?: string | null;
 }
 
 /** A49: one stuck delivery, oldest first on the board. */
@@ -313,6 +320,8 @@ export interface AttentionItem {
   since: string;
   minutes: number;
   words: string;
+  /** For the stacked banner's line, "Order 1042 · Priya isn't answering · 6 min". */
+  customerFirst?: string;
 }
 
 export interface OpsMapCourier {
@@ -331,6 +340,8 @@ export interface OpsMapCourier {
   at: string | null;
   freshness: Freshness;
   phone: { e164: string; display: string } | null;
+  /** Since when he's been waiting at the door (the "No answer · 4 min" chip). */
+  stuckSince?: string | null;
 }
 
 export interface OpsMapDelivery {
@@ -344,6 +355,8 @@ export interface OpsMapDelivery {
   customerFirstName: string;
   /** "Downtown", else "Boston 02109". */
   areaWords: string;
+  /** A48.1 (design 3.5): the board's line once it's picked up. */
+  line?: DeliveryLine | null;
 }
 
 export interface DemoRunState {

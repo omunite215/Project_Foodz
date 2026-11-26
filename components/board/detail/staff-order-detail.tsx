@@ -67,6 +67,7 @@ import {
 import { type BoardWriter, useBoardCard, useBoardWriter } from '@/lib/data/board';
 import { formatPrice } from '@/lib/format';
 import { channels } from '@/lib/realtime/channels';
+import { useStaffShell } from '@/components/admin/staff-shell-context';
 import { useChannelEvent } from '@/lib/realtime/client';
 import { useHydrated } from '@/lib/use-hydrated';
 import { useOnline } from '@/lib/use-online';
@@ -113,6 +114,8 @@ export function useStaffOrderDetail(
 ) {
   const hydrated = useHydrated();
   const listen = hydrated && live;
+  // F8 (L10.4): a demo run's order is heard on the demo staff channel only.
+  const demo = useStaffShell().user.isDemo;
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: detailKey(orderId),
@@ -125,9 +128,15 @@ export function useStaffOrderDetail(
   useChannelEvent(listen ? channels.ops : null, 'order.board-changed', (event) => {
     if (event.orderId === orderId) refetch();
   });
+  useChannelEvent(listen && demo ? channels.opsDemo : null, 'order.board-changed', (event) => {
+    if (event.orderId === orderId) refetch();
+  });
   useChannelEvent(listen ? channels.order(orderId) : null, 'order.status-changed', () => refetch());
   // F7 (A36): the courier section follows every change of the order's delivery.
   useChannelEvent(listen ? channels.ops : null, 'delivery.changed', (event) => {
+    if (event.orderId === orderId) refetch();
+  });
+  useChannelEvent(listen && demo ? channels.opsDemo : null, 'delivery.changed', (event) => {
     if (event.orderId === orderId) refetch();
   });
   return query;
@@ -807,6 +816,11 @@ export function StaffOrderDetailView({
             now={courierNow}
             timeZone={timeZone}
             level={level}
+            deliveryLine={
+              detail.courierSection.view === 'full' && !cancelledText
+                ? (detail.tracking?.line ?? null)
+                : null
+            }
             tracking={
               detail.tracking && detail.courierSection.view === 'full' ? (
                 <TrackingDetail

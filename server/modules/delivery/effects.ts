@@ -12,6 +12,7 @@ import {
   dispatchRestartRequested,
 } from '@/server/jobs/dispatch-events';
 import { logger } from '@/server/logger';
+import { staffChannelOf } from '@/server/modules/orders/live';
 import { publish } from '@/server/realtime/pusher';
 import { announceEarnings } from '@/server/modules/earnings/effects';
 import type { OfferEnding, OfferKind } from './schema';
@@ -86,7 +87,7 @@ async function runOne(effect: DispatchEffect) {
         version: effect.version,
         at: effect.at.toISOString(),
       };
-      await publish(channels.ops, 'delivery.changed', data);
+      await publish(await staffChannelOf(effect.orderId), 'delivery.changed', data);
       await publish(channels.order(effect.orderId), 'delivery.changed', data);
       await Promise.all(
         effect.partnerIds.map((partnerId) =>

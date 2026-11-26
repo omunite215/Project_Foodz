@@ -219,6 +219,8 @@ export interface DeliveryFacts {
   distanceToDoorM: number | null;
   durationSec: number | null;
   noAnswerSince: string | null;
+  /** A50.1: when staff last asked the courier to wait (the wait restarts then). */
+  waitRestartedAt?: string | null;
   lockedAt: string | null;
   problem: { kind: ProblemKind; at: string } | null;
 }
@@ -232,7 +234,10 @@ export function deliveryLineState(
   if (facts.lockedAt) return { state: 'locked', tone: 'red' };
   if (facts.noAnswerSince) {
     const { reportable } = noAnswerClock(facts.noAnswerSince, now, noAnswerSeconds);
-    return { state: 'noAnswer', tone: reportable ? 'red' : 'amber' };
+    // A50.1 (design 3.8, 3.10): staff asked him to wait, so the wait restarted with them.
+    const restarted = facts.waitRestartedAt ?? null;
+    const asked = restarted !== null && Date.parse(restarted) >= Date.parse(facts.noAnswerSince);
+    return { state: asked ? 'askedToWait' : 'noAnswer', tone: reportable ? 'red' : 'amber' };
   }
   if (facts.problem) return { state: 'problem', tone: 'amber' };
   const freshness = freshnessOf(facts.lastPointAt, now);

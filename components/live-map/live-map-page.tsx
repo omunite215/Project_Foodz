@@ -11,10 +11,11 @@ import {
   Play,
   RefreshCw,
   Truck,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { assignableCouriersAction, sendStaffOfferAction } from '@/server/modules/delivery/actions';
 import { startDemoDeliveryAction } from '@/server/modules/tracking/actions';
 import type {
@@ -24,6 +25,7 @@ import type {
 } from '@/server/modules/tracking/schema';
 import { MAP_STATES } from '@/server/modules/tracking/schema';
 import { AdminPage } from '@/components/admin/admin-page';
+import { DeliveryLineView } from '@/components/board/courier-parts';
 import { orderHref } from '@/components/board/order-card';
 import { SoundButton, useSound } from '@/components/board/sound-controls';
 import { StuckBanners, useStuckChime } from '@/components/board/stuck-banners';
@@ -36,7 +38,13 @@ import { CourierDisc } from '@/components/map/markers';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { callAction } from '@/lib/action-result';
@@ -163,7 +171,12 @@ function attentionChip(
   serverNowMs: number,
 ): { text: string; className: string } | null {
   const seconds = ageSeconds(courier.at, serverNowMs);
-  if (courier.state === 'noAnswer') return { text: 'No answer', className: 'bg-tag-6-bg' };
+  if (courier.state === 'noAnswer') {
+    // Review P5: "No answer · 4 min".
+    const waited = ageSeconds(courier.stuckSince ?? null, serverNowMs);
+    const text = waited === null ? 'No answer' : `No answer · ${Math.floor(waited / 60)} min`;
+    return { text, className: 'bg-tag-6-bg' };
+  }
   if (courier.state === 'locked') return { text: 'Code locked', className: 'bg-tag-4-bg' };
   if (courier.state === 'problem') return { text: 'Problem', className: 'bg-tag-4-bg' };
   if (seconds !== null && isStale(freshnessFor(seconds))) {
@@ -171,6 +184,28 @@ function attentionChip(
   }
   return null;
 }
+
+/**
+ * Review P10 (design Names): a row's parts read as a list, "Luis Moreno, Delivering 1042,
+ * arriving 7:46 pm, Scooter, 7KT 342, Updated 12 seconds ago": the dots are hidden from screen
+ * readers and a comma is spoken in their place. The name stays the row's own text.
+ */
+function Parts({ parts }: { parts: readonly ReactNode[] }) {
+  return parts.map((part, index) => (
+    // oxlint-disable-next-line react/no-array-index-key
+    <Fragment key={index}>
+      {index > 0 ? (
+        <>
+          <span aria-hidden> · </span>
+          <span className="sr-only">, </span>
+        </>
+      ) : null}
+      {part}
+    </Fragment>
+  ));
+}
+
+const COMMA = <span className="sr-only">, </span>;
 
 const ROW =
   'relative flex min-h-16 w-full gap-3 border-b border-neutral-6 px-4 py-3 text-left hover:bg-neutral-7 focus-visible:-outline-offset-2 aria-[current=true]:bg-brand-soft aria-[current=true]:before:absolute aria-[current=true]:before:inset-y-0 aria-[current=true]:before:left-0 aria-[current=true]:before:w-[3px] aria-[current=true]:before:bg-brand-strong';
@@ -192,7 +227,10 @@ function CourierRow({
 }) {
   const updated = staffUpdatedWords(ageSeconds(courier.at, serverNowMs));
   const chip = attentionChip(courier, serverNowMs);
-  const arriving = delivery?.etaAt ? ` · arriving ${boardClock(delivery.etaAt, timeZone)}` : '';
+  const arriving =
+    courier.state === 'delivering' && delivery?.etaAt
+      ? `arriving ${boardClock(delivery.etaAt, timeZone)}`
+      : null;
   return (
     <li>
       {/* The row's name is its text, in reading order (design "Names"). */}
@@ -209,15 +247,24 @@ function CourierRow({
           <span className="block text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
             {courier.fullName}
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-1">
-            {courier.words}
-            {courier.state === 'delivering' ? arriving : ''}
+            <Parts parts={[...courier.words.split(' · '), ...(arriving ? [arriving] : [])]} />
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-3">
-            {courier.vehicleWords} · <span aria-hidden>{updated.text}</span>
-            <span className="sr-only">{updated.spoken}</span>
+            <Parts
+              parts={[
+                ...courier.vehicleWords.split(' · '),
+                <Fragment key="updated">
+                  <span aria-hidden>{updated.text}</span>
+                  <span className="sr-only">{updated.spoken}</span>
+                </Fragment>,
+              ]}
+            />
           </span>
         </span>
+        {chip ? COMMA : null}
         {chip ? (
           <span
             className={cn(
@@ -260,6 +307,7 @@ function DeliveryRow({
             <span className="text-body-4 font-semibold text-neutral-1 tabular-nums">
               Order {delivery.number}
             </span>
+            {COMMA}
             <span
               className={cn(
                 'inline-flex h-6 items-center rounded-md px-2 text-caption font-medium text-neutral-1',
@@ -269,12 +317,19 @@ function DeliveryRow({
               {lateChip(delivery.lateMinutes)}
             </span>
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-1">
-            {delivery.courierShortName} · {delivery.stateWords}
-            {delivery.etaAt ? ` · arriving ${boardClock(delivery.etaAt, timeZone)}` : ''}
+            <Parts
+              parts={[
+                delivery.courierShortName,
+                delivery.stateWords,
+                ...(delivery.etaAt ? [`arriving ${boardClock(delivery.etaAt, timeZone)}`] : []),
+              ]}
+            />
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-3">
-            {delivery.customerFirstName} · {delivery.areaWords}
+            <Parts parts={[delivery.customerFirstName, delivery.areaWords]} />
           </span>
         </span>
       </button>
@@ -460,9 +515,13 @@ function Panel({
           >
             Order {delivery.number}
           </h2>
-          <p className="text-body-4 text-neutral-3">
-            {delivery.courierShortName} · {delivery.stateWords}
-          </p>
+          {delivery.line ? (
+            <DeliveryLineView line={delivery.line} vehicleWords={null} />
+          ) : (
+            <p className="text-body-4 text-neutral-3">
+              {delivery.courierShortName} · {delivery.stateWords}
+            </p>
+          )}
         </div>
         <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-body-4">
           <dt className="text-neutral-3">Arriving</dt>
@@ -508,18 +567,27 @@ function Panel({
         <p className="text-body-4 text-neutral-3">{courier.vehicleWords}</p>
       </div>
       <div>
-        <p className="flex items-center gap-2 text-body-4 font-medium text-neutral-1">
-          <span
-            aria-hidden
-            className="size-3 rounded-full"
-            style={{
-              background: isStale(freshnessFor(ageSeconds(courier.at, serverNowMs)))
-                ? STALE_FILL
-                : STATE_FILLS[courier.state],
-            }}
+        {/* Review S2 (design 3.5): on its way, the board's line, same component and tone. */}
+        {delivery?.line ? (
+          <DeliveryLineView
+            line={delivery.line}
+            vehicleWords={courier.vehicleWords}
+            className="mt-0"
           />
-          {courier.words}
-        </p>
+        ) : (
+          <p className="flex items-center gap-2 text-body-4 font-medium text-neutral-1">
+            <span
+              aria-hidden
+              className="size-3 rounded-full"
+              style={{
+                background: isStale(freshnessFor(ageSeconds(courier.at, serverNowMs)))
+                  ? STALE_FILL
+                  : STATE_FILLS[courier.state],
+              }}
+            />
+            {courier.words}
+          </p>
+        )}
         <p className="text-body-5 text-neutral-3">
           <span aria-hidden>{updated.text}</span>
           <span className="sr-only">{updated.spoken}</span>
@@ -714,10 +782,17 @@ export function LiveMapPage({
     if (!writer.position(event)) throttler.maybeExecute();
   });
   useChannelEvent(mapChannel, 'demo.run-changed', () => throttler.maybeExecute());
-  useChannelEvent(opsChannel, 'delivery.changed', (event) => {
+  const onDeliveryChanged = (event: { at: string }) => {
     setLastUpdate(event.at);
     throttler.maybeExecute();
-  });
+  };
+  useChannelEvent(opsChannel, 'delivery.changed', onDeliveryChanged);
+  // F8 (L10.4): the demo run's deliveries come on the demo staff channel only.
+  useChannelEvent(
+    hydrated && demo ? channels.opsDemo : null,
+    'delivery.changed',
+    onDeliveryChanged,
+  );
   const connected = realtime.status === 'connected';
   const paused = realtime.status === 'reconnecting' && realtime.everConnected;
   const wasConnected = useRef(false);
@@ -763,7 +838,7 @@ export function LiveMapPage({
         }}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <TabsList className="sticky top-0 z-10 grid h-12 w-full shrink-0 grid-cols-2 rounded-none border-b border-neutral-6 bg-white p-0">
+        <TabsList className="sticky top-0 z-10 grid h-12 w-full group-data-horizontal/tabs:h-12 shrink-0 grid-cols-2 rounded-none border-b border-neutral-6 bg-white p-0">
           <TabsTrigger
             value="couriers"
             className="h-full text-button-2 text-neutral-3 data-[state=active]:text-neutral-1"
@@ -985,6 +1060,19 @@ export function LiveMapPage({
               {selection?.kind === 'delivery' ? 'Delivery' : 'Courier'}
             </SheetTitle>
             <SheetDescription className="sr-only">Details and actions</SheetDescription>
+            {/* Review S4 (design 3.2): a handle and a visible Close. */}
+            <div className="sticky top-0 z-10 flex h-14 shrink-0 items-start justify-end bg-white px-2 pt-2">
+              <span
+                aria-hidden
+                data-sheet-handle=""
+                className="absolute top-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-neutral-5"
+              />
+              <SheetClose asChild>
+                <Button type="button" variant="ghost" size="icon-kitchen" aria-label="Close">
+                  <X className="size-5" aria-hidden />
+                </Button>
+              </SheetClose>
+            </div>
             {panel}
           </SheetContent>
         </Sheet>

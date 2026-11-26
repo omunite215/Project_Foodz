@@ -299,7 +299,7 @@ export function SlideToConfirm({
       <span
         ref={labelRef}
         id={labelId}
-        className="relative mx-auto px-16 py-2 text-center text-body-3 font-semibold"
+        className="relative mx-auto px-16 py-2 text-center text-body-3 font-semibold max-[25rem]:pr-3 max-[25rem]:text-button-2"
       >
         {label}
       </span>

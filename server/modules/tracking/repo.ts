@@ -470,8 +470,13 @@ export async function createDemoOrder(
   });
   const subtotalCents = dishes.reduce((sum, dish) => sum + dish.priceCents, 0) || 3200;
   const taxCents = Math.round(subtotalCents * 0.07);
+  // Design 3.7: demo runs are numbered D-1, D-2, … (the nightly reset starts again at D-1).
+  const [last] = await db(ctx).$queryRaw<{ next: number }[]>`
+    SELECT (coalesce(max(substring(number from 3)::int), 0) + 1)::int AS "next"
+    FROM orders WHERE number ~ '^D-[0-9]+$'`;
   const order = await db(ctx).order.create({
     data: {
+      number: `D-${last?.next ?? 1}`,
       items: {
         create: dishes.map((dish) => ({
           menuItemId: dish.id,

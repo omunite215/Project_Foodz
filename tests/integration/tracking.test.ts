@@ -200,6 +200,83 @@ describe('the location pipeline (L1 to L3)', () => {
     expect(await migrator.deliveryLocation.count({ where: { deliveryId } })).toBe(1);
   });
 
+  it('keeps one clock for the customer and staff when a phone repeats its fix (review S7)', async () => {
+    const { order, deliveryId } = await heldOrder();
+    await tracking.pickUp(luis.actor, deliveryId, {});
+    await redis.del(`partner:loc:${luis.partnerId}`);
+    const { onlineSessionId } = await migrator.deliveryPartner.findUniqueOrThrow({
+      where: { id: luis.partnerId },
+      select: { onlineSessionId: true },
+    });
+    const partners = await import('@/server/modules/partners/service');
+    const start = Date.now();
+    const at = (seconds: number) => new Date(start + seconds * 1000);
+    const send = (seconds: number) =>
+      partners.recordLocations(
+        luis.actor,
+        onlineSessionId,
+        {
+          points: [
+            { lat: 42.3521, lng: -71.0469, accuracy: 15, recordedAt: at(seconds).toISOString() },
+          ],
+        },
+        at(seconds),
+      );
+    // He stands still and the phone repeats the same fix every 15 s for 3 minutes.
+    for (let seconds = 0; seconds <= 180; seconds += 15) await send(seconds);
+    const capped = at(120).toISOString();
+    expect((await tracking.getCustomerTracking(priya.actor, order.id))?.courierPoint?.at).toBe(
+      capped,
+    );
+    const map = await asBrowser(daniel.browser, () => tracking.getOpsMap(daniel.actor, at(180)));
+    expect(map.couriers.find((courier) => courier.partnerId === luis.partnerId)).toMatchObject({
+      at: capped,
+      freshness: 'hollow',
+    });
+    const board = await tracking.boardTracking({ isDemo: false }, 'America/New_York', at(250));
+    expect(board.lines.get(order.id)).toMatchObject({
+      state: 'noLocation',
+      tone: 'amber',
+      // QA A48.1: the board reads it again when it turns red, by the same clock.
+      changesAt: new Date(Date.parse(capped) + 600_000).toISOString(),
+    });
+    expect(
+      (await tracking.boardTracking({ isDemo: false }, 'America/New_York', at(130))).lines.get(
+        order.id,
+      )?.changesAt,
+    ).toBe(new Date(Date.parse(capped) + 120_000).toISOString());
+    expect(
+      published('courier.position')
+        .map(([, , data]) => (data as { at: string }).at)
+        .every((value) => value <= capped),
+    ).toBe(true);
+  });
+
+  it("tells her page when he's almost there, about 2 minutes at most (QA S4.1)", async () => {
+    const { order, deliveryId } = await heldOrder();
+    await tracking.pickUp(luis.actor, deliveryId, {});
+    await migrator.delivery.update({ where: { id: deliveryId }, data: { routeDurationSec: 240 } });
+    const door = await migrator.order.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { addressLat: true, addressLng: true },
+    });
+    mocks.publish.mockClear();
+    await tracking.pointAccepted({
+      partnerId: luis.partnerId,
+      isDemo: false,
+      point: point(door.addressLat, door.addressLng),
+      acceptedAt: new Date(),
+    });
+    expect(
+      published('delivery.changed').some(([channel]) => channel === channels.order(order.id)),
+    ).toBe(true);
+    const notice = await migrator.notification.findFirstOrThrow({
+      where: { userId: priya.userId, type: 'order.almost-here' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(notice.body).toMatch(/^Luis is about [12] minutes? away\./);
+  });
+
   it('stores a straight-line estimate, flagged as estimated', async () => {
     const { deliveryId } = await heldOrder();
     const result = await tracking.refreshEstimate(deliveryId);
@@ -268,6 +345,14 @@ describe('door problems and staff (P43, A50)', () => {
         where: { action: 'tracking.handover-confirmed', targetId: order.id },
       }),
     ).toBe(1);
+    // Review S10: staff steps name the person (design 3.13).
+    const { getStaffOrderDetail } = await import('@/server/modules/board/service');
+    const detail = await asBrowser(morgan.browser, () =>
+      getStaffOrderDetail(morgan.actor, order.id),
+    );
+    expect(
+      (detail?.timeline ?? []).flatMap((entry) => (entry.type === 'courier' ? [entry.words] : [])),
+    ).toContain('Hand-over confirmed by Morgan Diaz (Support): Customer confirmed by phone');
     expect(
       published('delivery.changed').some(
         ([channel, , data]) =>
@@ -292,6 +377,24 @@ describe('door problems and staff (P43, A50)', () => {
       kind: 'askedToWait',
       orderNumber: order.number,
     });
+    // Review S1: the card the change named comes back with its "asked to wait" line, so the
+    // board reads it within 2 s, not at the next full read.
+    const { boardCardsAction } = await import('@/server/modules/board/actions');
+    const cards = await asBrowser(morgan.browser, () => boardCardsAction({ orderIds: [order.id] }));
+    expect(cards?.data?.cards[0]?.delivery).toMatchObject({
+      state: 'askedToWait',
+      tone: 'amber',
+      icon: 'hourglass',
+      words: expect.stringMatching(/^Luis M\. · \S+ isn't answering · asked to wait · 0 min$/),
+    });
+    // Review S10: the timeline names who asked (design 3.13).
+    const { getStaffOrderDetail } = await import('@/server/modules/board/service');
+    const detail = await asBrowser(morgan.browser, () =>
+      getStaffOrderDetail(morgan.actor, order.id),
+    );
+    expect(
+      (detail?.timeline ?? []).flatMap((entry) => (entry.type === 'courier' ? [entry.words] : [])),
+    ).toContain('Morgan Diaz (Support) asked Luis Moreno to wait 5 more minutes');
     await migrator.$executeRaw`UPDATE deliveries SET no_answer_since = app_now() - interval '6 minutes' WHERE id = ${deliveryId}::uuid`;
     const cancel = await asBrowser(morgan.browser, () =>
       actions.cancelUnreachableAction({ orderId: order.id, expectedVersion: second.version }),
@@ -399,6 +502,16 @@ describe('door problems and staff (P43, A50)', () => {
       kind: 'locked',
       words: `Order ${order.number}: the delivery code is locked after 5 wrong tries.`,
     });
+    // QA A50.1: after a lock, support may also ask him to wait 5 more minutes.
+    const locked = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+    const wait = await asBrowser(morgan.browser, () =>
+      actions.askToWaitAction({ orderId: order.id, expectedVersion: locked.version }),
+    );
+    expect(wait?.serverError).toBeUndefined();
+    expect(
+      (await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } }))
+        .noAnswerWaitRestartedAt,
+    ).not.toBeNull();
     // The live map carries the same banners and the kitchen's pin (design 3.3, 3.9).
     const map = await asBrowser(daniel.browser, () => actions.opsMapAction());
     expect(map?.data?.attention?.[0]).toMatchObject({ kind: 'locked', orderNumber: order.number });
@@ -434,6 +547,32 @@ describe('the live map and the demo run (A46, A54, L10)', () => {
     const prepared = await tracking.demoPrepare(runId);
     expect(prepared?.points).toBeGreaterThan(0);
     expect(await migrator.orderItem.count({ where: { orderId: prepared?.orderId } })).toBe(2);
+    // Design 3.7 and B9: the run's order is D-1, D-2…, and its start is audited.
+    expect(
+      (await migrator.order.findUniqueOrThrow({ where: { id: prepared!.orderId } })).number,
+    ).toMatch(/^D-\d+$/);
+    expect(
+      await migrator.auditLog.count({
+        where: { action: 'tracking.demo-run-started', targetId: runId },
+      }),
+    ).toBe(1);
+    // QA A54.2, L10.4: real staff never read the run's order, on the board, its cards, Find or
+    // the detail; the demo admin does.
+    const board = await import('@/server/modules/board/service');
+    const boardActions = await import('@/server/modules/board/actions');
+    const realBoard = await asBrowser(morgan.browser, () => board.getBoard(morgan.actor));
+    expect(realBoard.cards.map((card) => card.id)).not.toContain(prepared!.orderId);
+    const realCards = await asBrowser(morgan.browser, () =>
+      boardActions.boardCardsAction({ orderIds: [prepared!.orderId] }),
+    );
+    expect(realCards?.data?.cards ?? []).toEqual([]);
+    expect(
+      await asBrowser(daniel.browser, () =>
+        board.getStaffOrderDetail(daniel.actor, prepared!.orderId),
+      ),
+    ).toBeNull();
+    const demoBoard = await asBrowser(demoAdmin.browser, () => board.getBoard(demoAdmin.actor));
+    expect(demoBoard.cards.map((card) => card.id)).toContain(prepared!.orderId);
     const demoMap = await asBrowser(demoAdmin.browser, () => actions.opsMapAction());
     expect(demoMap?.data?.pool).toBe('DEMO');
     expect(demoMap?.data?.couriers.map((courier) => courier.fullName)).toEqual(['Jamie Courier']);
@@ -449,6 +588,20 @@ describe('the live map and the demo run (A46, A54, L10)', () => {
     expect((await migrator.demoRun.findUniqueOrThrow({ where: { id: runId } })).status).toBe(
       'done',
     );
+    // L10.4 (acceptance): the run's events reach demo staff only, never a real staff channel.
+    const aboutRun = mocks.publish.mock.calls.filter(
+      ([, , data]) => (data as { orderId?: string } | undefined)?.orderId === prepared!.orderId,
+    );
+    expect(aboutRun.some(([channel]) => channel === channels.opsDemo)).toBe(true);
+    expect(aboutRun.filter(([channel]) => channel === channels.ops)).toEqual([]);
+    expect(await canSubscribe(sub(morgan.userId, 'support'), channels.opsDemo)).toBe(false);
+    expect(await canSubscribe(sub(demoAdmin.userId, 'admin', true), channels.opsDemo)).toBe(true);
+    expect(await canSubscribe(sub(daniel.userId, 'admin'), channels.order(prepared!.orderId))).toBe(
+      false,
+    );
+    expect(
+      await canSubscribe(sub(demoAdmin.userId, 'admin', true), channels.order(prepared!.orderId)),
+    ).toBe(true);
     vi.unstubAllEnvs();
   });
 });

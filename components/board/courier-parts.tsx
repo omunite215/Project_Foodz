@@ -7,6 +7,7 @@ import {
   CircleSlash,
   Clock,
   DoorClosed,
+  Hourglass,
   LockKeyhole,
   type LucideIcon,
   MapPinOff,
@@ -143,6 +144,7 @@ const LINE_ICONS: Record<DeliveryLine['icon'], LucideIcon | null> = {
   pin: null,
   'signal-off': MapPinOff,
   door: DoorClosed,
+  hourglass: Hourglass,
   lock: LockKeyhole,
   alert: MessageCircleWarning,
 };
@@ -313,6 +315,7 @@ export function CourierSection({
   level,
   actions,
   tracking,
+  deliveryLine = null,
 }: {
   section: StaffCourierSection;
   orderNumber: string;
@@ -325,6 +328,8 @@ export function CourierSection({
   actions?: React.ReactNode;
   /** F8 (A53): the small map, the estimate and the steps, after the line. */
   tracking?: React.ReactNode;
+  /** F8 (design 3.12): on its way, the card's A48 line replaces F7's. */
+  deliveryLine?: DeliveryLine | null;
 }) {
   const Heading = level;
   const courier = section.courier;
@@ -335,7 +340,13 @@ export function CourierSection({
         Courier
       </Heading>
       <div className="mt-3">
-        {showLine ? (
+        {deliveryLine ? (
+          <DeliveryLineView
+            line={deliveryLine}
+            vehicleWords={courier.vehicleWords}
+            className="mt-0"
+          />
+        ) : showLine ? (
           <CourierLine courier={courier} now={now} orderStatus={orderStatus} className="mt-0" />
         ) : null}
         {tracking}

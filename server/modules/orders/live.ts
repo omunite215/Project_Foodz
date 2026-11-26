@@ -5,7 +5,7 @@ import { runAsSystem } from '@/server/db/context';
 import type { OrderStatus } from '@/server/db/enums';
 import { isBoardStatus } from '@/server/modules/board/schema';
 import { publish } from '@/server/realtime/pusher';
-import { findOrderChange } from './repo';
+import { findOrderChange, isDemoRunOrder } from './repo';
 
 /*
  * Realtime messages about an order (F5 contract 5), sent after the change is committed. They
@@ -28,6 +28,15 @@ export function concernsBoard(status: OrderStatus, fromStatus?: OrderStatus | nu
   return isBoardStatus(status) || (fromStatus ? isBoardStatus(fromStatus) : false);
 }
 
+/**
+ * F8 (L10.4): the staff channel that hears about an order. A demo run's order goes to demo staff
+ * only, never to real staff browsers (not even its id and status).
+ */
+export async function staffChannelOf(orderId: string): Promise<string> {
+  const demoRun = await runAsSystem('staff channel', (ctx) => isDemoRunOrder(ctx, orderId));
+  return demoRun ? channels.opsDemo : channels.ops;
+}
+
 export async function publishOrderChange(note: OrderChangeNote) {
   const order = await runAsSystem('order change', (ctx) => findOrderChange(ctx, note.orderId));
   if (!order) return;
@@ -41,7 +50,7 @@ export async function publishOrderChange(note: OrderChangeNote) {
     publish(channels.order(order.id), 'order.status-changed', event),
     publish(channels.user(order.userId), 'order.status-changed', event),
     ...(concernsBoard(order.status, note.fromStatus)
-      ? [publish(channels.ops, 'order.board-changed', event)]
+      ? [publish(await staffChannelOf(order.id), 'order.board-changed', event)]
       : []),
   ]);
 }

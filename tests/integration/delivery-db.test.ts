@@ -2,7 +2,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { v7 as uuid } from 'uuid';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { db, prisma } from '@/server/db/client';
-import { type Actor, runAs } from '@/server/db/context';
+import { type Actor, runAs, runAsSystem } from '@/server/db/context';
+import { searchCandidates } from '@/server/modules/delivery/repo';
 import { PrismaClient } from '@/server/db/generated/client';
 import { seedCatalog } from '../../prisma/seeding';
 import {
@@ -463,5 +464,56 @@ describe('giving back and the partner bookkeeping', () => {
     const row = await migrator.deliveryPartner.findUniqueOrThrow({ where: { id: luis.partnerId } });
     expect(row.unseenInRow).toBe(0);
     expect(Date.now() - row.lastPointAt!.getTime()).toBeLessThan(10_000);
+  });
+
+  it('stops offering a phone that repeats one fix 2 minutes after it moved (review S7)', async () => {
+    const order = await readyOrder(migrator, customer.userId);
+    const delivery = await searchingDelivery(order.id);
+    const candidates = async () =>
+      (
+        await runAsSystem('dispatch test', (ctx) =>
+          searchCandidates(ctx, {
+            deliveryId: delivery.id,
+            pool: 'REAL',
+            reachM: 5_000,
+            excluded: [],
+            secondChance: false,
+            freshSeconds: 45,
+            limit: 10,
+          }),
+        )
+      ).map((row) => row.partnerId);
+    const send = (sql: 'same' | 'moved') =>
+      runAs(luis.actor, (ctx) =>
+        sql === 'same'
+          ? db(ctx)
+              .$executeRaw`UPDATE delivery_partners SET last_seen_at = now() WHERE id = ${luis.partnerId}::uuid`
+          : db(ctx).$executeRaw`
+              UPDATE delivery_partners
+              SET last_seen_at = now(),
+                  last_location = ST_Project(last_location, 50, radians(0))
+              WHERE id = ${luis.partnerId}::uuid`,
+      );
+    expect(await candidates()).toContain(luis.partnerId);
+
+    // He last moved 3 minutes ago; his phone keeps sending that fix, so it's still alive.
+    await migrator.$executeRaw`
+      UPDATE delivery_partners
+      SET last_moved_at = app_now() - interval '3 minutes',
+          last_point_at = app_now() - interval '3 minutes', unseen_in_row = 1
+      WHERE id = ${luis.partnerId}::uuid`;
+    await send('same');
+    const held = await migrator.deliveryPartner.findUniqueOrThrow({
+      where: { id: luis.partnerId },
+    });
+    expect(held.unseenInRow).toBe(0);
+    const age = Date.now() - held.lastPointAt!.getTime();
+    expect(age).toBeGreaterThan(50_000);
+    expect(age).toBeLessThan(75_000);
+    expect(await candidates()).not.toContain(luis.partnerId);
+
+    // A real move makes him fresh again at once.
+    await send('moved');
+    expect(await candidates()).toContain(luis.partnerId);
   });
 });

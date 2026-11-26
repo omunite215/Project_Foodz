@@ -5,6 +5,7 @@ import { clockAt, openingPhrase } from '@/server/modules/orders/text';
 import type {
   BoardStaffRole,
   CancelCode,
+  RecordedCancelCode,
   ChangeHow,
   ForwardMove,
   HandoverReason,
@@ -50,6 +51,12 @@ export const CANCEL_REASON_LABELS: Record<CancelCode, string> = {
   'cant-deliver': "We can't deliver to this address",
   fraud: 'Suspected prank or fraud',
   other: 'Other',
+};
+
+/** The timeline's words for every recorded code (A53.2): F5's and F8's bring-back. */
+export const RECORDED_CANCEL_LABELS: Record<RecordedCancelCode, string> = {
+  ...CANCEL_REASON_LABELS,
+  'customer-unreachable': "Customer couldn't be reached",
 };
 
 export const MOVE_BACK_REASON_LABELS: Record<MoveBackReason, string> = {

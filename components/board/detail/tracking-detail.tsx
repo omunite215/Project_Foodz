@@ -99,7 +99,7 @@ export function stuckFromSteps(
   waitSeconds = 300,
 ): StuckAction[] {
   if (steps.deliveredAt) return [];
-  if (steps.codeLockedAt) return ['confirmHandover', 'cancelUnreachable'];
+  if (steps.codeLockedAt) return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   if (steps.noAnswerSince && serverNowMs - Date.parse(steps.noAnswerSince) >= waitSeconds * 1000) {
     return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   }
@@ -196,7 +196,7 @@ export function TrackingDetail({
             <span>Map © OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors</span>
             <Link
               href={mapHref}
-              aria-label={courierName ? `Open ${courierName} on the live map` : undefined}
+              aria-label={courierName ? `Open on the live map, ${courierName}` : undefined}
               className="inline-flex min-h-11 items-center text-body-5 text-neutral-1 underline underline-offset-4"
             >
               Open on the live map
@@ -233,8 +233,8 @@ export function TrackingDetail({
           <ol className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-body-5 text-neutral-1 tabular-nums">
             {steps.map((step, index) => (
               <li key={step} className="flex items-center gap-2">
-                {index > 0 ? <span aria-hidden>·</span> : null}
                 {step}
+                {index < steps.length - 1 ? <span aria-hidden>·</span> : null}
               </li>
             ))}
           </ol>

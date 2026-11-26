@@ -1004,7 +1004,9 @@ export async function recordLocations(
         partnerId: row.id,
         isDemo: row.isDemo,
         point: { lat: newest.lat, lng: newest.lng, heading: newest.heading, speed: newest.speed },
-        acceptedAt: now,
+        // F8 review S7: the stored point's clock (capped for a repeated fix), so the customer's
+        // and the live map's live updates age by the same rule as their first read.
+        acceptedAt: new Date(clocks.acceptedAt),
       });
     } catch (error) {
       logger.error({ err: error, partnerId: row.id }, 'tracking follow-up failed');

@@ -82,6 +82,9 @@ export interface RouteFigure {
 }
 
 /** "4 min to the kitchen" / "4 min · 1.4 km to go" (P48.2's spoken forms too). */
+/** Within this many metres of the drop-off, the figure reads "At the door". */
+export const AT_DOOR_M = 50;
+
 export function routeFigure(
   route: Pick<TrackingRoute, 'etaAt' | 'distanceM'> | null,
   toKitchen: boolean,
@@ -97,6 +100,10 @@ export function routeFigure(
       rest: ' to the kitchen',
       spoken: `${spokenMinutes} to the kitchen`,
     };
+  }
+  // Review P2: at the door, not "1 min · 0.0 km to go".
+  if (distanceM !== null && distanceM <= AT_DOOR_M) {
+    return { figure: 'At the door', rest: '', spoken: 'At the door' };
   }
   const km = distanceM === null ? null : kmText(distanceM);
   return {
@@ -197,17 +204,20 @@ export function problemNotice(
 
 /** "4:12 left" on the server's clock; "0:00" once it's up. */
 export function clockLeft(since: string, waitSeconds: number, serverNowMs: number): string {
-  const left = Math.max(
-    0,
-    Math.ceil((Date.parse(since) + waitSeconds * 1000 - serverNowMs) / 1000),
-  );
+  const left = secondsLeft(since, waitSeconds, serverNowMs);
   const minutes = Math.floor(left / 60);
   const seconds = left % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}${left > 0 ? ' left' : ''}`;
 }
 
-export const secondsLeft = (since: string, waitSeconds: number, serverNowMs: number) =>
-  Math.max(0, Math.ceil((Date.parse(since) + waitSeconds * 1000 - serverNowMs) / 1000));
+/**
+ * Seconds left of the wait, never more than the wait itself: a phone whose clock offset runs a
+ * few seconds behind the server's would otherwise open at "5:03 left" (QA P43.2).
+ */
+export function secondsLeft(since: string, waitSeconds: number, serverNowMs: number): number {
+  const left = Math.ceil((Date.parse(since) + waitSeconds * 1000 - serverNowMs) / 1000);
+  return Math.min(waitSeconds, Math.max(0, left));
+}
 
 export const waitingTitle = (customerFirst: string) => `Waiting for ${customerFirst}`;
 export const waitingTold = (customerFirst: string) =>

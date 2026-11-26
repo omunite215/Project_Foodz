@@ -20,6 +20,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { announce } from '@/lib/announce';
 import { dispatchStore, reportProblem } from '@/lib/partner/dispatch';
 import { DELIVERY_COPY, PROBLEM_ORDER, problemLabel } from '@/lib/partner/delivery-text';
+import { revealDeliveryOutcome } from '@/lib/partner/reveal';
 
 /*
  * "Problem with this delivery" (F8 design 2.8): five rows that send at once. The sheet closes
@@ -53,6 +54,8 @@ export function ProblemSheet({
   const alertRef = useRef<HTMLDivElement>(null);
   const [sending, setSending] = useState<ProblemKind | null>(null);
   const [alert, setAlert] = useState<{ text: string; offline: boolean } | null>(null);
+  /** A problem went through: the screen shows its outcome once the sheet has closed. */
+  const sent = useRef(false);
   const slow = useSlowPending(sending !== null);
   const first = delivery?.dropoff?.firstName ?? 'The customer';
 
@@ -68,6 +71,7 @@ export function ProblemSheet({
       requestAnimationFrame(() => alertRef.current?.focus());
     };
     if (outcome === 'done' || outcome === 'gone') {
+      sent.current = outcome === 'done';
       onOpenChange(false);
       return;
     }
@@ -94,6 +98,10 @@ export function ProblemSheet({
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           if (!dispatchStore.state.card) returnFocus();
+          if (sent.current) {
+            sent.current = false;
+            revealDeliveryOutcome();
+          }
         }}
       >
         <SheetTitle

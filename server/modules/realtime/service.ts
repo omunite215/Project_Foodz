@@ -2,7 +2,7 @@ import 'server-only';
 import { parseChannel } from '@/lib/realtime/channels';
 import { can, isStaff, type Role } from '@/server/auth/roles';
 import { runAs } from '@/server/db/context';
-import { isOrderVisible, isOwnOrder, partnerIdOfUser } from './repo';
+import { isDemoRunOrder, isOrderVisible, isOwnOrder, partnerIdOfUser } from './repo';
 
 export interface Subscriber {
   userId: string;
@@ -28,6 +28,9 @@ export async function canSubscribe(subscriber: Subscriber, channelName: string):
       return channel.id === subscriber.userId;
     case 'ops':
       return isOperations(subscriber);
+    case 'opsDemo':
+      // F8 L10.4: a demo run's orders, for demo staff only.
+      return isOperations(subscriber) && subscriber.isDemo;
     case 'partner': {
       if (subscriber.role !== 'partner') return false;
       const partnerId = await runAs(actorOf(subscriber), (ctx) =>
@@ -36,7 +39,14 @@ export async function canSubscribe(subscriber: Subscriber, channelName: string):
       return partnerId === channel.id;
     }
     case 'order':
-      if (isStaff(subscriber.role)) return isOperations(subscriber);
+      if (isStaff(subscriber.role)) {
+        if (!isOperations(subscriber)) return false;
+        // F8 L10.4: a demo run's order is for demo staff (and its own customer) only.
+        return (
+          subscriber.isDemo ||
+          !(await runAs(actorOf(subscriber), (ctx) => isDemoRunOrder(ctx, channel.id)))
+        );
+      }
       // F8 L9.1: partners stay off order channels; a partner's own order as a customer is fine.
       if (subscriber.role === 'partner') {
         return runAs(actorOf(subscriber), (ctx) => isOwnOrder(ctx, channel.id, subscriber.userId));

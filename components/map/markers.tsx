@@ -122,14 +122,15 @@ export function CourierDisc({
   );
 }
 
-export function YouDot({ palette }: { palette: MapPalette }) {
+export function YouDot({ palette, stale = false }: { palette: MapPalette; stale?: boolean }) {
   return (
     <span
       className="block rounded-full"
+      data-stale={stale || undefined}
       style={{
         width: 18,
         height: 18,
-        background: palette.you,
+        background: stale ? palette.stale : palette.you,
         border: `3px solid ${palette.youRing}`,
         boxShadow: '0 0 0 1px rgb(20 20 22 / 0.25)',
         boxSizing: 'border-box',

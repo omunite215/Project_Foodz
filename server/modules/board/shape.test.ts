@@ -134,6 +134,14 @@ describe('the other door notes on the timeline (gate S13)', () => {
     });
   });
 
+  it('keeps the bring-back reason, so the timeline reads it (QA A53.2)', () => {
+    expect(rowOf('support', unreachable)).toMatchObject({
+      type: 'cancelled',
+      reason: 'staff',
+      code: 'customer-unreachable',
+    });
+  });
+
   it("never shows the kitchen the note on ADMIN's hand-over for a courier", () => {
     expect(rowOf('kitchen', adminHandOver)).toMatchObject({ type: 'delivered', note: null });
     expect(rowOf('admin', adminHandOver)).toMatchObject({

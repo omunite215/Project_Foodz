@@ -85,6 +85,8 @@ export function FavoritesProvider({
   const [wanted, setWanted] = useState<ReadonlyMap<string, boolean>>(new Map());
   const wantedRef = useRef(wanted);
   const debouncers = useRef(new Map<string, Debouncer<(dish: FavoriteDish) => void>>());
+  /** Each dish's latest save, done whatever its outcome: the next one waits for it. */
+  const inFlight = useRef(new Map<string, Promise<void>>());
   /** Dishes whose change the page announces itself. */
   const quiet = useRef(new Set<string>());
   const [mountedAt] = useState(() => Date.now());
@@ -125,7 +127,30 @@ export function FavoritesProvider({
 
   const markSaved = (dishId: string, on: boolean) => markSavedIn(queryClient, dishId, on);
 
+  /**
+   * One dish's saves run one after another: an earlier one may still be on its way (Undo right
+   * after removing). The next compares with what that one saved, not with the list from before it,
+   * or the second change would never be sent.
+   */
   async function settle(dish: FavoriteDish) {
+    const before = inFlight.current.get(dish.id);
+    const run = (async () => {
+      await before;
+      await settleNow(dish);
+    })();
+    const done = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    inFlight.current.set(dish.id, done);
+    try {
+      await run;
+    } finally {
+      if (inFlight.current.get(dish.id) === done) inFlight.current.delete(dish.id);
+    }
+  }
+
+  async function settleNow(dish: FavoriteDish) {
     const desired = wantedRef.current.get(dish.id);
     if (desired === undefined) return;
     const current = (queryClient.getQueryData<string[]>(IDS_KEY) ?? []).includes(dish.id);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isMoving, keepRecent, type PartnerFix } from './moving';
+import { isMoving, keepRecent, type PartnerFix, ownMapStale } from './moving';
 
 const fix = (at: number, lat: number, speed: number | null = null): PartnerFix => ({
   lat,
@@ -26,5 +26,22 @@ describe('moving or stopped (P37.1)', () => {
     const kept = keepRecent([fix(0, 42.35), fix(5_000, 42.35)], fix(12_000, 42.35));
     expect(kept.map((item) => item.at)).toEqual([5_000, 12_000]);
     expect(keepRecent(kept, fix(12_000, 42.35))).toHaveLength(2);
+  });
+});
+
+describe('his own map when stale (F8 review S8)', () => {
+  const now = Date.parse('2026-11-25T23:00:00.000Z');
+  const ago = (seconds: number) => new Date(now - seconds * 1000).toISOString();
+  it('goes gray from 2 minutes without an accepted point, by the customer rule', () => {
+    expect(ownMapStale(ago(20), null, now)).toBe(false);
+    expect(ownMapStale(ago(119), null, now)).toBe(false);
+    expect(ownMapStale(ago(120), null, now)).toBe(true);
+    expect(ownMapStale(ago(300), null, now)).toBe(true);
+  });
+
+  it('counts from going online before the first point, and never without either', () => {
+    expect(ownMapStale(null, ago(180), now)).toBe(true);
+    expect(ownMapStale(null, ago(30), now)).toBe(false);
+    expect(ownMapStale(null, null, now)).toBe(false);
   });
 });

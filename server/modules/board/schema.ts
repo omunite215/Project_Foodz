@@ -104,6 +104,13 @@ export const CANCEL_CODES = [
 ] as const;
 export type CancelCode = (typeof CANCEL_CODES)[number];
 
+/**
+ * Codes an order can carry: F5's, plus F8's "Cancel and bring it back" (A50.1), which only that
+ * path records and F5's dialog never offers.
+ */
+export const RECORDED_CANCEL_CODES = [...CANCEL_CODES, 'customer-unreachable'] as const;
+export type RecordedCancelCode = (typeof RECORDED_CANCEL_CODES)[number];
+
 /** "Can't make it" offers the kitchen's reasons only (A6.2). */
 export const REFUSE_REASONS = [
   'dish-unavailable',
@@ -432,6 +439,8 @@ export interface FullBoardCard extends BoardCardBase {
     paidLate: boolean;
     /** The chips, in this order: "Refunded", "Partly refunded", "Disputed", "Paid late". */
     flags: MoneyFlag[];
+    /** A sample card order: no card payment behind it, so a cancellation refunds nothing. */
+    sample?: boolean;
   };
 }
 
@@ -580,7 +589,7 @@ export type StaffTimelineEntry = TimelineBase &
     | {
         type: 'cancelled';
         reason: 'customer' | 'payment-expired' | 'account-deleted' | 'staff';
-        code: CancelCode | null;
+        code: RecordedCancelCode | null;
         dishes: string[];
         note: string | null;
       }
@@ -659,7 +668,7 @@ interface DetailBase {
   kitchenNote: string | null;
   cancellation: {
     reason: 'customer' | 'payment-expired' | 'account-deleted' | 'staff' | 'kitchen-refused';
-    code: CancelCode | null;
+    code: RecordedCancelCode | null;
     dishes: string[];
     by: TimelineActor;
     at: string;

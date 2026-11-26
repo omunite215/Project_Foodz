@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryLine } from '@/server/modules/tracking/schema';
 import {
+  askedToWaitLine,
+  bringBackRefundLine,
   attentionListLine,
   attentionLook,
+  confirmOutcome,
   deliveryLineSpoken,
   deliveryTone,
   demoRunningText,
@@ -49,8 +52,25 @@ describe('stuck deliveries (A49, A50)', () => {
       'askToWait',
       'cancelUnreachable',
     ]);
+    // Review S1: the card's line the moment "ask to wait" succeeds.
+    expect(askedToWaitLine('Luis M.', 'Priya')).toMatchObject({
+      state: 'askedToWait',
+      tone: 'amber',
+      icon: 'hourglass',
+      words: "Luis M. · Priya isn't answering · asked to wait · 0 min",
+    });
+    // Asked to wait: nothing while the new 5 minutes run, the same three once they're up.
+    expect(stuckActionsFor(card(line({ state: 'askedToWait', tone: 'amber' })), 'full')).toEqual(
+      [],
+    );
+    expect(stuckActionsFor(card(line({ state: 'askedToWait', tone: 'red' })), 'full')).toEqual([
+      'confirmHandover',
+      'askToWait',
+      'cancelUnreachable',
+    ]);
     expect(stuckActionsFor(card(line({ state: 'locked', tone: 'red' })), 'full')).toEqual([
       'confirmHandover',
+      'askToWait',
       'cancelUnreachable',
     ]);
     expect(stuckActionsFor(card(line({ state: 'problem' })), 'full')).toEqual([
@@ -74,8 +94,12 @@ describe('stuck deliveries (A49, A50)', () => {
         since: '',
         minutes: 6,
         words: '',
+        customerFirst: 'Priya',
       }),
-    ).toBe("Order 1042 · isn't answering · 6 min");
+    ).toBe("Order 1042 · Priya isn't answering · 6 min");
+    expect(confirmOutcome('1042', 'Luis', 'Priya')).toBe(
+      "Order 1042 will be marked delivered. We'll tell Luis and Priya.",
+    );
   });
 });
 
@@ -123,5 +147,30 @@ describe('the live map (A46)', () => {
         (iso) => iso.slice(11, 16),
       ),
     ).toEqual(['Accepted 00:40', 'At the kitchen 00:41']);
+  });
+});
+
+const paidBy = (
+  payment: Partial<{ method: 'cash' | 'card'; status: 'PAID' | 'UNPAID'; sample: boolean }>,
+) => ({
+  view: 'full' as const,
+  payment: {
+    method: 'card' as const,
+    status: 'PAID' as const,
+    totalCents: 5397,
+    refundedCents: 0,
+    ...payment,
+  },
+});
+
+describe('the bring-back refund line (QA, A50.1)', () => {
+  it('words the refund from what was actually paid', () => {
+    expect(bringBackRefundLine(paidBy({}))).toBe("We'll refund $53.97 to the card in full.");
+    expect(bringBackRefundLine(paidBy({ sample: true }))).toBe(
+      "Sample order: there's no card payment to refund.",
+    );
+    expect(bringBackRefundLine(paidBy({ method: 'cash', status: 'UNPAID' }))).toBe(
+      "Nothing was charged, so there's nothing to refund.",
+    );
   });
 });

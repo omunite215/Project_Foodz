@@ -295,8 +295,11 @@ test('a courier takes an offer from support, picks up, and is taken off', async 
   const priya = await customer.newPage();
   await signIn(priya, ACCOUNTS.second, SAMPLE_PASSWORD);
   await open(priya, `/orders/${href?.split('/').at(-1) ?? ''}`);
+  // F8 (S1): within 100 m of the kitchen, he's "at the kitchen picking up your order".
   await expect(
-    priya.getByText(`It's packed. ${courier.first} is on the way to pick it up.`),
+    priya
+      .getByText(`It's packed. ${courier.first} is on the way to pick it up.`)
+      .or(priya.getByText(`${courier.first} is at the kitchen picking up your order.`)),
   ).toBeVisible();
   const block = priya.getByRole('region', { name: 'Your courier' });
   await expect(block.getByText(courier.first, { exact: true })).toBeVisible();

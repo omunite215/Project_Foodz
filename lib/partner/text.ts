@@ -193,8 +193,14 @@ export type LocationLineState =
   | { kind: 'queued'; secondsAgo: number | null }
   | { kind: 'demo' };
 
-/** The location line and its sub line (design 6.3's table). */
-export function locationLine(state: LocationLineState): { line: string; sub: string | null } {
+/**
+ * The location line and its sub line (design 6.3's table). While he holds an order (F8 review
+ * S8), the stale line says who can't see him, not what happens to offers.
+ */
+export function locationLine(
+  state: LocationLineState,
+  holding: { afterPickup: boolean; customerFirst: string | null } | null = null,
+): { line: string; sub: string | null } {
   switch (state.kind) {
     case 'shared':
       return { line: `Location shared · ${agoWords(state.secondsAgo)}`, sub: null };
@@ -208,7 +214,9 @@ export function locationLine(state: LocationLineState): { line: string; sub: str
     case 'stale':
       return {
         line: `Location not shared for ${Math.max(2, state.minutes)} min`,
-        sub: "You won't be offered orders until it's shared again.",
+        sub: holding
+          ? `${holding.afterPickup && holding.customerFirst ? holding.customerFirst : 'Foodz'} can't see you coming.`
+          : "You won't be offered orders until it's shared again.",
       };
     case 'queued':
       return {

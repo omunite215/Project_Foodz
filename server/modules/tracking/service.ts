@@ -25,7 +25,13 @@ import { acceptOffer, getCurrentDelivery } from '@/server/modules/delivery/servi
 import { cityAndZip, firstNameOf, shortName, courierVehicle } from '@/server/modules/delivery/text';
 import { notify } from '@/server/modules/notifications/service';
 import { type OrderEffect, runEffects } from '@/server/modules/orders/effects';
-import { readPoint } from '@/server/modules/partners/location-store';
+import { staffChannelOf } from '@/server/modules/orders/live';
+import {
+  readPoint,
+  readPoints,
+  type StoredPoint,
+  writePoint,
+} from '@/server/modules/partners/location-store';
 import { passStepUp, stepUpFreshUntilFor } from '@/server/modules/staff/service';
 import { publish } from '@/server/realtime/pusher';
 import { redis } from '@/server/redis';
@@ -77,6 +83,7 @@ import {
   CADENCE,
   cancelUnreachableInput,
   confirmHandoverInput,
+  FRESHNESS,
   handOverInput,
   pickedUpInput,
   PROBLEM_KINDS,
@@ -168,7 +175,7 @@ async function publishChanged(
     version: facts.version,
     at: new Date().toISOString(),
   };
-  await publish(channels.ops, 'delivery.changed', data);
+  await publish(await staffChannelOf(facts.orderId), 'delivery.changed', data);
   await publish(channels.order(facts.orderId), 'delivery.changed', data);
   await Promise.all(
     partnerIds.map((id) =>
@@ -525,6 +532,8 @@ export async function staffTrackingDetail(
   if (!row?.partnerId) return null;
   const hidden = viewer.isDemo && !row.customerIsDemo;
   const late = lateAgainstPromise(row);
+  const live = (await readPoint(row.partnerId)) ?? undefined;
+  const last = pointOf(row, live);
   return {
     steps: {
       assignedAt: row.assignedAt?.toISOString() ?? null,
@@ -536,19 +545,25 @@ export async function staffTrackingDetail(
       problem: problemFact(row.problemKind)?.kind ?? null,
     },
     point:
-      hidden || row.lastLat === null || row.lastLng === null || !ACTIVE.has(row.status)
+      hidden || !last || last.lat === null || last.lng === null || !ACTIVE.has(row.status)
         ? null
         : {
-            lat: roundCoordinate(row.lastLat),
-            lng: roundCoordinate(row.lastLng),
-            at: row.lastPointAt?.toISOString() ?? null,
-            freshness: freshnessOf(row.lastPointAt?.toISOString() ?? null, now),
+            lat: roundCoordinate(last.lat),
+            lng: roundCoordinate(last.lng),
+            at: last.at,
+            freshness: freshnessOf(last.at, now),
           },
     route: hidden || !ACTIVE.has(row.status) ? null : routeOf(row),
     dropoffPoint: hidden ? null : { lat: row.dropLat, lng: row.dropLng },
     etaAt: row.etaAt?.toISOString() ?? null,
     estimated: row.etaEstimated,
     late,
+    // Review S2 (design 3.12): the card's line, same words and tone, while it's on its way.
+    // Never for the demo admin on a real order (names and the door stay hidden).
+    line:
+      !hidden && row.status === 'PICKED_UP'
+        ? deliveryLineOf(row, viewer, STORE_TIME_ZONE, now, live)
+        : null,
   };
 }
 
@@ -849,7 +864,9 @@ export async function pointAccepted(input: {
       );
     }
     if (work.almost) {
-      const minutes = Math.max(1, Math.ceil((row.routeDurationSec ?? 60) / 60));
+      // S4.1: it fires within about 200 m or 2 minutes, so never more than "about 2 minutes"
+      // (the stored estimate can be a refresh behind).
+      const minutes = Math.min(2, Math.max(1, Math.ceil((row.routeDurationSec ?? 60) / 60)));
       const notice = customerNotices.almostHere(
         row.orderNumber,
         firstNameOf(row.partnerName ?? 'Your courier'),
@@ -864,6 +881,10 @@ export async function pointAccepted(input: {
           link: `/orders/${row.orderId}`,
           order: { orderId: row.orderId, orderNumber: row.orderNumber, status: 'pickedUp' },
         }),
+      );
+      // QA S4.1, S3.4: her open page reads "almost there" and highlights the code at once.
+      await safely('changed', () =>
+        publishChanged({ orderId: row.orderId, status: 'PICKED_UP', version: row.version }, []),
       );
     }
     const coordinates = ROUTE_LINE.safeParse(row.routeGeojson).data?.coordinates ?? null;
@@ -1020,31 +1041,111 @@ async function requireStaff(actor: UserActor, permission: Permission, write: boo
 
 const maskName = (name: string) => `${name.trim().charAt(0)}•••`;
 
-function lineFacts(row: TrackedDelivery, now: Date): DeliveryFacts {
+/**
+ * Review S7 (L5): one clock for every screen. The stored point's `acceptedAt` (capped for a
+ * repeated fix, S7 of the backend gate) is what the customer reads, so staff read it too; the
+ * database's `last_point_at` (written every 15 s, capped the same way) is the fallback.
+ */
+function pointOf(
+  row: Pick<TrackedDelivery, 'lastLat' | 'lastLng' | 'lastPointAt'>,
+  live?: StoredPoint,
+) {
+  if (live) return { lat: live.lat, lng: live.lng, at: live.acceptedAt };
+  if (row.lastLat === null || row.lastLng === null) {
+    return row.lastPointAt ? { lat: null, lng: null, at: row.lastPointAt.toISOString() } : null;
+  }
+  return { lat: row.lastLat, lng: row.lastLng, at: row.lastPointAt?.toISOString() ?? null };
+}
+
+async function livePoints(rows: readonly { partnerId: string | null }[]) {
+  return readPoints([...new Set(rows.flatMap((row) => (row.partnerId ? [row.partnerId] : [])))]);
+}
+
+function lineFacts(row: TrackedDelivery, now: Date, live?: StoredPoint): DeliveryFacts {
+  const last = pointOf(row, live);
   return {
     orderId: row.orderId,
     orderNumber: row.orderNumber,
     status: row.status,
-    lastPointAt: row.lastPointAt?.toISOString() ?? null,
+    lastPointAt: last?.at ?? null,
     distanceToDoorM:
-      row.lastLat === null || row.lastLng === null
+      !last || last.lat === null || last.lng === null
         ? null
         : Math.round(
-            distanceM(
-              { lat: row.lastLat, lng: row.lastLng },
-              { lat: row.dropLat, lng: row.dropLng },
-            ),
+            distanceM({ lat: last.lat, lng: last.lng }, { lat: row.dropLat, lng: row.dropLng }),
           ),
     durationSec: row.etaAt
       ? Math.max(0, Math.round((row.etaAt.getTime() - now.getTime()) / 1000))
       : null,
     noAnswerSince: row.noAnswerSince?.toISOString() ?? null,
+    waitRestartedAt: row.noAnswerWaitRestartedAt?.toISOString() ?? null,
     lockedAt: row.otpLockedAt?.toISOString() ?? null,
     problem:
       problemOf(row.problemKind) && row.problemAt
         ? { kind: problemOf(row.problemKind) ?? 'other', at: row.problemAt.toISOString() }
         : null,
   };
+}
+
+/** A48.1: one picked-up delivery's line, as the board, the detail and the live map show it. */
+function deliveryLineOf(
+  row: TrackedDelivery,
+  viewer: { isDemo: boolean },
+  timeZone: string,
+  now: Date,
+  live?: StoredPoint,
+): DeliveryLine {
+  const facts = lineFacts(row, now, live);
+  const waitSeconds = timings().noAnswerSeconds;
+  const state = deliveryLineState(facts, now, waitSeconds);
+  const name = row.partnerName ?? 'Courier';
+  const silent = facts.lastPointAt
+    ? Math.max(0, Math.floor((now.getTime() - Date.parse(facts.lastPointAt)) / 60_000))
+    : 0;
+  return withLate(row, {
+    ...deliveryLineWords({
+      ...state,
+      courierShort: shortName(viewer.isDemo ? maskName(name) : name),
+      customerFirst: firstNameOf(row.contactName),
+      distanceToDoorM: facts.distanceToDoorM,
+      arrivalClock: row.etaAt
+        ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone })
+            .format(row.etaAt)
+            .replace(' AM', ' am')
+            .replace(' PM', ' pm')
+        : null,
+      silentMinutes: silent,
+      // The database's clock can run a moment ahead of this one: never "-1 min".
+      waitedMinutes: row.noAnswerSince
+        ? Math.max(0, Math.floor((now.getTime() - row.noAnswerSince.getTime()) / 60_000))
+        : 0,
+      problem: facts.problem?.kind ?? null,
+    }),
+    changesAt: lineChangesAt(state, facts, waitSeconds),
+  });
+}
+
+const after = (from: string | null, seconds: number) =>
+  from ? new Date(Date.parse(from) + seconds * 1000).toISOString() : null;
+
+/** When a line turns by time alone, by the same freshness rule as the customer's page. */
+function lineChangesAt(
+  state: Pick<DeliveryLine, 'state' | 'tone'>,
+  facts: DeliveryFacts,
+  waitSeconds: number,
+): string | null {
+  switch (state.state) {
+    case 'onTheWay':
+    case 'almost':
+      return after(facts.lastPointAt, FRESHNESS.staleSeconds);
+    case 'noLocation':
+      return state.tone === 'amber' ? after(facts.lastPointAt, FRESHNESS.redSeconds) : null;
+    case 'noAnswer':
+    case 'askedToWait':
+      return state.tone === 'amber' ? after(facts.noAnswerSince, waitSeconds) : null;
+    default:
+      return null;
+  }
 }
 
 /** A48, A49: the Out-for-delivery lines and the stuck-delivery list for the board. */
@@ -1056,60 +1157,35 @@ export async function boardTracking(
   const rows = await runAsSystem('board tracking', (ctx) =>
     repo.listActive(ctx, viewer.isDemo ? 'DEMO' : 'REAL'),
   );
-  const t = timings();
   const lines = new Map<string, DeliveryLine>();
   const picked = rows.filter((row) => row.status === 'PICKED_UP');
+  const live = await livePoints(picked);
+  const liveOf = (row: TrackedDelivery) => (row.partnerId ? live.get(row.partnerId) : undefined);
   for (const row of picked) {
-    const facts = lineFacts(row, now);
-    const state = deliveryLineState(facts, now, t.noAnswerSeconds);
-    const name = row.partnerName ?? 'Courier';
-    const silent = row.lastPointAt
-      ? Math.floor((now.getTime() - row.lastPointAt.getTime()) / 60_000)
-      : 0;
-    lines.set(
-      row.orderId,
-      withLate(
-        row,
-        deliveryLineWords({
-          ...state,
-          courierShort: shortName(viewer.isDemo ? maskName(name) : name),
-          customerFirst: firstNameOf(row.contactName),
-          distanceToDoorM: facts.distanceToDoorM,
-          arrivalClock: row.etaAt
-            ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone })
-                .format(row.etaAt)
-                .replace(' AM', ' am')
-                .replace(' PM', ' pm')
-            : null,
-          silentMinutes: silent,
-          waitedMinutes: row.noAnswerSince
-            ? Math.floor((now.getTime() - row.noAnswerSince.getTime()) / 60_000)
-            : 0,
-          problem: facts.problem?.kind ?? null,
-        }),
-      ),
-    );
+    lines.set(row.orderId, deliveryLineOf(row, viewer, timeZone, now, liveOf(row)));
   }
   const items = attentionOf(
-    picked.map((row) => lineFacts(row, now)),
+    picked.map((row) => lineFacts(row, now, liveOf(row))),
     now,
   );
   const byOrder = new Map(rows.map((row) => [row.orderId, row]));
   const attention = items.map((item): AttentionItem => {
     const row = byOrder.get(item.orderId);
+    const customerFirst = firstNameOf(row?.contactName ?? 'The customer');
     return {
       orderId: item.orderId,
       orderNumber: item.orderNumber,
       kind: item.kind,
       since: item.since,
       minutes: item.minutes,
+      customerFirst,
       words: attentionWords({
         kind: item.kind,
         orderNumber: item.orderNumber,
         courierFirst: firstNameOf(
           viewer.isDemo ? maskName(row?.partnerName ?? 'Courier') : (row?.partnerName ?? 'Courier'),
         ),
-        customerFirst: firstNameOf(row?.contactName ?? 'The customer'),
+        customerFirst,
         minutes: item.minutes,
         problem: problemOf(row?.problemKind),
       }),
@@ -1133,7 +1209,8 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
     kitchen: await repo.findKitchenPoint(ctx),
   }));
   // A49 (design 3.9): the stuck-delivery banners show on the live map too, from the same pool.
-  const { attention } = await boardTracking(viewer, STORE_TIME_ZONE, now);
+  const { attention, lines } = await boardTracking(viewer, STORE_TIME_ZONE, now);
+  const live = await readPoints(data.couriers.map((courier) => courier.partnerId));
   const byPartner = new Map(
     data.active.flatMap((row) => (row.partnerId ? [[row.partnerId, row] as const] : [])),
   );
@@ -1149,9 +1226,12 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
       const row = byPartner.get(courier.partnerId) ?? null;
       const state = mapStateFor(row, courier.hasOpenOffer);
       const name = viewer.isDemo && !courier.shownToDemo ? maskName(courier.name) : courier.name;
-      const silent = courier.lastPointAt
-        ? Math.floor((now.getTime() - courier.lastPointAt.getTime()) / 60_000)
-        : null;
+      // Review S7: the customer's clock (the stored point), the database's as a fallback.
+      const last = pointOf(
+        { lastLat: courier.lat, lastLng: courier.lng, lastPointAt: courier.lastPointAt },
+        live.get(courier.partnerId),
+      );
+      const silent = last?.at ? Math.floor((now.getTime() - Date.parse(last.at)) / 60_000) : null;
       const orderNumber = row?.orderNumber ?? courier.offeredOrderNumber;
       return {
         partnerId: courier.partnerId,
@@ -1168,16 +1248,17 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
         orderId: row?.orderId ?? null,
         orderNumber,
         point:
-          courier.lat === null || courier.lng === null
+          !last || last.lat === null || last.lng === null
             ? null
-            : { lat: roundCoordinate(courier.lat), lng: roundCoordinate(courier.lng) },
+            : { lat: roundCoordinate(last.lat), lng: roundCoordinate(last.lng) },
         heading: null,
-        at: courier.lastPointAt?.toISOString() ?? null,
-        freshness: freshnessOf(courier.lastPointAt?.toISOString() ?? null, now),
+        at: last?.at ?? null,
+        freshness: freshnessOf(last?.at ?? null, now),
         phone:
           viewer.isDemo || !courier.phone
             ? null
             : { e164: courier.phone, display: displayPhone(courier.phone).display },
+        stuckSince: state === 'noAnswer' ? (row?.noAnswerSince?.toISOString() ?? null) : null,
       };
     }),
     deliveries: data.active.map((row) => {
@@ -1191,7 +1272,7 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
         courierShortName: shortName(
           viewer.isDemo ? maskName(row.partnerName ?? 'Courier') : (row.partnerName ?? 'Courier'),
         ),
-        stateWords: mapStateWords(mapStateFor(row, false), row.orderNumber, null),
+        stateWords: mapStateWords(mapStateFor(row, false), null, null),
         etaAt: row.etaAt?.toISOString() ?? null,
         lateMinutes:
           row.etaAt && promised !== null
@@ -1203,6 +1284,8 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
             ? maskName(row.contactName)
             : firstNameOf(row.contactName),
         areaWords: row.addressArea ?? cityAndZip(row.addressCity),
+        // Review S2 (design 3.5): the board's line for the panel, same words and tone.
+        line: lines.get(row.orderId) ?? null,
       };
     }),
     readyWithoutCourier: data.ready.map((order) => ({
@@ -1215,7 +1298,10 @@ export async function getOpsMap(actor: UserActor, now = new Date()): Promise<Ops
     demoRun: viewer.isDemo
       ? {
           running: Boolean(data.running),
-          orderNumber: null,
+          orderNumber: data.running
+            ? (data.active.find((row) => row.orderId === data.running?.orderId)?.orderNumber ??
+              null)
+            : null,
           endsAt: data.running?.endsAt.toISOString() ?? null,
           runsLeft: Math.max(0, 6 - data.starts.length),
           nextAt: verdict.ok ? null : verdict.why === 'limit' ? verdict.nextAt : null,
@@ -1502,6 +1588,13 @@ export async function startDemoDelivery(
         nextAt: verdict.nextAt,
       });
     await repo.insertDemoRun(ctx, { id: runId, endsAt, requestedBy: viewer.userId });
+    // B9: the demo run start is audited, with who asked.
+    await audit(ctx, {
+      action: 'tracking.demo-run-started',
+      targetType: 'demo_run',
+      targetId: runId,
+      data: { requestedBy: viewer.userId },
+    });
   });
   await inngest.send(
     demoDeliveryRequested.create(
@@ -1561,6 +1654,18 @@ export async function demoPoint(deliveryId: string, index: number): Promise<bool
   if (!point) return false;
   const at = new Date();
   await runAsSystem('demo point', (ctx) => repo.botPoint(ctx, cast.jamiePartnerId, point));
+  // Review S7: the bot's point is stored like a phone's, so every screen reads one clock.
+  const iso = at.toISOString();
+  await writePoint(cast.jamiePartnerId, {
+    ...point,
+    accuracy: 10,
+    heading: null,
+    speed: null,
+    recordedAt: iso,
+    acceptedAt: iso,
+    movedAt: iso,
+    writtenAt: iso,
+  });
   await pointAccepted({
     partnerId: cast.jamiePartnerId,
     isDemo: true,

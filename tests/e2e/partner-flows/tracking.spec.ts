@@ -115,6 +115,8 @@ test('a courier picks up, finds the door with the map and hands over with the co
     `Slide when you have the food, picked up order ${ORDER}`,
   );
   expect((await slider.boundingBox())?.height).toBeGreaterThanOrEqual(56);
+  // Review P1: its label stays on one line on a phone, so the track stays 56 px.
+  expect((await slider.boundingBox())?.height).toBeLessThanOrEqual(58);
 
   // At the kitchen (within 100 m), the map gives way to the counter card (P37.3).
   const counter = page
@@ -172,6 +174,80 @@ test('a courier picks up, finds the door with the map and hands over with the co
   await priya.setViewportSize({ width: 360, height: 760 });
   await expect(codeCard).toBeVisible();
   await expectNoAxeViolations(priya);
+
+  // Staff (review S2, S9): the detail's courier section shows the card's line, and the live
+  // map link's name starts with what it shows (WCAG 2.5.3).
+  const detail = await support.context.newPage();
+  await open(detail, href ?? '/admin/orders');
+  const section = detail.locator('[data-courier-section]');
+  await expect(section.locator('[data-delivery-state]')).toBeVisible({ timeout: 20_000 });
+  await expect(
+    section.getByRole('link', { name: `Open on the live map, ${OMAR.name}` }),
+  ).toBeVisible();
+  await expectNoAxeViolations(detail);
+
+  // Nobody answers (review S6): the sheet closes onto the waiting clock, scrolled into view,
+  // with focus back on the opener.
+  await page.setViewportSize({ width: 375, height: 667 });
+  const problem = page.getByRole('button', { name: 'Problem with this delivery' });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await problem.click();
+  const problems = page.getByRole('dialog', { name: 'Problem with this delivery' });
+  await problems.getByRole('button', { name: "Priya isn't answering" }).click();
+  await expect(problems).toHaveCount(0);
+  await expect(page.locator('[data-waiting-card]')).toBeInViewport();
+  await expect(problem).toBeFocused();
+
+  // Once the wait is up (20 s here), support asks him to wait: the card reads it within 2 s
+  // (review S1), the detail and the live map panel show the same line (S2), and the timeline
+  // names who asked (S10).
+  // The board narrows Out for delivery to a rail beside the sidebar; open it.
+  const expand = support.page.getByRole('button', { name: /^Expand Out for delivery/ });
+  if (await expand.isVisible()) await expand.click();
+  const line = card(support.page, ORDER).locator('[data-delivery-state]');
+  await expect(line).toHaveAttribute('data-delivery-state', 'noAnswer', { timeout: 20_000 });
+  await expect(line).toHaveAttribute('data-tone', 'red', { timeout: 60_000 });
+  await card(support.page, ORDER)
+    .getByRole('button', { name: new RegExp(`actions for order ${ORDER}`, 'i') })
+    .click();
+  await support.page
+    .getByRole('menuitem', { name: `Ask ${OMAR.first} to wait 5 more minutes` })
+    .click();
+  // The state changes when the request is done (its notice); the line follows within 2 s.
+  await expect(
+    support.page.getByText('Asked Omar H. to wait 5 more minutes for Priya.').first(),
+  ).toBeVisible();
+  await expect(line).toHaveAttribute('data-delivery-state', 'askedToWait', { timeout: 2_000 });
+  await expect(line.locator('span[aria-hidden]')).toHaveText(
+    /^Omar H\. · Priya isn't answering · asked to wait · 0 min$/,
+  );
+  await expect(section.locator('[data-delivery-state="askedToWait"]')).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(
+    detail.getByText(`Morgan Diaz (Support) asked ${OMAR.name} to wait 5 more minutes`),
+  ).toBeVisible({ timeout: 20_000 });
+
+  // The live map at 375 (review S4): the bottom sheet has a handle and a Close button.
+  const live = await support.context.newPage();
+  await live.setViewportSize({ width: 375, height: 812 });
+  await open(live, '/admin/map');
+  const rows = live.getByRole('navigation', { name: 'Couriers and deliveries' });
+  const row = rows.getByRole('button', { name: new RegExp(`^${OMAR.name}`) });
+  // Review P10: the row reads its parts as a list, no dots, nothing that isn't on screen.
+  await expect(row).toHaveAccessibleName(
+    /^Omar Haddad\s*,\s*(No answer\s*,\s*S1105|No location\s*,\s*\d+ min)\s*,\s*Car\s*,\s*5OH 318\s*,\s*Updated /,
+  );
+  await row.click();
+  const panel = live.getByRole('dialog', { name: 'Courier' });
+  await expect(panel.locator('[data-sheet-handle]')).toBeAttached();
+  await expect(panel.locator('[data-delivery-state="askedToWait"]')).toBeVisible();
+  await expectNoAxeViolations(live);
+  await panel.getByRole('button', { name: 'Close' }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(row).toBeFocused();
+  await live.close();
+  await detail.close();
 
   // A wrong code: the boxes clear, the server's tries, said assertively (P42).
   await page.setViewportSize({ width: 375, height: 812 });

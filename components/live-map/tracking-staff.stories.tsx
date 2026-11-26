@@ -220,7 +220,7 @@ const SNAPSHOT: OpsMapSnapshot = {
       orderId: '0193a000-0000-7000-8000-000000000100',
       number: '1042',
       courierShortName: 'Luis M.',
-      stateWords: 'Delivering 1042',
+      stateWords: 'Delivering',
       etaAt: AS_OF,
       lateMinutes: 8,
       dropoffPoint: { lat: 42.36, lng: -71.0547 },

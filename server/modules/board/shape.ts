@@ -17,7 +17,7 @@ import {
   type BoardGone,
   type BoardStaffRole,
   type BoardStatus,
-  CANCEL_CODES,
+  RECORDED_CANCEL_CODES,
   type CancelPreview,
   type ChangeHow,
   type DetailActions,
@@ -350,6 +350,8 @@ export function toCard(
       dispute: order.disputeStatus,
       paidLate,
       flags: moneyFlagsOf(order, paidLate),
+      // F8 (QA): a seeded card order with no payment behind it, so nothing is refunded.
+      sample: method === 'card' && !order.hasPaymentIntent,
     },
   };
 }
@@ -492,7 +494,7 @@ export function timelineOf(
             ...base,
             type: 'cancelled',
             reason: staff ? 'staff' : data.actor === 'customer' ? 'customer' : 'payment-expired',
-            code: staff ? oneOf(CANCEL_CODES, data.reason) : null,
+            code: staff ? oneOf(RECORDED_CANCEL_CODES, data.reason) : null,
             dishes: staff ? dishTitles(lines, stringList(data.lineIds)) : [],
             // F8 (gate S13): A50's "Cancel and bring it back" note is about the door or the
             // customer, which the kitchen never sees.
@@ -680,7 +682,7 @@ function cancellationOf(
   );
   return {
     reason,
-    code: oneOf(CANCEL_CODES, order.cancelCode),
+    code: oneOf(RECORDED_CANCEL_CODES, order.cancelCode),
     dishes: dishTitles(lines, order.cancelLineIds),
     by: event ? actorOf(event) : ({ kind: 'system' } as const),
     at: order.cancelledAt.toISOString(),

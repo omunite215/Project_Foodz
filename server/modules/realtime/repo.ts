@@ -24,3 +24,10 @@ export async function partnerIdOfUser(ctx: DbContext, userId: string) {
   });
   return partner?.id ?? null;
 }
+
+/** F8 (L10.4): an order a demo run made; the definer function reads demo_runs for the caller. */
+export async function isDemoRunOrder(ctx: DbContext, orderId: string) {
+  const rows = await db(ctx).$queryRaw<{ hit: boolean }[]>`
+    SELECT app_is_demo_run_order(${orderId}::uuid) AS "hit"`;
+  return rows[0]?.hit === true;
+}

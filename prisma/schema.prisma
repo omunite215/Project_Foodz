@@ -476,6 +476,8 @@ model DeliveryPartner {
   /// F7: the dispatch line (W3) and its counters (P25, W7.4), kept by the database.
   waitingSince           DateTime?                              @map("waiting_since")
   lastPointAt            DateTime?                              @map("last_point_at")
+  /// When `last_location` last changed; the same fix again keeps `last_point_at` fresh for 2 minutes after it.
+  lastMovedAt            DateTime?                              @map("last_moved_at")
   missedInRow            Int                                    @default(0) @map("missed_in_row")
   unseenInRow            Int                                    @default(0) @map("unseen_in_row")
   /// P31: the last order taken from this partner by someone else, for a notice he missed.

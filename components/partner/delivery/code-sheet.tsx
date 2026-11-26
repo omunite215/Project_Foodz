@@ -339,9 +339,6 @@ export function CodeSheet({
         >
           {delivered ? (
             <div className="text-center motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
-              <SheetDescription className="sr-only">
-                {deliveredAnnouncement(delivered.orderNumber, delivered.pay)}
-              </SheetDescription>
               <SuccessMark state="delivered" play tone="partner" />
               <SheetTitle
                 ref={titleRef}
@@ -350,12 +347,14 @@ export function CodeSheet({
               >
                 {deliveredTitle(delivered.orderNumber)}
               </SheetTitle>
-              <p className="mt-2 text-body-4 text-foreground">
-                You earned{' '}
-                <b className="text-title-2 font-semibold text-strong tabular-nums">
-                  {delivered.pay}
-                </b>
-              </p>
+              <SheetDescription asChild>
+                <p className="mt-2 text-body-4 text-foreground">
+                  You earned{' '}
+                  <b className="text-title-2 font-semibold text-strong tabular-nums">
+                    {delivered.pay}
+                  </b>
+                </p>
+              </SheetDescription>
               {delivered.today ? (
                 <p className="mt-1 text-body-5 text-muted-foreground tabular-nums">
                   {deliveredTodayLine(delivered.today)}

@@ -123,6 +123,13 @@ describe('the online screen', () => {
       line: 'Location not shared for 3 min',
       sub: "You won't be offered orders until it's shared again.",
     });
+    // F8 review S8: mid-delivery, who can't see him (the customer once he has the food).
+    expect(
+      locationLine({ kind: 'stale', minutes: 5 }, { afterPickup: true, customerFirst: 'Priya' }),
+    ).toEqual({ line: 'Location not shared for 5 min', sub: "Priya can't see you coming." });
+    expect(
+      locationLine({ kind: 'stale', minutes: 5 }, { afterPickup: false, customerFirst: null }).sub,
+    ).toBe("Foodz can't see you coming.");
     expect(locationLine({ kind: 'queued', secondsAgo: 40 })).toEqual({
       line: 'Location waiting to send',
       sub: 'Last sent 40 s ago',
