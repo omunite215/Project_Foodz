@@ -19,6 +19,9 @@ import {
   goalOfWords,
   goalReachedAnnouncement,
   keepsFeeSentence,
+  listLoadView,
+  loadView,
+  noEarningsCopy,
   longAmount,
   nextWeekName,
   offlineLine,
@@ -376,5 +379,31 @@ describe('ratings (1.12)', () => {
     expect(ratingsSentence(4.6, 3)).toBe('Rated 4.6 out of 5 from 3 ratings');
     expect(tagSentence('friendly', 5)).toBe('Friendly, picked 5 times');
     expect(tagSentence('late', 1)).toBe('Late, picked once');
+  });
+});
+
+describe('loading states (review S4, S5, P5)', () => {
+  it('never leaves a paused read on its skeleton', () => {
+    expect(loadView({ hasData: false, isError: false, paused: true })).toBe('offline');
+    expect(loadView({ hasData: false, isError: false, paused: false })).toBe('skeleton');
+    expect(loadView({ hasData: false, isError: true, paused: true })).toBe('error');
+    expect(loadView({ hasData: true, isError: true, paused: true })).toBe('data');
+  });
+
+  it('shows one problem block, not one for the week and one for the list', () => {
+    expect(listLoadView('error', 'error')).toBe('hidden');
+    expect(listLoadView('offline', 'offline')).toBe('hidden');
+    expect(listLoadView('error', 'data')).toBe('error');
+    expect(listLoadView('skeleton', 'data')).toBe('skeleton');
+  });
+
+  it("doesn't tell a suspended partner to go online", () => {
+    expect(noEarningsCopy(true)).toEqual({
+      heading: 'No earnings yet',
+      line: null,
+      homeAction: false,
+    });
+    expect(noEarningsCopy(false).line).toMatch(/^Go online to get your first order\./);
+    expect(noEarningsCopy(false).homeAction).toBe(true);
   });
 });

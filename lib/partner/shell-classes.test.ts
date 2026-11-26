@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { plainHeaderClass, statusHeaderClass } from './shell-classes';
 
-const POSITIONS = ['static', 'relative', 'absolute', 'fixed', 'sticky'];
+const POSITIONS = new Set(['static', 'relative', 'absolute', 'fixed', 'sticky']);
 const positionsOf = (className: string) =>
-  className.split(/\s+/).filter((name) => POSITIONS.includes(name));
+  className.split(/\s+/).filter((name) => POSITIONS.has(name));
 
 describe('partner headers (review S1)', () => {
   it('keep the status header stuck to the top, online and offline', () => {

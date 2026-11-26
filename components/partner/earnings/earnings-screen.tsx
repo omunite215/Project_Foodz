@@ -18,7 +18,15 @@ import { Button } from '@/components/ui/button';
 import { announce } from '@/lib/announce';
 import { useMotion } from '@/lib/motion';
 import { holdingNotice } from '@/lib/partner/delivery-text';
-import { offlineLine, periodAnnouncement, weekTitle } from '@/lib/partner/earnings-text';
+import {
+  LIST_OFFLINE,
+  listLoadView,
+  loadView,
+  offlineLine as offlineFigures,
+  periodAnnouncement,
+  WEEK_OFFLINE,
+  weekTitle,
+} from '@/lib/partner/earnings-text';
 import { useOnline } from '@/lib/use-online';
 import { PinnedConnectionBanner, usePartnerSession } from '../home/partner-home';
 import { SuspensionCover } from '../home/home-parts';
@@ -227,6 +235,16 @@ function RetryButton({ onPress }: { onPress: () => void }) {
 
 const LOAD_FAILED = "Couldn't load your earnings.";
 
+/** A read waiting for a connection (P59.3): it says so instead of spinning. */
+function OfflineLine({ words }: { words: string }) {
+  return (
+    <p className="flex items-start gap-2 text-body-4 text-muted-foreground">
+      <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+      {words}
+    </p>
+  );
+}
+
 /** P59.4: the summary failed. The cash card is never drawn from a guess. */
 export function EarningsErrorFrame({ frame }: { frame: FrameParts }) {
   const router = useRouter();
@@ -429,20 +447,34 @@ export function EarningsBody({
   );
   const listGroups = period === 'today' ? todayGroups : (groups ?? []);
 
+  const paused = weekQuery.fetchStatus === 'paused';
+  // The week block reads the summary for the current week, and its own read for earlier ones.
+  const weekView =
+    period === 'week'
+      ? loadView({ hasData: Boolean(shownBlock), isError: weekQuery.isError, paused })
+      : 'data';
+  const listView = listLoadView(
+    loadView({ hasData: Boolean(groups), isError: weekQuery.isError, paused }),
+    weekView,
+  );
+  const loadFailed = (
+    <FormAlert
+      variant="error"
+      tone="partner"
+      action={<RetryButton onPress={() => void weekQuery.refetch()} />}
+    >
+      {LOAD_FAILED}
+    </FormAlert>
+  );
+
   let list: ReactNode = null;
-  if (!summary.hasEntries) {
+  if (!summary.hasEntries || listView === 'hidden') {
     list = null;
-  } else if (weekQuery.isError && !groups) {
-    list = (
-      <FormAlert
-        variant="error"
-        tone="partner"
-        action={<RetryButton onPress={() => void weekQuery.refetch()} />}
-      >
-        {LOAD_FAILED}
-      </FormAlert>
-    );
-  } else if (!groups) {
+  } else if (listView === 'error') {
+    list = loadFailed;
+  } else if (listView === 'offline') {
+    list = <OfflineLine words={LIST_OFFLINE} />;
+  } else if (listView === 'skeleton') {
     list =
       listSkeleton.show || listSkeleton.reserve ? (
         <div className={listSkeleton.show ? undefined : 'invisible'}>
@@ -493,16 +525,10 @@ export function EarningsBody({
         onDay={(date) => listRef.current?.showDay(date)}
       />
     );
-  } else if (weekQuery.isError) {
-    block = (
-      <FormAlert
-        variant="error"
-        tone="partner"
-        action={<RetryButton onPress={() => void weekQuery.refetch()} />}
-      >
-        {LOAD_FAILED}
-      </FormAlert>
-    );
+  } else if (weekView === 'error') {
+    block = loadFailed;
+  } else if (weekView === 'offline') {
+    block = <OfflineLine words={WEEK_OFFLINE} />;
   } else {
     block = <WeekSkeleton />;
   }
@@ -540,7 +566,7 @@ export function EarningsBody({
           {online ? null : (
             <p className="flex min-h-6 items-center gap-2 text-body-5 font-medium text-strong tabular-nums">
               <WifiOff className="size-4 shrink-0 text-warning-mark" aria-hidden />
-              {offlineLine(figuresAt, tz)}
+              {offlineFigures(figuresAt, tz)}
             </p>
           )}
         </div>

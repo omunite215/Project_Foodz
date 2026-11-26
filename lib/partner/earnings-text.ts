@@ -468,3 +468,43 @@ export const tagWords = (tag: string) => (isTag(tag) ? TAG_WORDS[tag] : tag);
 /** "Friendly, picked 5 times". */
 export const tagSentence = (tag: string, count: number) =>
   `${tagWords(tag)}, picked ${count === 1 ? 'once' : `${count} times`}`;
+
+// ------------------------------------------------------------------ loading states (1.13)
+
+export type LoadView = 'data' | 'skeleton' | 'offline' | 'error';
+
+/**
+ * What a read shows. A read paused for want of a connection never shows its skeleton forever
+ * (P59.3): it says it loads when he's back online.
+ */
+export function loadView(read: { hasData: boolean; isError: boolean; paused: boolean }): LoadView {
+  if (read.hasData) return 'data';
+  if (read.isError) return 'error';
+  if (read.paused) return 'offline';
+  return 'skeleton';
+}
+
+/** The list stays out of the way when the week above already says it couldn't load (one block). */
+export const listLoadView = (list: LoadView, week: LoadView): LoadView | 'hidden' =>
+  week === 'error' || week === 'offline' ? 'hidden' : list;
+
+export const WEEK_OFFLINE = "This week loads when you're back online.";
+export const LIST_OFFLINE = "Your deliveries load when you're back online.";
+
+/**
+ * Today with no entry ever (P59.1). An active partner is told how to start; a suspended one
+ * (read-only, P61) can't go online, so he gets the heading alone, with Back in the header.
+ */
+export function noEarningsCopy(readOnly: boolean): {
+  heading: string;
+  line: string | null;
+  homeAction: boolean;
+} {
+  return readOnly
+    ? { heading: 'No earnings yet', line: null, homeAction: false }
+    : {
+        heading: 'No earnings yet',
+        line: 'Go online to get your first order. Your pay for each delivery shows up here.',
+        homeAction: true,
+      };
+}

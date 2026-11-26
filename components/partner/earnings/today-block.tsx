@@ -15,6 +15,7 @@ import {
   goalOfWords,
   goalReachedAnnouncement,
   longAmount,
+  noEarningsCopy,
   ringSentence,
 } from '@/lib/partner/earnings-text';
 import { cn } from '@/lib/utils';
@@ -166,20 +167,21 @@ export function TodayBlock({
   useGoalReachedAnnouncement(today, showRing ? goalCents : null);
 
   if (neverDelivered) {
+    const copy = noEarningsCopy(readOnly);
     return (
       <section aria-labelledby="today-title" className="pt-2 text-center">
         <Doodle name="strolling" className="w-40 max-[359px]:w-30" />
         <h2 id="today-title" className="mt-4 font-heading text-h4 text-strong">
-          No earnings yet
+          {copy.heading}
         </h2>
-        <p className="mt-2 text-body-4 text-muted-foreground">
-          Go online to get your first order. Your pay for each delivery shows up here.
-        </p>
-        <div className="mt-4 flex justify-center">
-          <Button asChild variant="outline" size="kitchen" className="bg-card text-strong">
-            <Link href="/partner">Go to Home</Link>
-          </Button>
-        </div>
+        {copy.line ? <p className="mt-2 text-body-4 text-muted-foreground">{copy.line}</p> : null}
+        {copy.homeAction ? (
+          <div className="mt-4 flex justify-center">
+            <Button asChild variant="outline" size="kitchen" className="bg-card text-strong">
+              <Link href="/partner">Go to Home</Link>
+            </Button>
+          </div>
+        ) : null}
       </section>
     );
   }
