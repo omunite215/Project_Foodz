@@ -29,6 +29,12 @@ const LAST_WEEK: EarningsReportQuery = {
   page: 1,
 };
 
+/** The range the parser settles on for an address's dates. */
+function range(from: string, to: string) {
+  const query = reportQueryFromSearch({ from, to }, TODAY);
+  return { from: query.from, to: query.to };
+}
+
 describe('reportQueryFromSearch', () => {
   it('opens on last week, partner A to Z', () => {
     expect(reportQueryFromSearch({}, TODAY)).toEqual(LAST_WEEK);
@@ -61,10 +67,6 @@ describe('reportQueryFromSearch', () => {
 
   it('falls back to last week for a range it would refuse', () => {
     const fallback = { from: LAST_WEEK.from, to: LAST_WEEK.to };
-    const range = (from: string, to: string) => {
-      const query = reportQueryFromSearch({ from, to }, TODAY);
-      return { from: query.from, to: query.to };
-    };
     expect(range('2026-11-15', '2026-11-09')).toEqual(fallback);
     expect(range('2025-01-01', '2026-11-15')).toEqual(fallback);
     expect(range('2026-11-21', '2026-11-22')).toEqual(fallback);
