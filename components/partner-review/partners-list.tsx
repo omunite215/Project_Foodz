@@ -892,7 +892,10 @@ function ResultsTable({
                   onClick={(event) => {
                     // A click anywhere on the row follows its name link (mouse only, 7.5).
                     const target = event.target;
-                    if (target instanceof Element && target.closest('a, button')) return;
+                    // The row menu is portaled, but React still bubbles its clicks to the row.
+                    if (target instanceof Element && target.closest('a, button, [role="menu"]')) {
+                      return;
+                    }
                     if (window.getSelection()?.toString()) return;
                     router.push(applicationHref(row.original.partnerId, result.query));
                   }}
