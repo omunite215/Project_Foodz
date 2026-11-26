@@ -13,6 +13,7 @@ import {
 } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { getCustomerDispatch } from '@/server/modules/delivery/service';
+import { getOrderRatingView, orderListFlags } from '@/server/modules/ratings/service';
 import { getCustomerTracking } from '@/server/modules/tracking/service';
 import { cityAndZip } from '@/server/modules/delivery/text';
 import { getAddress, getAddressBook } from '@/server/modules/addresses/service';
@@ -749,7 +750,12 @@ export async function getOrderView(
   const dispatch = await getCustomerDispatch(actor, parsed.data.orderId);
   // F8 B7: the live map, estimate and code, for her own order from the courier's accept on.
   const tracking = await getCustomerTracking(actor, parsed.data.orderId);
-  return { ...view, progress: { ...view.progress, ...(dispatch && { dispatch }), tracking } };
+  // F9 (B4): the rating card, from delivery for 7 days.
+  const rating = await getOrderRatingView(actor, parsed.data.orderId, now);
+  return {
+    ...view,
+    progress: { ...view.progress, ...(dispatch && { dispatch }), tracking, rating },
+  };
 }
 
 async function requireOwnView(actor: UserActor, orderId: string, now: Date) {
@@ -835,18 +841,23 @@ export async function listMyOrders(
 ): Promise<OrdersPage> {
   const { cursor } = listOrdersInput.parse(input);
   const after = decodeCursor(cursor);
-  return runAs(actor, async (ctx) => {
+  const rows = await runAs(actor, async (ctx) => {
     const inProgress = after ? [] : await listInProgress(ctx, actor.userId, ORDERS_PAGE_SIZE);
     const past = await listPast(ctx, actor.userId, after, ORDERS_PAGE_SIZE + 1);
-    const page = past.slice(0, ORDERS_PAGE_SIZE);
-    const last = page.at(-1);
-    return {
-      inProgress: inProgress.map((row) => toOrderSummary(row, now)),
-      past: page.map((row) => toOrderSummary(row, now)),
-      nextCursor:
-        past.length > ORDERS_PAGE_SIZE && last ? encodeCursor(last.createdAt, last.id) : null,
-    };
+    return { inProgress, past };
   });
+  const page = rows.past.slice(0, ORDERS_PAGE_SIZE);
+  const last = page.at(-1);
+  // F9 (S6.1): "Rate" and "Rated" on the rows.
+  const flags = await orderListFlags(actor, page, now);
+  return {
+    inProgress: rows.inProgress.map((row) => toOrderSummary(row, now)),
+    past: page.map((row) =>
+      Object.assign(toOrderSummary(row, now), { rating: flags.get(row.id) ?? null }),
+    ),
+    nextCursor:
+      rows.past.length > ORDERS_PAGE_SIZE && last ? encodeCursor(last.createdAt, last.id) : null,
+  };
 }
 
 // ------------------------------------------------------------------ cancelling (U6, S12.5)

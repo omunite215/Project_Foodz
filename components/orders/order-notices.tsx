@@ -1,6 +1,14 @@
 'use client';
 
-import { CircleX, ClipboardCheck, House, type LucideIcon, PackageCheck, Truck } from 'lucide-react';
+import {
+  CircleX,
+  ClipboardCheck,
+  House,
+  type LucideIcon,
+  PackageCheck,
+  Star,
+  Truck,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useReducer, useRef, useState } from 'react';
@@ -34,6 +42,7 @@ const ICONS: Record<OrderNoticeStatus, LucideIcon> = {
   pickedUp: Truck,
   delivered: House,
   cancelled: CircleX,
+  rate: Star,
 };
 
 const TICK_MS = 500;

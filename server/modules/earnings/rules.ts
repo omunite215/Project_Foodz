@@ -1,3 +1,4 @@
+import { isDeployedProduction } from '@/server/deployment';
 import {
   type BalanceState,
   type CashBreakdown,
@@ -181,8 +182,12 @@ export function presetRange(preset: ReportPreset, today: IsoDate): { from: IsoDa
   }
 }
 
-/** The latest `to` a report accepts: the end of this month, so the presets stay valid. */
-export const latestReportDay = (today: IsoDate): IsoDate => lastOfMonth(today);
+/** The latest `to` a report accepts: the end of this week or month, so the presets stay valid. */
+export function latestReportDay(today: IsoDate): IsoDate {
+  const endOfWeek = addDays(mondayOf(today), 6);
+  const endOfMonth = lastOfMonth(today);
+  return endOfWeek > endOfMonth ? endOfWeek : endOfMonth;
+}
 
 // ------------------------------------------------------------------ the goal (P52, P53)
 
@@ -439,3 +444,17 @@ export const PRACTICE_RATINGS = {
   ],
   mentioned: [{ tag: 'late', count: 2 }],
 } as const;
+
+// ------------------------------------------------------------------ the nightly check (E7, B13)
+
+export const RECONCILE_CRON = 'TZ=America/New_York 15 3 * * *';
+export const DEMO_RESET_CRON = 'TZ=America/New_York 0 4 * * *';
+
+/** `EARNINGS_RECONCILE_CRON` only with `FOODZ_TEST_TIMING=1`, never on a deployed production. */
+export function reconcileCron(env: Record<string, string | undefined>): string {
+  const testing =
+    (env.FOODZ_TEST_TIMING === '1' || env.FOODZ_TEST_TIMING === 'true') &&
+    !isDeployedProduction(env);
+  const value = env.EARNINGS_RECONCILE_CRON?.trim();
+  return testing && value && /^[\w*/,\- =]+$/.test(value) ? value : RECONCILE_CRON;
+}

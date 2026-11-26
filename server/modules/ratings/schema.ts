@@ -41,6 +41,14 @@ export const TAG_WORDS: Record<DishTag | CourierTag, string> = {
 
 export const STAR_WORDS = { 1: 'Bad', 2: 'Poor', 3: 'OK', 4: 'Good', 5: 'Great' } as const;
 export type Stars = keyof typeof STAR_WORDS;
+export const isStars = (value: unknown): value is Stars =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 5;
+const DISH_TAG_LIST: ReadonlySet<string> = new Set([...DISH_TAGS.good, ...DISH_TAGS.bad]);
+const COURIER_TAG_LIST: ReadonlySet<string> = new Set([...COURIER_TAGS.good, ...COURIER_TAGS.bad]);
+export const isDishTag = (value: string): value is DishTag => DISH_TAG_LIST.has(value);
+export const isCourierTag = (value: string): value is CourierTag => COURIER_TAG_LIST.has(value);
+export const isTag = (value: string): value is DishTag | CourierTag =>
+  isDishTag(value) || isCourierTag(value);
 
 export const RATING_RULES = {
   windowDays: 7,
@@ -138,6 +146,8 @@ export const skipRatingInput = z.object({ orderId: z.uuid() }).strict();
 
 export const EXCLUDE_REASONS = ['abusive', 'wrong-subject', 'test-or-duplicate', 'other'] as const;
 export type ExcludeReason = (typeof EXCLUDE_REASONS)[number];
+export const isExcludeReason = (value: unknown): value is ExcludeReason =>
+  typeof value === 'string' && (EXCLUDE_REASONS as readonly string[]).includes(value);
 
 export const excludeRatingInput = z
   .object({

@@ -6,6 +6,7 @@ import {
   orderPaymentStarted,
   orderRefundRequested,
 } from '@/server/jobs/client';
+import { orderDelivered } from '@/server/jobs/earnings-events';
 import { logger } from '@/server/logger';
 import { notify } from '@/server/modules/notifications/service';
 import { keepSavedCard } from '@/server/modules/payments/service';
@@ -138,6 +139,16 @@ async function runEffect(effect: OrderEffect) {
       return;
     case 'notice':
       await sendOrderNotice(effect.orderId, effect.step);
+      // F9 (V6): every delivered path passes here once; the rating reminder starts its wait.
+      if (effect.step === 'delivered') {
+        const at = new Date().toISOString();
+        await inngest.send(
+          orderDelivered.create(
+            { orderId: effect.orderId, deliveredAt: at, at },
+            { id: `order-delivered-${effect.orderId}` },
+          ),
+        );
+      }
       return;
     default:
       return;

@@ -60,6 +60,9 @@ export const statements = {
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
   review: ['create', 'moderate'],
+  // F9: a partner reads his own ledger; SUPPORT reads ledgers and records cash; ADMIN adjusts,
+  // records payouts (both with step-up) and runs the report and its CSVs.
+  earnings: ['read-own', 'read', 'record-cash', 'adjust', 'payout', 'report'],
   analytics: ['read'],
   audit: ['read'],
   staff: ['assign-role'],
@@ -99,6 +102,7 @@ const partner = ac.newRole({
   order: ['create', 'read-own', 'cancel'],
   partner: ['apply', 'deliver'],
   review: ['create'],
+  earnings: ['read-own'],
 });
 
 const kitchen = ac.newRole({
@@ -115,6 +119,7 @@ const support = ac.newRole({
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
   review: ['moderate'],
+  earnings: ['read', 'record-cash'],
 });
 
 const contentEditor = ac.newRole({
@@ -143,6 +148,7 @@ const admin = ac.newRole({
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
   review: ['moderate'],
+  earnings: ['read', 'record-cash', 'adjust', 'payout', 'report'],
   analytics: ['read'],
   audit: ['read'],
   staff: ['assign-role'],

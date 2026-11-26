@@ -322,6 +322,44 @@ const POLICIES = {
     duration: 3600,
     message: 'Demo deliveries are limited to 6 an hour. Try again in {wait}.',
   },
+  // F9 (V10.1): ratings, the ledger's money actions, the report and the partner's earnings.
+  'rating.submit': {
+    points: 30,
+    duration: 3600,
+    message: "You've sent a lot of ratings. Try again in {wait}.",
+  },
+  'rating.moderate': {
+    points: 120,
+    duration: 3600,
+    message: "You've changed a lot of ratings. Try again in {wait}.",
+  },
+  'earnings.cash-record': {
+    points: 60,
+    duration: 3600,
+    message: "You've recorded a lot of cash hand-ins. Try again in {wait}.",
+  },
+  'earnings.adjust': {
+    points: 30,
+    duration: 3600,
+    message: "You've made a lot of adjustments. Try again in {wait}.",
+  },
+  'earnings.payout': {
+    points: 30,
+    duration: 3600,
+    message: "You've recorded a lot of payouts. Try again in {wait}.",
+  },
+  'report.export': {
+    points: 20,
+    duration: 3600,
+    message: "You've exported a lot of reports. Try again in {wait}.",
+  },
+  'earnings.read': { points: 60, duration: 60 },
+  'earnings.goal': {
+    points: 20,
+    duration: 600,
+    message: "You've changed your goal a lot. Try again in {wait}.",
+  },
+  'earnings.staff-read': { points: 120, duration: 60 },
   'realtime.auth': { points: 60, duration: 60 },
   'upload.request': { points: 30, duration: 600 },
   // Address suggestions while typing (debounced in the browser).

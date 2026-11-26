@@ -156,8 +156,8 @@ export function stepUpFreshUntilFor(actor: UserActor, now = new Date()): Promise
 
 // ------------------------------------------------------------------ the step-up gate (A7.10)
 
-/** `action`: what the code is for, `refund` (F5) or `partner` (F6: approve, suspend, reinstate). */
-export const stepUpRequired = (action: 'refund' | 'partner' = 'refund') =>
+/** `action`: what the code is for: `refund` (F5), `partner` (F6: approve, suspend, reinstate) or `earnings` (F9: adjust, payout). */
+export const stepUpRequired = (action: 'refund' | 'partner' | 'earnings' = 'refund') =>
   new AppError('STEP_UP_REQUIRED', 'Enter a code from your authenticator app to continue.', 403, {
     details: { action, windowMinutes: STEP_UP_WINDOW_MS / 60_000 },
   });
@@ -187,7 +187,7 @@ export async function passStepUp(
   actor: UserActor,
   code: unknown,
   now = new Date(),
-  action: 'refund' | 'partner' = 'refund',
+  action: 'refund' | 'partner' | 'earnings' = 'refund',
 ): Promise<void> {
   if (code === undefined || code === null) throw stepUpRequired(action);
   const { method, code: value } = stepUpInput.parse(code);

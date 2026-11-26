@@ -40,6 +40,8 @@ export type AdjustReason = (typeof ADJUST_REASONS)[number];
 
 export const PAYOUT_METHODS = ['bank-transfer', 'cash-at-kitchen', 'other'] as const;
 export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
+export const isPayoutMethod = (value: unknown): value is PayoutMethod =>
+  typeof value === 'string' && (PAYOUT_METHODS as readonly string[]).includes(value);
 
 export const EARNINGS_LIMITS = {
   adjustMaxCents: 50_000,
@@ -98,21 +100,27 @@ export function cleanPlainText(value: string): string | undefined {
   return cleaned === '' ? undefined : cleaned;
 }
 
-const amount = z
-  .string()
-  .max(20)
-  .transform((value, ctx) => {
-    const cents = parseAmountText(value);
-    if (cents === null) {
-      ctx.addIssue({ code: 'custom', message: EARNINGS_FIELD_ERRORS.amount });
-      return z.NEVER;
-    }
-    if (cents < 1) {
-      ctx.addIssue({ code: 'custom', message: EARNINGS_FIELD_ERRORS.amountMin });
-      return z.NEVER;
-    }
-    return cents;
-  });
+/**
+ * Typed text from a dialog, or cents already parsed (the action's wrapper parses once and the
+ * service checks again).
+ */
+const amount = z.union([z.string(), z.number()]).transform((value, ctx) => {
+  let cents: number | null = null;
+  if (typeof value === 'number') {
+    cents = Number.isSafeInteger(value) && value <= 10_000_000 ? value : null;
+  } else if (value.length <= 20) {
+    cents = parseAmountText(value);
+  }
+  if (cents === null) {
+    ctx.addIssue({ code: 'custom', message: EARNINGS_FIELD_ERRORS.amount });
+    return z.NEVER;
+  }
+  if (cents < 1) {
+    ctx.addIssue({ code: 'custom', message: EARNINGS_FIELD_ERRORS.amountMin });
+    return z.NEVER;
+  }
+  return cents;
+});
 
 const plain = (max: number) =>
   z
