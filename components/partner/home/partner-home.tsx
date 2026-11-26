@@ -38,7 +38,7 @@ import {
   wentOffline,
 } from '@/lib/partner/dispatch';
 import { LOOKING_AFTER_MS, STALE_AFTER_MS, fixQuality } from '@/lib/partner/location-queue';
-import { keepRecent, type PartnerFix } from '@/lib/partner/moving';
+import { keepRecent, ownMapStale, type PartnerFix } from '@/lib/partner/moving';
 import { pickedUpAnnouncement } from '@/lib/partner/delivery-text';
 import { unlockOfferSound } from '@/lib/partner/offer-sound';
 import { deliverTitle, pickUpTitle } from '@/lib/partner/offer-text';
@@ -550,7 +550,21 @@ export function PartnerHome({
             customerFirst={afterPickup ? (holding.dropoff?.firstName ?? null) : null}
           />
         }
-        locationRow={line.kind === 'shared' ? null : <LocationLine state={line} />}
+        locationRow={
+          line.kind === 'shared' ? null : (
+            <LocationLine
+              state={line}
+              holding={{
+                afterPickup,
+                customerFirst: afterPickup ? (holding.dropoff?.firstName ?? null) : null,
+              }}
+            />
+          )
+        }
+        stale={
+          !sharing.isDemo &&
+          ownMapStale(sharing.lastAcceptedAt, sharing.onlineSince ?? null, serverNow)
+        }
       />
     );
     body =
@@ -814,7 +828,7 @@ export function PartnerHome({
         <ProblemSheet
           open={problemsOpen}
           onOpenChange={setProblemsOpen}
-          returnFocus={() => problemRef.current?.focus()}
+          returnFocus={() => problemRef.current?.focus({ preventScroll: true })}
         />
       ) : null}
       <OfferLayer />

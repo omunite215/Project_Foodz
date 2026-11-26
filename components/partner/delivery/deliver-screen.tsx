@@ -265,8 +265,11 @@ export function DeliverScreen({
       >
         {deliverTitle(delivery.orderNumber)}
       </h1>
-      <WaitingCard delivery={delivery} serverNow={serverNow} askedToWait={askedToWait} />
-      <ProblemOutcome delivery={delivery} />
+      {/* Design 2.8 (amended): the sheet closes onto this, scrolled into view. */}
+      <div data-delivery-outcome="" className="scroll-mt-24 space-y-5 empty:hidden">
+        <WaitingCard delivery={delivery} serverNow={serverNow} askedToWait={askedToWait} />
+        <ProblemOutcome delivery={delivery} />
+      </div>
       {notices}
       {locationOff ? (
         <LocationHelpCard

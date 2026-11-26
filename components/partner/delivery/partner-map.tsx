@@ -79,6 +79,7 @@ function PartnerLayers({
   route,
   following,
   moving,
+  stale,
   onPanned,
 }: {
   handle: MapHandle;
@@ -90,10 +91,16 @@ function PartnerLayers({
   route: PartnerDeliveryF8['route'];
   following: boolean;
   moving: boolean;
+  /** Review S8: no accepted point for 2 minutes: his dot gray, the route dashed. */
+  stale: boolean;
   onPanned: () => void;
 }) {
   const { map } = handle;
-  const dot = useRef<{ glider: Glider; remove: () => void } | null>(null);
+  const dot = useRef<{
+    glider: Glider;
+    remove: () => void;
+    render: (node: ReactNode) => void;
+  } | null>(null);
   const latest = useRef({ onPanned });
   useEffect(() => {
     latest.current = { onPanned };
@@ -160,8 +167,12 @@ function PartnerLayers({
   useEffect(() => {
     if (!fix) return;
     if (!dot.current) {
-      const mounted = mountMarker(handle, fix, <YouDot palette={palette} />);
-      dot.current = { glider: createGlider(mounted.marker, fix), remove: mounted.remove };
+      const mounted = mountMarker(handle, fix, <YouDot palette={palette} stale={stale} />);
+      dot.current = {
+        glider: createGlider(mounted.marker, fix),
+        remove: mounted.remove,
+        render: mounted.render,
+      };
     } else {
       dot.current.glider.to(fix, { reduced: prefersReducedMotion() });
     }
@@ -169,6 +180,10 @@ function PartnerLayers({
     if (following) follow(handle, fix, stop);
     // oxlint-disable-next-line react/exhaustive-deps
   }, [fix?.at, following]);
+
+  useEffect(() => {
+    dot.current?.render(<YouDot palette={palette} stale={stale} />);
+  }, [palette, stale]);
 
   useEffect(
     () => () => {
@@ -184,6 +199,7 @@ function PartnerLayers({
       handle={handle}
       coordinates={routeFrom(route?.geojson?.coordinates ?? null, fix, stop)}
       palette={palette}
+      stale={stale}
     />
   );
 }
@@ -197,6 +213,7 @@ export function PartnerMapCard({
   serverNow,
   openInMaps,
   locationRow,
+  stale = false,
 }: {
   delivery: PartnerDeliveryF8;
   /** His latest fix (the demo partner's pretend point). */
@@ -210,6 +227,8 @@ export function PartnerMapCard({
   openInMaps: ReactNode;
   /** F6's location line, only when it isn't "Shared". */
   locationRow: ReactNode;
+  /** Review S8: his own point is stale (the freshness rule). */
+  stale?: boolean;
 }) {
   const toDoor = delivery.status === 'PICKED_UP' && delivery.dropoff !== null;
   const stop = toDoor && delivery.dropoff ? delivery.dropoff.point : delivery.kitchen.point;
@@ -229,6 +248,7 @@ export function PartnerMapCard({
     <section
       aria-label={toDoor ? 'Route to the drop-off' : 'Route to the kitchen'}
       data-partner-map=""
+      data-stale={stale || undefined}
       className="overflow-hidden rounded-2xl border border-border bg-card"
     >
       <MapFrame
@@ -275,6 +295,7 @@ export function PartnerMapCard({
             route={delivery.route}
             following={following}
             moving={moving}
+            stale={stale}
             onPanned={() => {
               if (!moving) setPanned(true);
             }}
