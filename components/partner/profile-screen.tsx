@@ -10,6 +10,7 @@ import {
   Star,
   Sun,
   SunMoon,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
@@ -25,6 +26,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { releasedByOwnChoice } from '@/lib/partner/dispatch';
+import { holdingNotice } from '@/lib/partner/delivery-text';
 import {
   goOffline,
   goOfflineGivingBack,
@@ -42,7 +44,7 @@ import { OfferAlertsSection } from './offers/idle-parts';
 import { OfferLayer, useOfferOpen } from './offers/offer-layer';
 import { DispatchNoticeSlot } from './offers/offer-notices';
 import { usePartnerTheme } from './partner-root';
-import { PartnerFrame, PartnerTabBar, StatusHeader } from './shell';
+import { PartnerFrame, PartnerNotice, PartnerTabBar, StatusHeader } from './shell';
 
 /*
  * Profile (F6 design 6.7): who he is, the appearance (this phone's own choice, written to a
@@ -128,6 +130,9 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
   const [confirming, setConfirming] = useState(false);
   const [givingBack, setGivingBack] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  // F8 2.11: after pickup, signing out keeps the order; the dialog says so first.
+  const [keeping, setKeeping] = useState(false);
+  const keepRef = useRef<HTMLButtonElement>(null);
   const signOutRef = useRef<HTMLButtonElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
   const partner = state.partner;
@@ -154,6 +159,20 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
           mainClassName="pt-6 space-y-8"
         >
           <DispatchNoticeSlot />
+          {holding ? (
+            // F8 P45.1: the order he holds comes first; Home always brings him back to it.
+            <PartnerNotice
+              tone="muted"
+              icon={Info}
+              action={
+                <Button asChild variant="outline" size="kitchen" className="bg-card text-strong">
+                  <Link href="/partner">Back to the delivery</Link>
+                </Button>
+              }
+            >
+              {holdingNotice(holding.orderNumber)}
+            </PartnerNotice>
+          ) : null}
           <section className="text-center">
             {partner.photo?.url ? (
               // A 5-minute private link to his own photo.
@@ -236,7 +255,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
                 // F7 P30.4: before pickup, signing out asks to give the order back first; after
                 // pickup the order stays his (lead decision 5).
                 if (holding?.canGiveBack) setGivingBack(true);
-                else if (holding) signOutNow();
+                else if (holding) setKeeping(true);
                 else if (online && !sharing.isDemo) setConfirming(true);
                 else signOutNow();
               }}
@@ -325,6 +344,52 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
           }}
           returnFocus={() => signOutRef.current?.focus()}
         />
+      ) : null}
+      {holding ? (
+        <AlertDialog open={keeping} onOpenChange={setKeeping}>
+          <AlertDialogContent
+            className="border border-border bg-card text-foreground"
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              keepRef.current?.focus();
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              signOutRef.current?.focus();
+            }}
+          >
+            <AlertDialogTitle className="font-heading text-title-2 text-strong">
+              You have order {holding.orderNumber}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="mt-3 text-body-4 text-foreground">
+              You&apos;ll keep it. Sign back in on this phone to finish the delivery.
+            </AlertDialogDescription>
+            <div className="mt-6 flex flex-col gap-3">
+              <Button
+                ref={keepRef}
+                type="button"
+                variant="outline"
+                size="kitchen"
+                className="w-full bg-card text-strong"
+                onClick={() => setKeeping(false)}
+              >
+                Stay signed in
+              </Button>
+              <Button
+                type="button"
+                size="kitchen"
+                variant="stop"
+                className="w-full"
+                onClick={() => {
+                  setKeeping(false);
+                  signOutNow();
+                }}
+              >
+                Sign out
+              </Button>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
       <SignOutDialog state={signOut} onCloseFocus={() => signOutRef.current?.focus()} />
       <OfferLayer />

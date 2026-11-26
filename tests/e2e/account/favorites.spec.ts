@@ -12,6 +12,10 @@ import {
 const heart = (page: import('@playwright/test').Page, dish: string) =>
   page.locator('main').getByRole('button', { name: `Favorite ${dish}`, exact: true });
 
+/** A server action request: how a heart saves. */
+const isSave = (request: { method: () => string; headers: () => Record<string, string> }) =>
+  request.method() === 'POST' && Boolean(request.headers()['next-action']);
+
 test.describe('Favorites', () => {
   test('a signed-out heart asks her to sign in, then saves the dish on return (S5.3, B13)', async ({
     page,
@@ -73,6 +77,17 @@ test.describe('Favorites', () => {
     const list = page.locator('main').getByRole('list').last();
     await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Kimchi', 'Bulgogi']);
 
+    // Server action requests (the hearts' saves) still on their way.
+    let savesInFlight = 0;
+    page.on('request', (request) => {
+      if (isSave(request)) savesInFlight += 1;
+    });
+    const settled = (request: Parameters<typeof isSave>[0]) => {
+      if (isSave(request)) savesInFlight -= 1;
+    };
+    page.on('requestfinished', settled);
+    page.on('requestfailed', settled);
+
     await heart(page, 'Kimchi').click();
     // The visible notice; the screen-reader announcer may hold the same words for a moment.
     await expect(
@@ -87,10 +102,30 @@ test.describe('Favorites', () => {
     await expect(heart(page, 'Kimchi')).toBeFocused();
     await expect(liveRegion(page)).toHaveText('Kimchi saved to your favorites.');
 
-    // Saved on the server: still there after a reload (a heart settles 300 ms after the last tap).
-    await page.waitForTimeout(1000);
-    await page.reload();
-    await expect(list.locator('h2 > span[aria-hidden]')).toHaveText(['Kimchi', 'Bulgogi']);
+    // Saved on the server: still there after a reload. A heart settles 300 ms after the last tap,
+    // and on a busy machine its request can take longer than any fixed wait: wait until no save
+    // is in flight, then read the server's list until it shows the undo.
+    // Quiet for 1.5 s: an Undo's save starts only once the removal's has answered, so a single
+    // moment with nothing in flight isn't enough, and a reload would cancel the save.
+    let quietChecks = 0;
+    await expect
+      .poll(
+        () => {
+          quietChecks = savesInFlight > 0 ? 0 : quietChecks + 1;
+          return quietChecks >= 3;
+        },
+        { timeout: 15_000, intervals: [500] },
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        async () => {
+          await page.reload();
+          return list.locator('h2 > span[aria-hidden]').allTextContents();
+        },
+        { timeout: 20_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toEqual(['Kimchi', 'Bulgogi']);
     await expectNoSidewaysScroll(page);
     await expectAccessible(page);
   });

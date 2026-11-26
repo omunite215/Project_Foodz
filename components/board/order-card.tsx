@@ -9,12 +9,13 @@ import { type CardMenuItem, cardActions, PREVIOUS_STEP } from '@/server/modules/
 import { cardTiming } from '@/server/modules/board/timing';
 import { msUntil } from '@/lib/board/clock';
 import { cardTone, courierLineShown } from '@/lib/board/courier-text';
+import { deliveryTone, firstOfShort, type StuckAction } from '@/lib/board/tracking-text';
 import { timeBlockText } from '@/lib/board/text';
 import { prefersReducedMotion, useMotion } from '@/lib/motion';
 import { isSitePath } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 import { type Blocked, CardActions, type CourierMenuItem, type MoveProgress } from './card-actions';
-import { CourierLine } from './courier-parts';
+import { CourierLine, DeliveryLineView } from './courier-parts';
 import {
   type CardReason,
   CardReasonBlock,
@@ -121,6 +122,8 @@ export function OrderCard({
   courierNow,
   courierItems,
   onCourier,
+  stuckItems,
+  onStuck,
 }: {
   card: BoardCard;
   /** The server's time now (B14), refreshed every 15 seconds. */
@@ -130,6 +133,9 @@ export function OrderCard({
   /** F7 (design 2.6): the card menu's courier items for SUPPORT and ADMIN. */
   courierItems?: readonly CourierMenuItem[];
   onCourier?: (card: BoardCard, item: CourierMenuItem) => void;
+  /** F8 (A50): a stuck delivery's actions for SUPPORT and ADMIN. */
+  stuckItems?: readonly StuckAction[];
+  onStuck?: (card: BoardCard, item: StuckAction) => void;
   /** Server clock minus the device's, for the Undo window. */
   offset: number;
   timeZone: string;
@@ -157,7 +163,11 @@ export function OrderCard({
   // F7 (D18): the card's border takes the worse of the time tone and the courier tone.
   const courier = courierLineShown(card);
   const courierTone = card.status === 'READY' ? courier?.tone : null;
-  const tone = cardTone(time.tone, courierTone);
+  // F8 (A48): Out for delivery takes the delivery line's tone, and red when late (A48.2).
+  const tone =
+    card.status === 'PICKED_UP' && card.delivery
+      ? deliveryTone(time.tone, card.delivery)
+      : cardTone(time.tone, courierTone);
 
   return (
     <article
@@ -193,7 +203,12 @@ export function OrderCard({
       </div>
       <div className="relative">
         <TimeLine text={time} />
-        {courier ? (
+        {card.status === 'PICKED_UP' && card.delivery ? (
+          <DeliveryLineView
+            line={card.delivery}
+            vehicleWords={card.courier?.vehicleWords ?? null}
+          />
+        ) : courier ? (
           <CourierLine courier={courier} now={courierNow ?? now} orderStatus={card.status} />
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -220,6 +235,9 @@ export function OrderCard({
         onUndo={() => onUndo(card)}
         courierItems={courierItems}
         onCourier={onCourier ? (item) => onCourier(card, item) : undefined}
+        stuckItems={stuckItems}
+        courierFirst={firstOfShort(card.courier?.shortName)}
+        onStuck={onStuck ? (item) => onStuck(card, item) : undefined}
       />
       {reason ? <CardReasonBlock reason={reason} /> : null}
     </article>

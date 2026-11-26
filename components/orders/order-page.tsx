@@ -36,11 +36,14 @@ import {
 import { useCartActions } from '@/lib/data/cart';
 import {
   acceptedCancelSentence,
+  courierShown,
   currentStep,
   isCollected,
   orderTabTitle,
   stepLine,
 } from '@/lib/order-progress';
+import { tracksLive } from '@/lib/order-tracking';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { cancelDescription, moneyNotices, orderStateOf, telOf } from '@/lib/order-text';
 import { useMinuteClock } from '@/lib/use-minute-clock';
 import { useOnline } from '@/lib/use-online';
@@ -61,6 +64,7 @@ import {
   WithPhone,
 } from './order-progress';
 import { PaymentStep } from './payment-step';
+import { AtDoorBanner, TrackingMapCard } from './tracking';
 import { useLiveOrder } from './use-live-order';
 import { OrderAgainButton } from './use-reorder';
 
@@ -308,6 +312,57 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
   const kitchenHas =
     step === 'accepted' || step === 'preparing' || step === 'ready' || step === 'pickedUp';
 
+  // F8 (design 1.2 to 1.8): the live map, code and banner from pickup to the end. Two columns
+  // from 1024 px for every order in progress; a delivery that ends while the page is open
+  // keeps them until the next visit, and only the map leaves.
+  const tracking = view.progress.tracking ?? null;
+  const inProgress = state === 'placed' && !storeCancelled;
+  const liveTracking = inProgress && tracksLive(tracking) ? tracking : null;
+  const courierFirst = courierShown(view)?.firstName ?? 'Your courier';
+  const vehicleWords = courierShown(view)?.vehicleWords ?? null;
+  const [twoColumns, setTwoColumns] = useState(inProgress);
+  if (inProgress && !twoColumns) setTwoColumns(true);
+  const wide = useMediaQuery('(min-width: 64rem)');
+  const [codeAtLoad] = useState(Boolean(liveTracking?.code));
+  const [atDoorAtLoad] = useState(Boolean(liveTracking?.atDoor));
+  const atDoor = Boolean(liveTracking?.atDoor);
+  const nowLineRef = useRef<HTMLParagraphElement>(null);
+  const statusRef = useRef<HTMLElement>(null);
+  const mapHadFocus = useRef(false);
+  const mapFocus = {
+    onFocus: () => {
+      mapHadFocus.current = true;
+    },
+    onBlur: () => {
+      mapHadFocus.current = false;
+    },
+  };
+  const tracked = liveTracking !== null;
+  useEffect(() => {
+    if (tracked || !mapHadFocus.current) return;
+    mapHadFocus.current = false;
+    requestAnimationFrame(() => (nowLineRef.current ?? statusRef.current)?.focus());
+  }, [tracked]);
+  const mapCard = (slot: 'card' | 'side') =>
+    liveTracking ? (
+      <div {...mapFocus}>
+        <TrackingMapCard
+          key={slot}
+          orderId={view.id}
+          tracking={liveTracking}
+          courierFirst={courierFirst}
+          vehicleWords={vehicleWords}
+          asOf={view.progress.asOf}
+          timeZone={view.store.timeZone}
+          headingId={`track-title-${slot}`}
+          active={slot === 'side' ? wide : !wide}
+          nowLineRef={nowLineRef}
+          className={slot === 'side' ? 'lg:rounded-2xl' : undefined}
+          boxClassName={slot === 'side' ? 'lg:h-[360px] xl:h-[420px]' : 'h-60 md:h-72'}
+        />
+      </div>
+    ) : null;
+
   // A live change removed the focused control: focus lands on what replaced it (D25).
   // Either slot counts: the Cancel button, or the sentence and its phone link that replace it.
   const cancelHadFocus = useRef(false);
@@ -360,186 +415,228 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
   const tel = telOf(view.store.phone);
 
   return (
-    <div className="mx-auto max-w-[600px]">
-      <div className="mb-6">
-        <BackLink href="/account/orders">Your orders</BackLink>
-      </div>
-      {online ? null : (
-        <FormAlert variant="info" icon={WifiOff} className="mb-6">
-          You&apos;re offline. This page will update when you&apos;re back online.
-        </FormAlert>
+    <div
+      className={cn(
+        'mx-auto max-w-[600px]',
+        twoColumns &&
+          'lg:grid lg:max-w-[1040px] lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start lg:gap-8',
       )}
-      <OrderHero
-        view={view}
-        state={state}
-        play={fresh}
-        headingRef={headingRef}
-        slow={slow}
-        now={minute}
-      />
-      <OrderNumber number={view.number} />
-      {storeCancelled ? (
-        <CancellationCard
-          view={view}
-          headingRef={cancelHeadingRef}
-          animateIn={!cancelledAtLoad}
-          orderAgain={
-            <OrderAgainButton
-              orderId={view.id}
-              number={view.number}
-              variant="outline"
-              className="max-sm:items-stretch max-sm:text-center"
-            />
-          }
-        />
-      ) : null}
-      {view.progress.steps ? (
-        <ProgressCard
-          view={view}
-          now={new Date(minute)}
-          live={{ state: liveLine, returnPath: `/orders/${view.id}` }}
-        />
-      ) : (
-        <OrderStatusCard view={view} state={state} now={new Date(minute)} timeline={false} />
-      )}
-      {canCancel && step === 'placed' ? (
-        <div
-          className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
-          onFocus={slotFocus}
-          onBlur={slotBlur}
-        >
-          <Button
-            ref={cancelButtonRef}
-            type="button"
-            variant="outline"
-            size="touch"
-            aria-disabled={!online || undefined}
-            aria-describedby={online ? undefined : 'cancel-offline'}
-            onClick={() => {
-              if (!online) {
-                announce("You're offline.");
-                return;
-              }
-              setCancelRefusal(null);
-              setCancelOpen(true);
-            }}
-            className="border-destructive bg-white text-destructive hover:bg-tag-4-bg hover:text-destructive"
-          >
-            Cancel order
-          </Button>
-          {online ? null : (
-            <span id="cancel-offline" className="text-body-5 text-neutral-3">
-              You&apos;re offline.
-            </span>
-          )}
+    >
+      <div className="min-w-0">
+        {liveTracking && atDoor ? (
+          <AtDoorBanner
+            courierFirst={courierFirst}
+            code={liveTracking.code}
+            phone={view.store.phone}
+            live={!atDoorAtLoad}
+          />
+        ) : null}
+        <div className="mb-6">
+          <BackLink href="/account/orders">Your orders</BackLink>
         </div>
-      ) : kitchenHas && !cancelRefusal ? (
-        <div
-          className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
-          onFocus={slotFocus}
-          onBlur={slotBlur}
-        >
-          <p
-            ref={sentenceRef}
-            tabIndex={-1}
-            className="max-w-[480px] text-body-5 text-neutral-3 focus:outline-none"
-          >
-            <WithPhone text={acceptedCancelSentence('{phone}')} phone={view.store.phone} />
-          </p>
-        </div>
-      ) : null}
-      <TimelineCard view={view} now={new Date(minute)} />
-      <MoneyNotices notices={notices} />
-      {state === 'waiting' && view.payable && payment && arrivalChecked ? (
-        <PaymentStep
-          view={view}
-          savedCards={payment.savedCards}
-          savedCardLimit={payment.savedCardLimit}
-          publishableKey={payment.publishableKey}
-          testMode={payment.testMode}
-          onPaid={() => {
-            markConfirming(view.id);
-            setFresh(true);
-            setStalled(false);
-            setSlow(false);
-            setConfirming(true);
-            setConfirmingSince(Date.now());
-            requestAnimationFrame(() => headingRef.current?.focus());
-          }}
-          onChanged={(next) => {
-            if (next) {
-              setView(next);
-              requestAnimationFrame(() => headingRef.current?.focus());
-            } else void refetch();
-          }}
-        />
-      ) : null}
-      {showDetails ? (
-        <>
-          <Receipt view={view} state={state} />
-          <DeliveryCard view={view} />
-        </>
-      ) : null}
-
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-        {stalled && confirming ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="touch"
-            className="bg-white"
-            onClick={() => {
-              setStalled(false);
-              setConfirmingSince(Date.now());
-            }}
-          >
-            Check again
-          </Button>
-        ) : null}
-        {state === 'delivered' ? (
-          <OrderAgainButton orderId={view.id} number={view.number} variant="primary" />
-        ) : null}
-        {primary ? (
-          <Button
-            asChild
-            size="touch"
-            variant={state === 'delivered' ? 'outline' : 'default'}
-            className={state === 'delivered' ? 'bg-white' : 'uppercase'}
-          >
-            <Link href={primary.href}>{primary.label}</Link>
-          </Button>
-        ) : null}
-        {reorderable && state !== 'delivered' ? (
-          <OrderAgainButton orderId={view.id} number={view.number} variant="outline" />
-        ) : null}
-      </div>
-      <div ref={refusalRef} tabIndex={-1} className="outline-none">
-        {cancelRefusal ? (
-          <FormAlert variant="error" className="mt-6">
-            {cancelRefusal.kitchen ? (
-              <>
-                The kitchen has already started on order {view.number}, so it can&apos;t be
-                cancelled here. Call us on{' '}
-                <a href={`tel:${tel}`} className={cn('font-medium underline', PHONE_LINK_TARGET)}>
-                  {view.store.phone}
-                </a>
-                .
-              </>
-            ) : (
-              cancelRefusal.text
-            )}
+        {online ? null : (
+          <FormAlert variant="info" icon={WifiOff} className="mb-6">
+            You&apos;re offline. This page will update when you&apos;re back online.
           </FormAlert>
+        )}
+        <OrderHero
+          view={view}
+          state={state}
+          play={fresh}
+          headingRef={headingRef}
+          slow={slow}
+          now={minute}
+          markHiddenOnPhone={liveTracking !== null}
+        />
+        <OrderNumber number={view.number} />
+        {storeCancelled ? (
+          <CancellationCard
+            view={view}
+            headingRef={cancelHeadingRef}
+            animateIn={!cancelledAtLoad}
+            orderAgain={
+              <OrderAgainButton
+                orderId={view.id}
+                number={view.number}
+                variant="outline"
+                className="max-sm:items-stretch max-sm:text-center"
+              />
+            }
+          />
         ) : null}
+        {view.progress.steps ? (
+          <ProgressCard
+            view={view}
+            now={new Date(minute)}
+            live={{ state: liveLine, returnPath: `/orders/${view.id}` }}
+            sectionRef={statusRef}
+            tracking={
+              liveTracking
+                ? {
+                    tracking: liveTracking,
+                    courierFirst,
+                    map: twoColumns ? (
+                      <div className="lg:hidden">{mapCard('card')}</div>
+                    ) : (
+                      mapCard('card')
+                    ),
+                    atDoor,
+                    codeAnimateIn: !codeAtLoad,
+                    nowLineRef,
+                  }
+                : null
+            }
+          />
+        ) : (
+          <OrderStatusCard view={view} state={state} now={new Date(minute)} timeline={false} />
+        )}
+        {canCancel && step === 'placed' ? (
+          <div
+            className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
+            onFocus={slotFocus}
+            onBlur={slotBlur}
+          >
+            <Button
+              ref={cancelButtonRef}
+              type="button"
+              variant="outline"
+              size="touch"
+              aria-disabled={!online || undefined}
+              aria-describedby={online ? undefined : 'cancel-offline'}
+              onClick={() => {
+                if (!online) {
+                  announce("You're offline.");
+                  return;
+                }
+                setCancelRefusal(null);
+                setCancelOpen(true);
+              }}
+              className="border-destructive bg-white text-destructive hover:bg-tag-4-bg hover:text-destructive"
+            >
+              Cancel order
+            </Button>
+            {online ? null : (
+              <span id="cancel-offline" className="text-body-5 text-neutral-3">
+                You&apos;re offline.
+              </span>
+            )}
+          </div>
+        ) : kitchenHas && !cancelRefusal ? (
+          <div
+            className="mt-6 flex min-h-11 flex-col items-center justify-center gap-1 text-center"
+            onFocus={slotFocus}
+            onBlur={slotBlur}
+          >
+            <p
+              ref={sentenceRef}
+              tabIndex={-1}
+              className="max-w-[480px] text-body-5 text-neutral-3 focus:outline-none"
+            >
+              <WithPhone text={acceptedCancelSentence('{phone}')} phone={view.store.phone} />
+            </p>
+          </div>
+        ) : null}
+        <TimelineCard view={view} now={new Date(minute)} />
+        <MoneyNotices notices={notices} />
+        {state === 'waiting' && view.payable && payment && arrivalChecked ? (
+          <PaymentStep
+            view={view}
+            savedCards={payment.savedCards}
+            savedCardLimit={payment.savedCardLimit}
+            publishableKey={payment.publishableKey}
+            testMode={payment.testMode}
+            onPaid={() => {
+              markConfirming(view.id);
+              setFresh(true);
+              setStalled(false);
+              setSlow(false);
+              setConfirming(true);
+              setConfirmingSince(Date.now());
+              requestAnimationFrame(() => headingRef.current?.focus());
+            }}
+            onChanged={(next) => {
+              if (next) {
+                setView(next);
+                requestAnimationFrame(() => headingRef.current?.focus());
+              } else void refetch();
+            }}
+          />
+        ) : null}
+        {showDetails ? (
+          <>
+            <Receipt view={view} state={state} />
+            <DeliveryCard view={view} className={twoColumns ? 'mt-6 lg:hidden' : 'mt-6'} />
+          </>
+        ) : null}
+
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          {stalled && confirming ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="touch"
+              className="bg-white"
+              onClick={() => {
+                setStalled(false);
+                setConfirmingSince(Date.now());
+              }}
+            >
+              Check again
+            </Button>
+          ) : null}
+          {state === 'delivered' ? (
+            <OrderAgainButton orderId={view.id} number={view.number} variant="primary" />
+          ) : null}
+          {primary ? (
+            <Button
+              asChild
+              size="touch"
+              variant={state === 'delivered' ? 'outline' : 'default'}
+              className={state === 'delivered' ? 'bg-white' : 'uppercase'}
+            >
+              <Link href={primary.href}>{primary.label}</Link>
+            </Button>
+          ) : null}
+          {reorderable && state !== 'delivered' ? (
+            <OrderAgainButton orderId={view.id} number={view.number} variant="outline" />
+          ) : null}
+        </div>
+        <div ref={refusalRef} tabIndex={-1} className="outline-none">
+          {cancelRefusal ? (
+            <FormAlert variant="error" className="mt-6">
+              {cancelRefusal.kitchen ? (
+                <>
+                  The kitchen has already started on order {view.number}, so it can&apos;t be
+                  cancelled here. Call us on{' '}
+                  <a href={`tel:${tel}`} className={cn('font-medium underline', PHONE_LINK_TARGET)}>
+                    {view.store.phone}
+                  </a>
+                  .
+                </>
+              ) : (
+                cancelRefusal.text
+              )}
+            </FormAlert>
+          ) : null}
+        </div>
+        <p className="mt-6 text-center text-body-5 text-neutral-3">
+          Need help? Call{' '}
+          <a
+            href={`tel:${tel}`}
+            className={cn('text-neutral-1 underline underline-offset-4', PHONE_LINK_TARGET)}
+          >
+            {view.store.phone}
+          </a>
+        </p>
       </div>
-      <p className="mt-6 text-center text-body-5 text-neutral-3">
-        Need help? Call{' '}
-        <a
-          href={`tel:${tel}`}
-          className={cn('text-neutral-1 underline underline-offset-4', PHONE_LINK_TARGET)}
-        >
-          {view.store.phone}
-        </a>
-      </p>
+      {twoColumns ? (
+        <aside aria-label="Your delivery" className="hidden space-y-6 lg:sticky lg:top-6 lg:block">
+          {mapCard('side')}
+          {showDetails ? (
+            <DeliveryCard view={view} headingId="delivery-title-side" className="" />
+          ) : null}
+        </aside>
+      ) : null}
 
       <AlertDialog
         open={cancelOpen}

@@ -12,6 +12,27 @@ function capture(fields: Record<string, unknown>) {
 
 const SECRET = 'do-not-log-me';
 
+describe('logger redaction of live tracking (F8 L12)', () => {
+  it('never writes a delivery code or a position, wherever it sits', () => {
+    const line = JSON.stringify(
+      capture({
+        body: { code: '4071', cashCollected: true },
+        input: { code: '4071' },
+        point: { lat: 42.35532, lng: -71.05061 },
+        lat: 42.35532,
+        lng: -71.05061,
+        courierPoint: { lat: 42.35532, lng: -71.05061 },
+        routeGeojson: { type: 'LineString', coordinates: [[-71.045, 42.3505]] },
+        coordinates: [[-71.045, 42.3505]],
+        codeHash: 'a'.repeat(64),
+        deliveryId: 'd1',
+      }),
+    );
+    expect(line).not.toMatch(/4071|42\.35|71\.05|71\.045|aaaa/);
+    expect(line).toContain('d1');
+  });
+});
+
 describe('logger redaction', () => {
   it.each([
     'password',

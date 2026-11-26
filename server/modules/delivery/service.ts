@@ -9,6 +9,8 @@ import type { DeliveryStatus } from '@/server/db/enums';
 import { AppError, forbidden, notFound, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
+import { inngest } from '@/server/jobs/client';
+import { deliveryTrackingStarted } from '@/server/jobs/tracking-events';
 import { redis } from '@/server/redis';
 import { presignDownload } from '@/server/storage/s3';
 import type { TurnResult } from '@/server/jobs/dispatch-run';
@@ -87,6 +89,14 @@ const DEMO_CANNOT = 'Read-only in the demo';
 const PHOTO_SECONDS = 300;
 const RELEASE_NOTICE_MS = 30 * 60_000;
 const GIVE_BACK_ALERT_AT = 10;
+const RELEASE_KINDS = [
+  'takenOff',
+  'cancelled',
+  'handedOver',
+  'confirmed',
+  'cancelledBringBack',
+  'markedDelivered',
+] as const;
 const LATE_ACCEPT_ALERT_AT = 5;
 const DAY_MS = 24 * 60 * 60_000;
 const ASSIGN = { delivery: ['assign'] } as const satisfies Permission;
@@ -434,6 +444,20 @@ export async function acceptOffer(
       },
     ]);
     logger.info({ offerId, deliveryId: result.deliveryId, partnerId: me.id }, 'offer accepted');
+    // F8 L4.1: the estimate loop runs from the accept until the delivery ends.
+    await inngest
+      .send(
+        deliveryTrackingStarted.create(
+          {
+            deliveryId: result.deliveryId,
+            orderId: result.orderId,
+            version: result.version,
+            at: at.toISOString(),
+          },
+          { id: `delivery-tracking-${result.deliveryId}-${result.version}` },
+        ),
+      )
+      .catch((error: unknown) => logger.error({ err: error }, 'tracking start failed'));
   }
   return {
     deliveryId: result.deliveryId,
@@ -678,12 +702,7 @@ export async function partnerDispatchState(
     partner.releasedAt &&
     now.getTime() - partner.releasedAt.getTime() <= RELEASE_NOTICE_MS
       ? {
-          kind:
-            partner.releasedKind === 'takenOff'
-              ? ('takenOff' as const)
-              : partner.releasedKind === 'handedOver'
-                ? ('handedOver' as const)
-                : ('cancelled' as const),
+          kind: RELEASE_KINDS.find((kind) => kind === partner.releasedKind) ?? 'cancelled',
           orderNumber: partner.releasedOrderNumber,
           at: partner.releasedAt.toISOString(),
         }

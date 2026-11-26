@@ -7,6 +7,8 @@ import type { OrderStatus } from '@/server/db/enums';
 import { AppError, forbidden, invalidInput, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
+import { boardTracking, staffTrackingDetail } from '@/server/modules/tracking/service';
+import { STORE_TIME_ZONE } from '@/lib/order-text';
 import {
   courierHolding,
   courierLines,
@@ -300,7 +302,17 @@ export async function getBoard(actor: UserActor, now = new Date()): Promise<Boar
   });
   // F7: courier lines and the couriers count, read after the board's own transaction.
   const cards = await withCouriers(viewer, snapshot.cards, now);
-  return { ...snapshot, cards, couriers: await couriersCount() };
+  if (isKitchenView(viewer.role)) return { ...snapshot, cards, couriers: await couriersCount() };
+  // F8 A48, A49: the Out-for-delivery lines and the stuck deliveries (never for the kitchen).
+  const tracking = await boardTracking(viewer, snapshot.store.timeZone, now);
+  return {
+    ...snapshot,
+    cards: cards.map((card) =>
+      Object.assign(card, { delivery: tracking.lines.get(card.id) ?? null }),
+    ),
+    couriers: await couriersCount(),
+    attention: tracking.attention,
+  };
 }
 
 /** A34.1: each Ready and Out-for-delivery card's courier line, in one read for the page. */
@@ -340,7 +352,19 @@ export async function getBoardCards(
       }
     }
     return { asOf: now.toISOString(), cards: sortCards(cards), gone };
-  }).then(async (result) => ({ ...result, cards: await withCouriers(viewer, result.cards, now) }));
+  }).then(async (result) => {
+    const cards = await withCouriers(viewer, result.cards, now);
+    if (isKitchenView(viewer.role)) return { ...result, cards };
+    // F8 (A48, design 3.8): the Out-for-delivery line comes with the card a change named, so
+    // "asked to wait" or a lock reads on the card within 2 s, not at the next full read.
+    const tracking = await boardTracking(viewer, STORE_TIME_ZONE, now);
+    return {
+      ...result,
+      cards: cards.map((card) =>
+        Object.assign(card, { delivery: tracking.lines.get(card.id) ?? null }),
+      ),
+    };
+  });
 }
 
 async function readOrder(actor: UserActor, orderId: string) {
@@ -391,7 +415,11 @@ export async function getStaffOrderDetail(
     now,
     names,
   );
-  return { ...detail, courierSection: await courierSection(viewer, found.order, now) };
+  return {
+    ...detail,
+    courierSection: await courierSection(viewer, found.order, now),
+    tracking: await staffTrackingDetail(viewer, found.order.id, now),
+  };
 }
 
 /** The refuse and cancel dialogs' opening data, shaped by role (design 3.2, 3.3). */
@@ -1031,10 +1059,9 @@ async function handOver(
   const { orderId, expectedVersion, reason, note } = input;
   const from: OrderStatus = mode === 'pickUp' ? 'READY' : 'PICKED_UP';
   const to: OrderStatus = mode === 'pickUp' ? 'PICKED_UP' : 'DELIVERED';
-  // F7: "Picked up by the assigned courier" only when a courier holds the order.
-  if (mode === 'pickUp' && reason === 'assigned-courier' && !(await courierHolding(orderId))) {
-    throw invalidInput(BOARD_FIELD_ERRORS.noCourier, { reason: [BOARD_FIELD_ERRORS.noCourier] });
-  }
+  // F8 A51.1: "Courier's app isn't working" keeps a courier who holds the order.
+  const keepsCourier =
+    mode === 'pickUp' && reason === 'courier-app-down' && Boolean(await courierHolding(orderId));
 
   const outcome = await runAs(actor, async (ctx) => {
     const { order, events } = await loadLocked(ctx, orderId);
@@ -1082,11 +1109,7 @@ async function handOver(
         kind: 'dispatch',
         orderId,
         change:
-          mode === 'deliver'
-            ? 'delivered'
-            : reason === 'assigned-courier'
-              ? 'picked-up-by-courier'
-              : 'handed-over',
+          mode === 'deliver' ? 'delivered' : keepsCourier ? 'picked-up-by-courier' : 'handed-over',
       },
     ];
     // U23: no "On its way" notice when the customer collected it herself.

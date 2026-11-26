@@ -1,7 +1,15 @@
 'use client';
 
 import { useSelector } from '@tanstack/react-store';
-import { AlarmClock, CircleCheck, Clock, Info, type LucideIcon, VolumeX } from 'lucide-react';
+import {
+  AlarmClock,
+  CircleCheck,
+  Clock,
+  Info,
+  type LucideIcon,
+  Undo2,
+  VolumeX,
+} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { announce } from '@/lib/announce';
 import { dismissNotice, dispatchStore, refreshSoundState } from '@/lib/partner/dispatch';
@@ -13,6 +21,7 @@ import {
   type OfferNoticeWords,
 } from '@/lib/partner/offer-text';
 import { useMotion } from '@/lib/motion';
+import { CallKitchenLink } from '../delivery/pick-up-screen';
 import { PartnerNotice } from '../shell';
 
 /*
@@ -26,6 +35,7 @@ const ICONS: Record<OfferNoticeIcon, LucideIcon> = {
   info: Info,
   alarm: AlarmClock,
   check: CircleCheck,
+  undo: Undo2,
 };
 
 export function OfferNotice({
@@ -45,7 +55,19 @@ export function OfferNotice({
   );
   return (
     <div ref={ref}>
-      <PartnerNotice tone={words.tone} icon={ICONS[words.icon]} onDismiss={onDismiss}>
+      <PartnerNotice
+        tone={words.tone}
+        icon={ICONS[words.icon]}
+        onDismiss={onDismiss}
+        action={
+          words.call ? (
+            <div className="space-y-2">
+              <p className="text-body-5 text-foreground">{words.call.address}</p>
+              <CallKitchenLink phone={words.call.phone} />
+            </div>
+          ) : undefined
+        }
+      >
         {words.text}
       </PartnerNotice>
     </div>

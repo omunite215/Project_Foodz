@@ -11,6 +11,7 @@ import { inngest } from '@/server/jobs/client';
 import type { OrderStatus } from '@/server/db/enums';
 import { logger } from '@/server/logger';
 import { type OrderChange, orderChanged } from '@/server/modules/delivery/service';
+import { issueCodeForOrder, notifyMarkedDelivered } from '@/server/modules/tracking/service';
 import { expireMenuCache } from '@/server/modules/menu/cache';
 import { type OrderEffect, runEffects } from '@/server/modules/orders/effects';
 import { STEP_NOTICE_DELAY_MS } from '@/server/modules/orders/progress-schema';
@@ -100,6 +101,10 @@ async function runOne(effect: BoardEffect) {
       return;
     case 'dispatch':
       await orderChanged(effect.orderId, effect.change);
+      // F8 A51.1: a courier kept by ADMIN's override still hands over with a code.
+      if (effect.change === 'picked-up-by-courier') await issueCodeForOrder(effect.orderId);
+      // F8 A51.2: "Foodz marked order 1042 as delivered." on the courier's phone.
+      if (effect.change === 'delivered') await notifyMarkedDelivered(effect.orderId);
       return;
     case 'dish':
       expireMenuCache();

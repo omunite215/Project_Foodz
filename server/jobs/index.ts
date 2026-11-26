@@ -2,6 +2,12 @@ import 'server-only';
 import type { InngestFunction } from 'inngest';
 import { accountEmail } from './functions/account-email';
 import {
+  deliveryEta,
+  deliveryLocationsRetention,
+  deliveryNoAnswer,
+  demoDeliveryRun,
+} from './functions/tracking';
+import {
   dispatchOrder,
   dispatchWake,
   expireOfferJob,
@@ -39,4 +45,8 @@ export const functions: InngestFunction.Any[] = [
   expireOfferJob,
   dispatchWake,
   withdrawOnOffline,
+  deliveryEta,
+  deliveryNoAnswer,
+  deliveryLocationsRetention,
+  demoDeliveryRun,
 ];

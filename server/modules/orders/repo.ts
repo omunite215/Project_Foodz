@@ -239,6 +239,7 @@ export interface NewOrder {
   addressLine1: string;
   addressLine2: string | null;
   addressCity: string;
+  addressArea: string | null;
   courierInstructions: string | null;
   addressLat: number;
   addressLng: number;
@@ -291,6 +292,7 @@ export async function insertOrder(
       addressLine1: order.addressLine1,
       addressLine2: order.addressLine2,
       addressCity: order.addressCity,
+      addressArea: order.addressArea,
       courierInstructions: order.courierInstructions,
       addressLat: order.addressLat,
       addressLng: order.addressLng,
@@ -601,6 +603,13 @@ export function findOrderView(ctx: DbContext, orderId: string, userId?: string) 
 }
 
 /** What a realtime message about an order carries, read after the change is committed. */
+/** F8 (L10.4): an order a demo run made (read as the platform). */
+export async function isDemoRunOrder(ctx: DbContext, orderId: string): Promise<boolean> {
+  const rows = await db(ctx).$queryRaw<{ hit: boolean }[]>`
+    SELECT app_is_demo_run_order(${orderId}::uuid) AS "hit"`;
+  return rows[0]?.hit === true;
+}
+
 export function findOrderChange(ctx: DbContext, orderId: string) {
   return db(ctx).order.findUnique({
     where: { id: orderId },

@@ -278,12 +278,15 @@ const LINE_ICONS: Record<LocationLineState['kind'], { icon: LucideIcon; tone: st
 export function LocationLine({
   state,
   offersPaused = false,
+  holding = null,
 }: {
   state: LocationLineState;
   /** F7 P26.2: no point accepted for 45 s while online. */
   offersPaused?: boolean;
+  /** F8: he holds an order (the stale line says who can't see him). */
+  holding?: { afterPickup: boolean; customerFirst: string | null } | null;
 }) {
-  const { line, sub } = locationLine(state);
+  const { line, sub } = locationLine(state, holding);
   const { icon: Icon, tone } = LINE_ICONS[state.kind];
   return (
     <div className="flex min-h-16 items-center gap-3 px-4 py-3">

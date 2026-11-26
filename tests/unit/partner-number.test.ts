@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 /*
  * F6 U26 (contract 11.5): nothing that serves a request decrypts a partner's ID number. The
- * only code that may call `decryptField` is the encryption module itself and F2's sealed
- * account emails, which use their own context.
+ * only code that may call `decryptField` is the encryption module itself, F2's sealed account
+ * emails and F8's delivery code (shown to the order's customer), each with its own context.
  */
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -13,6 +13,7 @@ const ALLOWED = new Set([
   'server/security/field-encryption.ts',
   'server/security/field-encryption.test.ts',
   'server/modules/notifications/account-email.ts',
+  'server/modules/tracking/service.ts',
 ]);
 
 function sourceFiles(dir: string): string[] {

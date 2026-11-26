@@ -6,9 +6,12 @@ import {
   Check,
   CircleSlash,
   Clock,
-  Info,
+  DoorClosed,
+  Hourglass,
+  LockKeyhole,
   type LucideIcon,
   MapPinOff,
+  MessageCircleWarning,
   Motorbike,
   Phone,
   Scooter,
@@ -20,6 +23,7 @@ import {
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useRef } from 'react';
+import type { DeliveryLine } from '@/server/modules/tracking/schema';
 import type {
   BoardCourier,
   CourierState,
@@ -39,6 +43,7 @@ import {
   outcomeText,
 } from '@/lib/board/courier-text';
 import { boardClock, clockWithSeconds, HIDDEN_FOR_DEMO } from '@/lib/board/text';
+import { deliveryLineSpoken } from '@/lib/board/tracking-text';
 import { useMotion } from '@/lib/motion';
 import { isSitePath } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
@@ -130,6 +135,57 @@ export function CourierLine({
         ) : null}
       </span>
       <span className="sr-only">{line.spoken}</span>
+    </p>
+  );
+}
+
+const LINE_ICONS: Record<DeliveryLine['icon'], LucideIcon | null> = {
+  truck: null,
+  pin: null,
+  'signal-off': MapPinOff,
+  door: DoorClosed,
+  hourglass: Hourglass,
+  lock: LockKeyhole,
+  alert: MessageCircleWarning,
+};
+
+/**
+ * F8 (design 3.8): the Out-for-delivery line, resolved on the server (state, words, tone),
+ * with F7's anatomy. Never a live region; the spoken form is built from parts.
+ */
+export function DeliveryLineView({
+  line,
+  vehicleWords,
+  className,
+}: {
+  line: DeliveryLine;
+  vehicleWords: string | null;
+  className?: string;
+}) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const tone = TONES[line.tone];
+  const Icon = LINE_ICONS[line.icon] ?? VEHICLE_ICONS[vehicleKey(vehicleWords)] ?? Scooter;
+  useMotion(
+    (motion) => {
+      if (!ref.current || motion.reduced) return;
+      motion.from(ref.current, { opacity: 0.4, duration: 0.15, ease: 'power2.out' });
+    },
+    { scope: ref, dependencies: [line.state, line.tone] },
+  );
+  return (
+    <p
+      ref={ref}
+      data-tone={line.tone}
+      data-delivery-state={line.state}
+      className={cn(
+        'mt-2 flex items-start gap-2 rounded-lg border-l-4 px-2.5 py-2 text-body-4 text-neutral-1 [overflow-wrap:anywhere]',
+        tone.box,
+        className,
+      )}
+    >
+      <Icon className={cn('mt-1 size-4 shrink-0', tone.icon)} aria-hidden />
+      <span aria-hidden>{line.words}</span>
+      <span className="sr-only">{deliveryLineSpoken(line)}</span>
     </p>
   );
 }
@@ -258,6 +314,8 @@ export function CourierSection({
   timeZone,
   level,
   actions,
+  tracking,
+  deliveryLine = null,
 }: {
   section: StaffCourierSection;
   orderNumber: string;
@@ -268,6 +326,10 @@ export function CourierSection({
   level: 'h2' | 'h3';
   /** The action row (assign, take off, choose another, find a courier), SUPPORT and ADMIN. */
   actions?: React.ReactNode;
+  /** F8 (A53): the small map, the estimate and the steps, after the line. */
+  tracking?: React.ReactNode;
+  /** F8 (design 3.12): on its way, the card's A48 line replaces F7's. */
+  deliveryLine?: DeliveryLine | null;
 }) {
   const Heading = level;
   const courier = section.courier;
@@ -278,9 +340,16 @@ export function CourierSection({
         Courier
       </Heading>
       <div className="mt-3">
-        {showLine ? (
+        {deliveryLine ? (
+          <DeliveryLineView
+            line={deliveryLine}
+            vehicleWords={courier.vehicleWords}
+            className="mt-0"
+          />
+        ) : showLine ? (
           <CourierLine courier={courier} now={now} orderStatus={orderStatus} className="mt-0" />
         ) : null}
+        {tracking}
         {section.view === 'kitchen' ? (
           courier.shortName && courier.vehicleWords ? (
             <p className="mt-3 text-body-4 text-neutral-1">
@@ -362,12 +431,6 @@ function FullCourier({
         <p className="mt-2 text-caption text-neutral-3">{HIDDEN_FOR_DEMO}</p>
       ) : null}
       {actions}
-      {section.actions.afterPickup ? (
-        <p className="mt-3 flex items-center gap-2 text-body-5 text-neutral-3">
-          <Info className="size-4" aria-hidden />
-          After pickup, call the courier.
-        </p>
-      ) : null}
       <OffersList
         orderNumber={orderNumber}
         offers={section.offers}

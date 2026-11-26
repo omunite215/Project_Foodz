@@ -5,6 +5,7 @@ import { clockAt, openingPhrase } from '@/server/modules/orders/text';
 import type {
   BoardStaffRole,
   CancelCode,
+  RecordedCancelCode,
   ChangeHow,
   ForwardMove,
   HandoverReason,
@@ -52,6 +53,12 @@ export const CANCEL_REASON_LABELS: Record<CancelCode, string> = {
   other: 'Other',
 };
 
+/** The timeline's words for every recorded code (A53.2): F5's and F8's bring-back. */
+export const RECORDED_CANCEL_LABELS: Record<RecordedCancelCode, string> = {
+  ...CANCEL_REASON_LABELS,
+  'customer-unreachable': "Customer couldn't be reached",
+};
+
 export const MOVE_BACK_REASON_LABELS: Record<MoveBackReason, string> = {
   'marked-ready-by-mistake': 'Marked ready by mistake',
   'wrong-ticket': 'Moved the wrong ticket',
@@ -60,10 +67,10 @@ export const MOVE_BACK_REASON_LABELS: Record<MoveBackReason, string> = {
 };
 
 export const HANDOVER_REASON_LABELS: Record<HandoverReason, string> = {
-  'assigned-courier': 'Picked up by the assigned courier',
+  'courier-app-down': "Courier's app isn't working",
   'own-driver': 'Picked up by our own driver',
   'customer-collected': 'Customer collected it',
-  'courier-app-down': 'Courier app not available',
+  'customer-confirmed': 'Customer confirmed by phone',
   other: 'Other',
 };
 

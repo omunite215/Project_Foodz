@@ -10,6 +10,7 @@ import { AppError, forbidden, invalidInput, notFound } from '@/server/errors';
 import { logger } from '@/server/logger';
 import type { PartnerExport } from '@/server/modules/account/schema';
 import { audit } from '@/server/modules/audit/service';
+import { pointAccepted } from '@/server/modules/tracking/service';
 import {
   activeDeliveryOf,
   giveBackCurrent,
@@ -985,6 +986,19 @@ export async function recordLocations(
     });
     if (write) await runAs(actor, (ctx) => writeLastLocation(ctx, row.id, newest, now));
     lastPointAt = clocks.acceptedAt;
+    // F8 L1.2: history, the stages, the customer's and the map's positions, re-plans.
+    try {
+      await pointAccepted({
+        partnerId: row.id,
+        isDemo: row.isDemo,
+        point: { lat: newest.lat, lng: newest.lng, heading: newest.heading, speed: newest.speed },
+        // F8 review S7: the stored point's clock (capped for a repeated fix), so the customer's
+        // and the live map's live updates age by the same rule as their first read.
+        acceptedAt: new Date(clocks.acceptedAt),
+      });
+    } catch (error) {
+      logger.error({ err: error, partnerId: row.id }, 'tracking follow-up failed');
+    }
   }
   if (verdict.jumps > 0) {
     const total = await countJumps(row.id, verdict.jumps);

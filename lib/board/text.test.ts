@@ -386,6 +386,14 @@ describe('the detail (design 5)', () => {
     expect(timelineText(TIMELINE[10]!).note).toBe('Called back to confirm');
   });
 
+  it("words F8's bring-back reason (A53.2)", () => {
+    const cancelled = TIMELINE[10]!;
+    if (cancelled.type !== 'cancelled') throw new Error('TIMELINE[10] is the cancellation');
+    expect(timelineText({ ...cancelled, code: 'customer-unreachable', note: null }).sentence).toBe(
+      "Cancelled by Morgan Diaz (Support): Customer couldn't be reached",
+    );
+  });
+
   it('gives the kitchen refunds without amounts', () => {
     expect(
       timelineText({ ...TIMELINE[11]!, type: 'refunded', amountCents: null, cardLabel: null })

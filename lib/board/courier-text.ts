@@ -1,3 +1,4 @@
+import type { HandoverReason } from '@/server/modules/board/schema';
 import type { Tone } from '@/server/modules/board/timing';
 import type {
   AssignableCourier,
@@ -385,10 +386,23 @@ export const moveBackCourierLine = (shortName: string) =>
   `${shortName} is assigned. They'll keep the order and be told it needs a few more minutes.`;
 export const cancelCourierLine = (shortName: string) =>
   `${shortName} is on the way to pick it up. We'll tell them it's cancelled.`;
-export const assignedCourierReason = (shortName: string) =>
-  `Picked up by the assigned courier (${shortName})`;
-export const deliveredByCourierReason = (shortName: string) =>
-  `Delivered by the assigned courier (${shortName})`;
+/** F8 (A51): F5's hand-marking with a courier holding the order is an override. */
+export const HELD_PICKUP_REASONS = [
+  'courier-app-down',
+  'own-driver',
+  'customer-collected',
+  'other',
+] as const satisfies readonly HandoverReason[];
+export const HELD_DELIVER_REASONS = [
+  'courier-app-down',
+  'customer-confirmed',
+  'other',
+] as const satisfies readonly HandoverReason[];
+export const KEEP_COURIER_REASON = "Courier's app isn't working (keep the courier)";
+export const keepsCourierLine = (shortName: string, orderNumber: string) =>
+  `${shortName} keeps order ${orderNumber}, and their phone moves to the delivery.`;
+export const deliveryDoneLine = (shortName: string) =>
+  `We'll tell ${shortName} the delivery is done.`;
 export const otherWayLine = (shortName: string) =>
   `${shortName} will be told it was handed over another way.`;
 export const suspendCourierLine = (firstName: string, orderNumber: string) =>

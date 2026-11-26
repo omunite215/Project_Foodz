@@ -13,6 +13,7 @@ import type {
 } from '@/server/modules/board/schema';
 import {
   CANCEL_REASON_LABELS,
+  RECORDED_CANCEL_LABELS,
   HANDOVER_REASON_LABELS,
   MOVE_BACK_REASON_LABELS,
   MOVE_BUTTONS,
@@ -724,7 +725,7 @@ export function timelineText(entry: StaffTimelineEntry): TimelineText {
       if (entry.reason === 'payment-expired') return plain('Expired: not paid within 15 minutes');
       if (entry.reason === 'account-deleted')
         return plain('Cancelled: the customer deleted their account');
-      const reason = entry.code ? `: ${CANCEL_REASON_LABELS[entry.code]}` : '';
+      const reason = entry.code ? `: ${RECORDED_CANCEL_LABELS[entry.code]}` : '';
       const dishes = entry.dishes.length ? ` (${joinWords(entry.dishes)})` : '';
       return plain(`Cancelled by ${by}${reason}${dishes}`, null, entry.note);
     }

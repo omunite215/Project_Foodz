@@ -206,8 +206,43 @@ export const COURIER_MILESTONES = [
   'escalated',
   'search-stopped',
   'search-restarted',
+  // F8 (design 3.13, A53.2): written as `courier-<name>` by the location pipeline and steps.
+  'at-kitchen',
+  'almost-there',
+  'no-answer',
+  'problem',
 ] as const;
-export type CourierMilestone = (typeof COURIER_MILESTONES)[number];
+
+/**
+ * F8's other timeline milestones: their own event types (`otp-wrong`, `asked-to-wait`, …), and
+ * the courier's own pickup and code delivery (F5's `picked-up` and `delivered` with the courier
+ * as the actor). Wrong tries never carry the digits.
+ */
+export const TRACKING_MILESTONES = [
+  'picked-up',
+  'otp-wrong',
+  'otp-locked',
+  'delivered-with-code',
+  'handover-confirmed',
+  'asked-to-wait',
+] as const;
+export type CourierMilestone =
+  | (typeof COURIER_MILESTONES)[number]
+  | (typeof TRACKING_MILESTONES)[number];
+
+const PROBLEM_TIMELINE: Record<string, string> = {
+  address: "can't find the address",
+  refused: 'customer refused the order',
+  'cant-finish': "can't finish the delivery",
+  other: 'something else',
+};
+
+const CONFIRM_WORDS: Record<string, string> = {
+  'customer-confirmed': 'Customer confirmed by phone',
+  'left-as-asked': 'Left as the customer asked',
+  'code-checked': 'Code checked another way',
+  other: 'Other',
+};
 
 const GIVE_BACK_WORDS: Record<string, string> = {
   vehicle: 'Vehicle problem',
@@ -237,6 +272,9 @@ export function courierTimelineWords(facts: {
   staff: { name: string | null; role: string } | null;
   reason: string | null;
   pickupM: number | null;
+  /** F8: the wrong try's number (1 to 5); the cash taken at a code delivery. */
+  tryNumber?: number | null;
+  cashCents?: number | null;
 }): string {
   const courier = facts.courierName ?? 'A courier';
   const staff = facts.staff
@@ -263,6 +301,30 @@ export function courierTimelineWords(facts: {
       return 'No courier after 5 minutes · Foodz (automatic)';
     case 'search-stopped':
       return 'Stopped looking for a courier after 60 minutes · Foodz (automatic)';
+    case 'at-kitchen':
+      return `${courier} arrived at the kitchen`;
+    case 'picked-up':
+      return `${courier} picked it up`;
+    case 'almost-there':
+      return 'Almost there · Foodz (automatic)';
+    case 'no-answer':
+      return `${courier}: customer isn't answering`;
+    case 'problem':
+      return `${courier}: ${PROBLEM_TIMELINE[facts.reason ?? 'other'] ?? 'something else'}`;
+    case 'asked-to-wait':
+      return `${staff} asked ${courier} to wait 5 more minutes`;
+    case 'otp-wrong':
+      return facts.tryNumber
+        ? `Delivery code: wrong try (${facts.tryNumber} of 5)`
+        : 'Delivery code: wrong try';
+    case 'otp-locked':
+      return 'Delivery code locked';
+    case 'delivered-with-code':
+      return facts.cashCents
+        ? `Delivered with the code by ${courier} · cash ${formatPrice(facts.cashCents)} collected`
+        : `Delivered with the code by ${courier}`;
+    case 'handover-confirmed':
+      return `Hand-over confirmed by ${staff}: ${CONFIRM_WORDS[facts.reason ?? 'other'] ?? 'Other'}`;
     default:
       return `${staff} started looking for a courier again`;
   }

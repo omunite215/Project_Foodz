@@ -1,4 +1,9 @@
-import { COURIER_MILESTONES, courierTimelineWords } from '@/server/modules/delivery/text';
+import {
+  COURIER_MILESTONES,
+  type CourierMilestone,
+  courierTimelineWords,
+  TRACKING_MILESTONES,
+} from '@/server/modules/delivery/text';
 import { displayPhone } from '@/lib/phone';
 import { can as roleCan, type Role } from '@/server/auth/roles';
 import type { OrderStatus } from '@/server/db/enums';
@@ -12,7 +17,7 @@ import {
   type BoardGone,
   type BoardStaffRole,
   type BoardStatus,
-  CANCEL_CODES,
+  RECORDED_CANCEL_CODES,
   type CancelPreview,
   type ChangeHow,
   type DetailActions,
@@ -202,6 +207,8 @@ const STAFF_ROLES: readonly BoardStaffRole[] = ['kitchen', 'support', 'admin'];
 const SYSTEM_SOURCES = new Set(['system', 'expiry-job', 'refund-job']);
 const STRIPE_SOURCES = new Set(['stripe', 'check']);
 const STRIPE_EVENTS = new Set(['refunded', 'dispute-opened', 'dispute-closed']);
+/** Hand-overs staff confirm for a courier at the door (A50): their notes are about the door. */
+const DOOR_REASONS = new Set<unknown>(['courier-app-down', 'customer-confirmed']);
 
 /** The person or system behind an event, from its snapshot (`by`) or its source (`actor`). */
 export function actorOf(event: Pick<EventFacts, 'type' | 'data'>): TimelineActor {
@@ -343,6 +350,8 @@ export function toCard(
       dispute: order.disputeStatus,
       paidLate,
       flags: moneyFlagsOf(order, paidLate),
+      // F8 (QA): a seeded card order with no payment behind it, so nothing is refunded.
+      sample: method === 'card' && !order.hasPaymentIntent,
     },
   };
 }
@@ -485,9 +494,11 @@ export function timelineOf(
             ...base,
             type: 'cancelled',
             reason: staff ? 'staff' : data.actor === 'customer' ? 'customer' : 'payment-expired',
-            code: staff ? oneOf(CANCEL_CODES, data.reason) : null,
+            code: staff ? oneOf(RECORDED_CANCEL_CODES, data.reason) : null,
             dishes: staff ? dishTitles(lines, stringList(data.lineIds)) : [],
-            note: staff ? note : null,
+            // F8 (gate S13): A50's "Cancel and bring it back" note is about the door or the
+            // customer, which the kitchen never sees.
+            note: staff && !(kitchen && data.reason === 'customer-unreachable') ? note : null,
           },
         ];
       }
@@ -501,14 +512,25 @@ export function timelineOf(
           },
         ];
       case 'picked-up':
+        // F8 (A53.2): the courier's own slide reads as his milestone (not for the kitchen).
+        if (data.actor === 'courier' && !kitchen) {
+          return [courierEntry('picked-up', base, data, null)];
+        }
         return [{ ...base, type: 'picked-up', reason: oneOf(HANDOVER_REASONS, data.reason), note }];
       case 'delivered':
+        if (data.actor === 'courier' && !kitchen) {
+          return [courierEntry('delivered-with-code', base, data, null)];
+        }
         return [
           {
             ...base,
             type: 'delivered',
             reason: oneOf(HANDOVER_REASONS, data.reason),
-            note,
+            // F8 (A47, gates S12 and S13): a staff hand-over's note is about the door or the
+            // customer, which the kitchen never sees. ADMIN's Mark delivered while a courier holds
+            // the order (F5's handOver) writes no actor, so its reasons are checked too.
+            note:
+              kitchen && (data.actor === 'staff' || DOOR_REASONS.has(data.reason)) ? null : note,
             cashCollectedCents: kitchen ? null : count(data.cashCollectedCents),
           },
         ];
@@ -518,28 +540,60 @@ export function timelineOf(
         return [{ ...base, type: 'sold-out', dishes: stringList(data.dishes) }];
       default: {
         // F7 (design 2.5): courier milestones, named from the caller's (masked) name map.
-        const milestone = COURIER_MILESTONES.find((name) => `courier-${name}` === event.type);
+        const milestone: CourierMilestone | undefined =
+          COURIER_MILESTONES.find((name) => `courier-${name}` === event.type) ??
+          TRACKING_MILESTONES.find((name) => name === event.type);
         if (!milestone) return [];
-        const partnerId = text(data.partnerId);
-        const courierName = partnerId ? (courierNames.get(partnerId) ?? null) : null;
-        const reason = text(data.reason);
-        const staff = base.by.kind === 'staff' ? { name: base.by.name, role: base.by.role } : null;
-        const pickupM = typeof data.pickupM === 'number' ? data.pickupM : null;
-        return [
-          {
-            ...base,
-            type: 'courier',
-            event: milestone,
-            courierName,
-            reason,
-            note: kitchen ? null : note,
-            words: courierTimelineWords({ event: milestone, courierName, staff, reason, pickupM }),
-          },
-        ];
+        // F8 (A47): the kitchen sees the pickup, not the door.
+        if (kitchen && F8_MILESTONES.has(milestone)) return [];
+        return [courierEntry(milestone, base, data, kitchen ? null : note)];
       }
     }
   });
+
+  function courierEntry(
+    milestone: CourierMilestone,
+    base: TimelineBaseFields,
+    data: Record<string, unknown>,
+    entryNote: string | null,
+  ): StaffTimelineEntry {
+    const partnerId = text(data.partnerId);
+    const courierName = partnerId ? (courierNames.get(partnerId) ?? null) : null;
+    const reason = text(data.reason);
+    const staff = base.by.kind === 'staff' ? { name: base.by.name, role: base.by.role } : null;
+    const pickupM = typeof data.pickupM === 'number' ? data.pickupM : null;
+    const tryNumber = typeof data.try === 'number' ? data.try : null;
+    const cashCents = typeof data.cashCollectedCents === 'number' ? data.cashCollectedCents : null;
+    return {
+      ...base,
+      type: 'courier',
+      event: milestone,
+      courierName,
+      reason,
+      note: entryNote,
+      words: courierTimelineWords({
+        event: milestone,
+        courierName,
+        staff,
+        reason,
+        pickupM,
+        tryNumber,
+        cashCents,
+      }),
+    };
+  }
 }
+
+type TimelineBaseFields = Pick<StaffTimelineEntry, 'id' | 'at' | 'by' | 'fromStatus' | 'toStatus'>;
+
+/** F8's milestones about the door and the code, never shown to the kitchen (A47). */
+const F8_MILESTONES: ReadonlySet<CourierMilestone> = new Set<CourierMilestone>([
+  'at-kitchen',
+  'almost-there',
+  'no-answer',
+  'problem',
+  ...TRACKING_MILESTONES,
+]);
 
 // ------------------------------------------------------------------ the detail (A10)
 
@@ -628,7 +682,7 @@ function cancellationOf(
   );
   return {
     reason,
-    code: oneOf(CANCEL_CODES, order.cancelCode),
+    code: oneOf(RECORDED_CANCEL_CODES, order.cancelCode),
     dishes: dishTitles(lines, order.cancelLineIds),
     by: event ? actorOf(event) : ({ kind: 'system' } as const),
     at: order.cancelledAt.toISOString(),

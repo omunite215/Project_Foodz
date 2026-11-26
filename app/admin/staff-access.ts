@@ -76,3 +76,30 @@ export async function partnersPageMetadata(title: string): Promise<Metadata> {
   }
   return { title };
 }
+
+export type LiveMapAccess =
+  | { kind: 'allowed'; actor: UserActor; shell: Extract<StaffShell, { kind: 'staff' }> }
+  | { kind: 'handledByLayout' }
+  /** KITCHEN and CONTENT_EDITOR at the live map (F8 A47.2). */
+  | { kind: 'noAccess' };
+
+/** May this request see the live map? SUPPORT, ADMIN and the demo admin (F8 A46.1). */
+export async function liveMapAccess(): Promise<LiveMapAccess> {
+  const shell = await loadStaffShell();
+  if (shell.kind !== 'staff') return { kind: 'handledByLayout' };
+  if (!shell.screens.includes('liveMap')) return { kind: 'noAccess' };
+  const actor = await getActor();
+  if (actor.kind !== 'user') return { kind: 'handledByLayout' };
+  return { kind: 'allowed', actor, shell };
+}
+
+/** The live map's tab title, or the gate's. */
+export async function liveMapPageMetadata(title: string): Promise<Metadata> {
+  const shell = await loadStaffShell();
+  if (shell.kind === 'notStaff') return STOREFRONT_NOT_FOUND;
+  if (shell.kind === 'twoFactorRequired') return { title: GATE_TAB_TITLES.twoFactor };
+  if (shell.kind === 'staff' && !shell.screens.includes('liveMap')) {
+    return { title: GATE_TAB_TITLES.liveMapNoAccess };
+  }
+  return { title };
+}

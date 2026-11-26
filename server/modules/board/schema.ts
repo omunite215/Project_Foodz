@@ -4,6 +4,11 @@ import type {
   StaffCourierSection,
 } from '@/server/modules/delivery/schema';
 import type { CourierMilestone } from '@/server/modules/delivery/text';
+import type {
+  AttentionItem,
+  DeliveryLine,
+  StaffTrackingDetail,
+} from '@/server/modules/tracking/schema';
 import { z } from 'zod';
 import type { Cuisine, DisputeStatus, OrderStatus, PaymentStatus } from '@/server/db/enums';
 import { cleanNote } from '@/server/modules/cart/schema';
@@ -98,6 +103,13 @@ export const CANCEL_CODES = [
 ] as const;
 export type CancelCode = (typeof CANCEL_CODES)[number];
 
+/**
+ * Codes an order can carry: F5's, plus F8's "Cancel and bring it back" (A50.1), which only that
+ * path records and F5's dialog never offers.
+ */
+export const RECORDED_CANCEL_CODES = [...CANCEL_CODES, 'customer-unreachable'] as const;
+export type RecordedCancelCode = (typeof RECORDED_CANCEL_CODES)[number];
+
 /** "Can't make it" offers the kitchen's reasons only (A6.2). */
 export const REFUSE_REASONS = [
   'dish-unavailable',
@@ -130,11 +142,11 @@ export const MOVE_BACK_REASONS = [
 export type MoveBackReason = (typeof MOVE_BACK_REASONS)[number];
 
 export const HANDOVER_REASONS = [
-  /** F7: the courier who accepted the order (until F8 the courier's own step). */
-  'assigned-courier',
+  /** F8 A51: with a courier on the order it keeps him ("Courier's app isn't working"). */
+  'courier-app-down',
   'own-driver',
   'customer-collected',
-  'courier-app-down',
+  'customer-confirmed',
   'other',
 ] as const;
 export type HandoverReason = (typeof HANDOVER_REASONS)[number];
@@ -146,7 +158,6 @@ export const BOARD_FIELD_ERRORS = {
   dishes: "Check the dishes you can't make.",
   refusalNote: 'Tell us what happened, so support can answer the customer.',
   otherNote: 'Add a note about what happened.',
-  noCourier: 'No courier has this order. Choose another reason.',
   noteLength: 'Keep the note under 500 characters.',
   orderNumber: 'Enter an order number, like 1042.',
   /** Mark delivered on a cash order without the tick (A9.2, design 3.6). */
@@ -380,6 +391,8 @@ interface BoardCardBase {
    * null elsewhere. Always sent by the server; optional so older fixtures still type-check.
    */
   courier?: BoardCourier | null;
+  /** F8 (A48.1): how the delivery is going, on Out-for-delivery cards; never for the kitchen. */
+  delivery?: DeliveryLine | null;
   id: string;
   number: string;
   status: BoardStatus;
@@ -425,6 +438,8 @@ export interface FullBoardCard extends BoardCardBase {
     paidLate: boolean;
     /** The chips, in this order: "Refunded", "Partly refunded", "Disputed", "Paid late". */
     flags: MoneyFlag[];
+    /** A sample card order: no card payment behind it, so a cancellation refunds nothing. */
+    sample?: boolean;
   };
 }
 
@@ -447,6 +462,8 @@ export interface BoardAbilities {
 export interface BoardSnapshot {
   /** F7 (A35.1): real couriers online and free, no names. */
   couriers?: CouriersCount;
+  /** F8 (A49): stuck deliveries, oldest first, words ready; never for the kitchen. */
+  attention?: AttentionItem[];
   /** The server's clock; timers count from it, never from the device's (B14). */
   asOf: string;
   view: 'kitchen' | 'full';
@@ -571,7 +588,7 @@ export type StaffTimelineEntry = TimelineBase &
     | {
         type: 'cancelled';
         reason: 'customer' | 'payment-expired' | 'account-deleted' | 'staff';
-        code: CancelCode | null;
+        code: RecordedCancelCode | null;
         dishes: string[];
         note: string | null;
       }
@@ -622,6 +639,8 @@ export interface DetailActions {
 interface DetailBase {
   /** F7 (A36): the courier section, shaped by role; null with no courier story to tell. */
   courierSection?: StaffCourierSection | null;
+  /** F8 (A53): steps with times, the latest point, the route and the estimate; not for the kitchen. */
+  tracking?: StaffTrackingDetail | null;
   asOf: string;
   id: string;
   number: string;
@@ -648,7 +667,7 @@ interface DetailBase {
   kitchenNote: string | null;
   cancellation: {
     reason: 'customer' | 'payment-expired' | 'account-deleted' | 'staff' | 'kitchen-refused';
-    code: CancelCode | null;
+    code: RecordedCancelCode | null;
     dishes: string[];
     by: TimelineActor;
     at: string;

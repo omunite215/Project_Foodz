@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { findOrderAction } from '@/server/modules/board/actions';
 import { restartSearchAction } from '@/server/modules/delivery/actions';
+import { askToWaitAction } from '@/server/modules/tracking/actions';
 import {
   type BoardCard,
   type BoardColumn as Column,
@@ -56,6 +57,12 @@ import {
 } from '@/lib/board/preferences';
 import { CHIME_REPEAT_MS } from '@/lib/board/sound';
 import {
+  askedToWaitLine,
+  askedToWaitNotice,
+  type StuckAction,
+  stuckActionsFor,
+} from '@/lib/board/tracking-text';
+import {
   COLUMN_HASHES,
   type ColumnCount,
   goneAnnouncement,
@@ -68,7 +75,9 @@ import {
 } from '@/lib/board/text';
 import { addUnseen, clearUnseen, useUnseen } from '@/lib/board/unseen';
 import { onBoardReadFailure, useBoard, useBoardWriter } from '@/lib/data/board';
+import { channels } from '@/lib/realtime/channels';
 import { useChannelEvent } from '@/lib/realtime/client';
+import type { DeliveryChangedEvent, OrderChangedEvent } from '@/lib/realtime/events';
 import { isSitePath } from '@/lib/navigation';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { cn } from '@/lib/utils';
@@ -80,6 +89,7 @@ import {
 } from './board-banners';
 import { BoardColumn, columnHeadingId } from './board-column';
 import { NobodyOnlineBanner, NoCourierBanner, useNoCourierChime } from './courier-banners';
+import { StuckBanners, useStuckChime } from './stuck-banners';
 import { CouriersChip } from './courier-parts';
 import { BoardEmpty } from './board-empty';
 import {
@@ -461,7 +471,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     return () => clearTimeout(timer);
   }, [backOnline]);
 
-  useChannelEvent(connection.channel, 'order.board-changed', (event) => {
+  // F8 (L10.4): the demo admin also hears demo runs, which real staff channels never carry.
+  const demoChannel = connection.channel && shell.user.isDemo ? channels.opsDemo : null;
+  const onBoardChanged = (event: OrderChangedEvent) => {
     setLastUpdate(event.at);
     const verdict = writer.verdict(event);
     if (verdict === 'ignore') return;
@@ -488,7 +500,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     }
     // The card still exists: if it held focus, focus follows it to its new column.
     if (hadFocus) focusCardOrColumn(next.id, COLUMN_OF[next.status]);
-  });
+  };
+  useChannelEvent(connection.channel, 'order.board-changed', onBoardChanged);
+  useChannelEvent(demoChannel, 'order.board-changed', onBoardChanged);
 
   useChannelEvent(connection.channel, 'menu.availability-changed', (event) => {
     writer.markDish(event.dishId, !event.available);
@@ -539,11 +553,13 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
       }),
     [writer],
   );
-  useChannelEvent(connection.channel, 'delivery.changed', (event) => {
+  const onDeliveryChanged = (event: DeliveryChangedEvent) => {
     setLastUpdate(event.at);
     if (writer.card(event.orderId)) courierBatcher.addItem(event.orderId);
     countThrottler.maybeExecute();
-  });
+  };
+  useChannelEvent(connection.channel, 'delivery.changed', onDeliveryChanged);
+  useChannelEvent(demoChannel, 'delivery.changed', onDeliveryChanged);
   // A35.1: a partner went online or offline; the chip reads the count at once, and a burst
   // of changes costs one read a second at most.
   const couriersCountThrottler = useMemo(
@@ -682,6 +698,50 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     setTimeout(() => openDialog(item, card, trigger), 0);
   };
 
+  // F8 (design 3.10): "Ask to wait" acts at once (nothing is lost); the others open dialogs.
+  const [asking, setAsking] = useState<string | null>(null);
+  const onStuck = (card: BoardCard, item: StuckAction) => {
+    if (meta.can.readOnly) return;
+    if (item !== 'askToWait') {
+      const trigger = document.querySelector(
+        `[data-card-id="${CSS.escape(card.id)}"] [data-card-menu]`,
+      );
+      setTimeout(() => openDialog(item, card, trigger), 0);
+      return;
+    }
+    if (asking) return;
+    setAsking(card.id);
+    void (async () => {
+      const outcome = await callAction(() =>
+        askToWaitAction({
+          orderId: card.id,
+          expectedVersion: card.courier?.deliveryVersion ?? 0,
+        }),
+      );
+      setAsking(null);
+      if (outcome.ok) {
+        showBoardNotice(
+          askedToWaitNotice(
+            card.courier?.shortName ?? 'the courier',
+            card.masked.firstName ? null : card.firstName,
+          ),
+        );
+        writer.setDelivery(
+          card.id,
+          askedToWaitLine(card.courier?.shortName ?? 'The courier', card.firstName),
+        );
+        void courierChanges([card.id]);
+        void writer.refresh().catch(() => undefined);
+        return;
+      }
+      if (outcome.error.code === 'UNAUTHENTICATED') {
+        setSignedOutByServer(true);
+        return;
+      }
+      showBoardNotice(outcome.error.message, { variant: 'error' });
+    })();
+  };
+
   const onPrimary = (card: BoardCard) => {
     if (card.status === 'READY' && meta.can.handOver) {
       openDialog('pickUp', card);
@@ -736,6 +796,35 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     sound.state === 'on',
   );
   const couriers = meta.couriers ?? null;
+  // F8 (A49): stuck deliveries, with F7's chime once per new case.
+  const attention = meta.attention ?? [];
+  useStuckChime(attention, sound.state === 'on');
+  // A48.1: distances and times on Out-for-delivery lines at least every 30 s.
+  const outForDelivery = cards.some((card) => card.status === 'PICKED_UP');
+  useEffect(() => {
+    if (!outForDelivery || meta.view !== 'full') return undefined;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void writer.refresh().catch(() => undefined);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [outForDelivery, meta.view, writer]);
+
+  // A48.1 (QA): a line that turns by time alone ("no location for 2 min") is read again when it
+  // does, in step with the customer's page, not at the next 30 s refresh.
+  const nextLineChange = useMemo(() => {
+    const times = cards.flatMap((card) =>
+      card.status === 'PICKED_UP' && card.delivery?.changesAt
+        ? [Date.parse(card.delivery.changesAt)]
+        : [],
+    );
+    return times.length ? Math.min(...times) : null;
+  }, [cards]);
+  useEffect(() => {
+    if (nextLineChange === null || meta.view !== 'full') return undefined;
+    const wait = Math.max(2_000, nextLineChange - serverNow(offset).getTime() + 500);
+    const timer = setTimeout(() => void writer.refresh().catch(() => undefined), wait);
+    return () => clearTimeout(timer);
+  }, [nextLineChange, meta.view, offset, writer]);
 
   const banner = connectionBanner(connection.kind);
   const offline = connection.kind === 'offline';
@@ -801,6 +890,12 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
                 if (card) openDialog('assignCourier', card);
               }}
               onShowOldest={() => noCourier[0] && showCard(noCourier[0])}
+            />
+          ) : null}
+          {attention.length > 0 ? (
+            <StuckBanners
+              items={attention}
+              onOpen={(orderId) => router.push(orderHref(orderId), { scroll: false })}
             />
           ) : null}
           {hiddenStill.length > 0 ? (
@@ -906,6 +1001,8 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
                         courierNow={courierNow}
                         courierItems={courierMenuFor(card, meta.view)}
                         onCourier={onCourier}
+                        stuckItems={stuckActionsFor(card, meta.view)}
+                        onStuck={onStuck}
                       />
                     </li>
                   ))}

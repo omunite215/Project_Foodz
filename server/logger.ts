@@ -55,6 +55,22 @@ const SENSITIVE_KEYS = [
   'applicantText',
   'photoKey',
   'idDocumentKey',
+  // Live tracking (F8 L12): positions, routes and the delivery code in any shape.
+  'lat',
+  'lng',
+  'latitude',
+  'longitude',
+  'location',
+  'courierPoint',
+  'dropoffPoint',
+  'routeGeojson',
+  'routeGeoJson',
+  'geojson',
+  'coordinates',
+  'codeEnc',
+  'codeHash',
+  'typedHash',
+  'deliveryCode',
 ] as const;
 
 /**

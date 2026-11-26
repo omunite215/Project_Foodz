@@ -1,4 +1,5 @@
-import type { OfferDetail, PartnerDelivery } from '@/server/modules/delivery/schema';
+import type { OfferDetail } from '@/server/modules/delivery/schema';
+import type { PartnerDeliveryF8 } from '@/server/modules/tracking/schema';
 import type { OfferCard } from '@/lib/partner/dispatch';
 
 /*
@@ -68,7 +69,22 @@ export function cardFor(
   };
 }
 
-export const PICK_UP: PartnerDelivery = {
+const ROUTE_TO_KITCHEN = {
+  geojson: {
+    type: 'LineString' as const,
+    coordinates: [
+      [-71.0532, 42.3554],
+      [-71.0499, 42.3531],
+      [-71.045, 42.3505],
+    ] as [number, number][],
+  },
+  distanceM: 900,
+  durationSec: 240,
+  etaAt: '2026-11-21T00:44:00.000Z',
+  estimated: false,
+};
+
+export const PICK_UP: PartnerDeliveryF8 = {
   deliveryId: '0193a000-0000-7000-8000-0000000000d1',
   status: 'ASSIGNED',
   version: 4,
@@ -84,19 +100,51 @@ export const PICK_UP: PartnerDelivery = {
     point: { lat: 42.3505, lng: -71.045 },
     phone: '+16175550142',
   },
+  canGiveBack: true,
+  stage: 'toKitchen',
+  orderReady: true,
+  route: ROUTE_TO_KITCHEN,
   dropoff: null,
+  noAnswer: null,
+  problem: null,
+  otp: { locked: false, triesLeft: 5 },
+  notice: null,
+};
+
+export const AT_KITCHEN: PartnerDeliveryF8 = {
+  ...PICK_UP,
+  status: 'AT_RESTAURANT',
+  version: 5,
+  stage: 'atKitchen',
   canGiveBack: true,
 };
 
-export const DELIVERING: PartnerDelivery = {
+export const DELIVERING: PartnerDeliveryF8 = {
   ...PICK_UP,
   status: 'PICKED_UP',
   version: 6,
+  stage: 'delivering',
+  route: {
+    geojson: {
+      type: 'LineString',
+      coordinates: [
+        [-71.045, 42.3505],
+        [-71.0502, 42.3561],
+        [-71.0547, 42.36],
+      ],
+    },
+    distanceM: 1400,
+    durationSec: 240,
+    etaAt: '2026-11-21T00:46:00.000Z',
+    estimated: false,
+  },
   dropoff: {
     firstName: 'Priya',
     addressText: '1 Faneuil Hall Square, Boston, MA 02109',
+    apt: 'Apt 3',
     instructions: 'Ring twice.\nThird floor, the blue door.',
     point: { lat: 42.36, lng: -71.0547 },
+    phone: '+16175550123',
   },
   canGiveBack: false,
 };

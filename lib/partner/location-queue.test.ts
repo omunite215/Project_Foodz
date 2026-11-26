@@ -11,6 +11,7 @@ import {
   QUEUE_MAX_AGE_MS,
   retryAfterSeconds,
   shouldQueue,
+  HOLDING_MOVE_M,
   toPoint,
 } from './location-queue';
 
@@ -37,6 +38,28 @@ describe('which fixes are sent (P10.3, P16.5)', () => {
     expect(shouldQueue(fix(2_000, R1), last, 2_000)).toBe(false);
     expect(shouldQueue(fix(5_000, R1), last, 5_000)).toBe(true);
     expect(shouldQueue(fix(5_000, R0), last, 5_000)).toBe(false);
+  });
+
+  it('sends every 10 m while he holds an order (F8 P46)', () => {
+    const last = toPoint({
+      lat: 42.35,
+      lng: -71.05,
+      accuracy: 10,
+      heading: null,
+      speed: null,
+      at: 0,
+    });
+    // About 13 m north: too little for idle, enough while delivering.
+    const moved = {
+      lat: 42.35012,
+      lng: -71.05,
+      accuracy: 10,
+      heading: null,
+      speed: null,
+      at: 5_000,
+    };
+    expect(shouldQueue(moved, last, 5_000)).toBe(false);
+    expect(shouldQueue(moved, last, 5_000, HOLDING_MOVE_M)).toBe(true);
   });
 
   it('sends a heartbeat every 15 s while standing still', () => {

@@ -4,6 +4,7 @@ import type {
   OfferEndedWhy,
   OfferGoneWhy,
 } from '@/server/modules/delivery/schema';
+import { endingNotice } from './delivery-text';
 
 /*
  * The partner's offer words (F7 design 1, "Copy"): the card, the slider, the endings, the
@@ -106,12 +107,14 @@ export function ringOffset(left: number, total: number): number {
 // ------------------------------------------------------------------ endings (design 1.7)
 
 export type OfferNoticeTone = 'muted' | 'warning' | 'success';
-export type OfferNoticeIcon = 'clock' | 'info' | 'alarm' | 'check';
+export type OfferNoticeIcon = 'clock' | 'info' | 'alarm' | 'check' | 'undo';
 
 export interface OfferNoticeWords {
   text: string;
   tone: OfferNoticeTone;
   icon: OfferNoticeIcon;
+  /** F8 P44.3: "Call Foodz Kitchen" and the kitchen's address line inside the notice. */
+  call?: { phone: string; address: string };
 }
 
 const MISSED: OfferNoticeWords = {
@@ -170,8 +173,24 @@ export function goneNotice(why: OfferGoneWhy): OfferNoticeWords {
 
 // ------------------------------------------------------------------ what happened to his order (P31)
 
-export function releaseNotice(kind: DeliveryNotice, orderNumber: string): OfferNoticeWords {
+export function releaseNotice(
+  kind: DeliveryNotice,
+  orderNumber: string,
+  /** F8: the pay for "confirmed", and the kitchen for "bring it back". */
+  extra: { pay?: string | null; kitchen?: { phone: string; address: string } | null } = {},
+): OfferNoticeWords {
   switch (kind) {
+    case 'confirmed':
+    case 'cancelledBringBack':
+    case 'markedDelivered': {
+      const words = endingNotice(kind, orderNumber, extra.pay ?? null);
+      return {
+        text: words.text,
+        tone: words.tone === 'error' ? 'warning' : words.tone,
+        icon: kind === 'confirmed' ? 'check' : kind === 'cancelledBringBack' ? 'undo' : 'info',
+        ...(words.bringBack && extra.kitchen ? { call: extra.kitchen } : {}),
+      };
+    }
     case 'takenOff':
       return {
         text: `Foodz support took order ${orderNumber} off you. You don't need to pick it up.`,
@@ -198,12 +217,6 @@ export function releaseNotice(kind: DeliveryNotice, orderNumber: string): OfferN
       };
   }
 }
-
-export const deliveredNotice = (orderNumber: string): OfferNoticeWords => ({
-  text: `Order ${orderNumber} delivered. You're waiting for orders again.`,
-  tone: 'success',
-  icon: 'check',
-});
 
 export const yoursText = (orderNumber: string) => `Order ${orderNumber} is yours`;
 export const gaveBackText = (orderNumber: string) => `Order ${orderNumber} given back.`;

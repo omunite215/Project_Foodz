@@ -32,6 +32,7 @@ import { gsap } from 'gsap';
 import { type ReactNode, type Ref, type RefObject, useRef, useState } from 'react';
 import type { OrderView } from '@/server/modules/orders/schema';
 import type { OrderStep, StepKey } from '@/server/modules/orders/progress-schema';
+import type { CustomerTracking } from '@/server/modules/tracking/schema';
 import { SignInAgain } from '@/components/forms/sign-in-again';
 import { Button } from '@/components/ui/button';
 import { useMotion } from '@/lib/motion';
@@ -52,9 +53,11 @@ import {
   stepWord,
   timelineTime,
 } from '@/lib/order-progress';
-import { telOf, timelineLabel } from '@/lib/order-text';
+import { timelineLabel } from '@/lib/order-text';
 import { cn } from '@/lib/utils';
 import { CourierBlock } from './courier-block';
+import { PHONE_LINK_TARGET, WithPhone } from './with-phone';
+import { CompactProgress, DeliveryCodeCard, TrackingArrivalRow } from './tracking';
 
 /*
  * The live parts of the customer's order page (F5 design 6.4 to 6.9): the stepper, the arrival
@@ -62,29 +65,7 @@ import { CourierBlock } from './courier-block';
  * Never a staff name, role, note or reason code (S5.6).
  */
 
-/**
- * A phone number inside a sentence, as a 44 px target (S8.5): padding grows the link's box to
- * 44 px tall and the same negative margin gives the space back, so the line doesn't move.
- */
-export const PHONE_LINK_TARGET = 'inline-block py-3 -my-3';
-
-/** A sentence with "{phone}" turned into a tap-to-call link (inline, underlined). */
-export function WithPhone({ text, phone }: { text: string; phone: string }) {
-  const [before, after] = text.split('{phone}');
-  if (after === undefined) return <>{text}</>;
-  return (
-    <>
-      {before}
-      <a
-        href={`tel:${telOf(phone)}`}
-        className={cn('font-medium text-neutral-1 underline underline-offset-4', PHONE_LINK_TARGET)}
-      >
-        {phone}
-      </a>
-      {after}
-    </>
-  );
-}
+export { PHONE_LINK_TARGET, WithPhone };
 
 const STEP_ICONS: Record<StepKey, LucideIcon> = {
   placed: Receipt,
@@ -357,36 +338,94 @@ export function ConnectionLine({ state, returnPath }: { state: LiveLine; returnP
   return <p className="mt-4 text-body-5 text-muted-foreground">This page updates by itself.</p>;
 }
 
+/** F8: what the status card adds from pickup to the end (design 1.2). */
+export interface LiveTrackingParts {
+  tracking: CustomerTracking;
+  courierFirst: string;
+  /** The map card inside the card (below 1024 px); null from 1024, where it's beside it. */
+  map: ReactNode;
+  /** The at-the-door banner shows: the code card is highlighted too (S3.4). */
+  atDoor: boolean;
+  /** The code arrived while the page was open: it rises in. */
+  codeAnimateIn: boolean;
+  nowLineRef?: Ref<HTMLParagraphElement>;
+}
+
 /** The status card: the stepper, the arrival and the connection line (design 6.4 to 6.6). */
 export function ProgressCard({
   view,
   now,
   live,
+  tracking,
+  sectionRef,
 }: {
   view: OrderView;
   now: Date;
   live: { state: LiveLine; returnPath: string };
+  /** F8: on its way with the live view (design 1.2's order); null before pickup and after. */
+  tracking?: LiveTrackingParts | null;
+  sectionRef?: Ref<HTMLElement>;
 }) {
   const steps = view.progress.steps;
   const courier = courierShown(view);
   // F7: in the server's HTML the courier block shows at once; one that arrives live rises in.
   const [courierAtLoad] = useState(courier?.firstName ?? null);
   if (!steps) return null;
+  const courierBlock = courier ? (
+    <CourierBlock
+      key={courier.firstName}
+      courier={courier}
+      changed={courierChangedShown(view)}
+      animateIn={courierAtLoad !== courier.firstName}
+    />
+  ) : null;
   return (
     <section
+      ref={sectionRef}
+      tabIndex={-1}
       aria-label="Order status"
-      className="mt-8 rounded-2xl border border-neutral-6 bg-white p-5 md:p-6"
+      className="mt-8 rounded-2xl border border-neutral-6 bg-white p-5 outline-none md:p-6"
     >
-      <OrderStepper steps={steps} now={now} timeZone={view.store.timeZone} />
-      {courier ? (
-        <CourierBlock
-          key={courier.firstName}
-          courier={courier}
-          changed={courierChangedShown(view)}
-          animateIn={courierAtLoad !== courier.firstName}
-        />
-      ) : null}
-      <ArrivalRow view={view} />
+      {tracking ? (
+        <>
+          <div className="md:hidden">
+            <CompactProgress
+              steps={steps}
+              now={now}
+              timeZone={view.store.timeZone}
+              nowLineRef={tracking.nowLineRef}
+            />
+          </div>
+          <div className="max-md:hidden">
+            <OrderStepper steps={steps} now={now} timeZone={view.store.timeZone} />
+          </div>
+          <TrackingArrivalRow
+            orderId={view.id}
+            tracking={tracking.tracking}
+            courierFirst={tracking.courierFirst}
+            asOf={view.progress.asOf}
+            timeZone={view.store.timeZone}
+            phone={view.store.phone}
+            fallback={<ArrivalRow view={view} />}
+          />
+          {tracking.tracking.code ? (
+            <DeliveryCodeCard
+              code={tracking.tracking.code}
+              courierFirst={tracking.courierFirst}
+              highlighted={tracking.tracking.almost || tracking.atDoor}
+              animateIn={tracking.codeAnimateIn}
+            />
+          ) : null}
+          {tracking.map ? <div className="mt-4 lg:hidden">{tracking.map}</div> : null}
+          {courierBlock}
+        </>
+      ) : (
+        <>
+          <OrderStepper steps={steps} now={now} timeZone={view.store.timeZone} />
+          {courierBlock}
+          <ArrivalRow view={view} />
+        </>
+      )}
       <ConnectionLine state={live.state} returnPath={live.returnPath} />
     </section>
   );

@@ -1,9 +1,10 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import { isRole, isStaff } from '@/server/auth/roles';
 import { getActor } from '@/server/auth/session';
 import { partnerMenuEntry } from '@/server/modules/partners/service';
 import { readNotices } from '@/server/modules/account/notices';
+import { isOrderPage, REQUEST_PATH_HEADER } from '@/lib/request-path';
 import { firstNameOf } from '@/server/modules/account/schema';
 import { FavoritesProvider } from '@/components/favorites/favorites-provider';
 import { OrderNoticeStack } from '@/components/orders/order-notices';
@@ -31,12 +32,13 @@ import { SkipLink } from './skip-link';
  * staff addresses (F5 A1.3). Staff tools under /admin have their own shell and never this one.
  */
 export async function StorefrontChrome({ children }: { children: ReactNode }) {
-  const [status, announcement, cookieStore, session, notices] = await Promise.all([
+  const [status, announcement, cookieStore, session, notices, requestHeaders] = await Promise.all([
     loadStoreStatus(),
     loadAnnouncement(),
     cookies(),
     loadSignedIn(),
     readNotices(),
+    headers(),
   ]);
   const [favoriteIds, partner] = session
     ? await Promise.all([
@@ -44,8 +46,13 @@ export async function StorefrontChrome({ children }: { children: ReactNode }) {
         readOrNull('partner menu', async () => partnerMenuEntry(await getActor())),
       ])
     : [null, null];
+  // F8 (lead decision 1): never on an order's page, so the delivery code fits above the fold
+  // on a phone. Decided here, in the server's HTML, so it never flashes.
+  const onOrderPage = isOrderPage(requestHeaders.get(REQUEST_PATH_HEADER));
   const showAnnouncement =
-    announcement !== null && cookieStore.get(ANNOUNCEMENT_COOKIE)?.value !== announcement.id;
+    announcement !== null &&
+    !onOrderPage &&
+    cookieStore.get(ANNOUNCEMENT_COOKIE)?.value !== announcement.id;
 
   const user = session?.user;
   const account: HeaderAccount | null = user

@@ -22,6 +22,13 @@ import {
   TriangleAlert,
   UserRoundCheck,
   UserRoundX,
+  DoorClosed,
+  Hourglass,
+  KeyRound,
+  LockKeyhole,
+  MapPin,
+  MessageCircleWarning,
+  Store,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { StaffTimelineEntry, StaffTimelineType } from '@/server/modules/board/schema';
@@ -76,6 +83,17 @@ const COURIER_DISCS: Record<
   escalated: { icon: TriangleAlert, className: 'bg-destructive' },
   'search-stopped': { icon: CircleSlash, className: 'bg-neutral-4' },
   'search-restarted': { icon: RotateCcw, className: 'bg-neutral-3' },
+  // F8 (design 3.13).
+  'at-kitchen': { icon: Store, className: 'bg-brand-strong' },
+  'picked-up': { icon: Truck, className: 'bg-brand-strong' },
+  'almost-there': { icon: MapPin, className: 'bg-neutral-3' },
+  'no-answer': { icon: DoorClosed, className: 'bg-warning-strong' },
+  problem: { icon: MessageCircleWarning, className: 'bg-warning-strong' },
+  'asked-to-wait': { icon: Hourglass, className: 'bg-neutral-3' },
+  'otp-wrong': { icon: KeyRound, className: 'bg-neutral-3' },
+  'otp-locked': { icon: LockKeyhole, className: 'bg-destructive' },
+  'delivered-with-code': { icon: House, className: 'bg-brand-strong' },
+  'handover-confirmed': { icon: House, className: 'bg-brand-strong' },
 };
 
 /** One timeline row as drawn: a disc, the sentence, any details and text blocks, the time. */

@@ -1,4 +1,5 @@
 import type { CustomerDispatchView } from '@/server/modules/delivery/schema';
+import type { CustomerTracking } from '@/server/modules/tracking/schema';
 import { z } from 'zod';
 
 /*
@@ -158,6 +159,8 @@ export interface OrderProgress {
    * fixtures still type-check.
    */
   dispatch?: CustomerDispatchView;
+  /** F8 (B7): the live map, estimate and code; null before a courier accepts and after the end. */
+  tracking?: CustomerTracking | null;
   /** The server's clock when this was built; the page words every time from it. */
   asOf: string;
   /** The order's version: compare with `order.status-changed` events (S3.7). */

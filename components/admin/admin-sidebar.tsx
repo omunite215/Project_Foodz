@@ -1,6 +1,6 @@
 'use client';
 
-import { Bike, LogOut, Settings, SquareKanban, Store } from 'lucide-react';
+import { Bike, LogOut, Map as MapIcon, Settings, SquareKanban, Store } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -35,12 +35,14 @@ import { roleLabel, useStaffShell } from './staff-shell-context';
 /*
  * The staff sidebar (F5 design 1.2): SUPPORT, ADMIN and the demo admin. 256 px expanded, a
  * 72 px icon rail, a 288 px drawer on phones. It lists only screens that exist for this role:
- * "Order board", and "Partners" for SUPPORT, ADMIN and the demo admin (F6 A18.1). The current
+ * "Order board", "Live map" (F8 A46.1) and "Partners" for SUPPORT, ADMIN and the demo admin
+ * (F6 A18.1). The current
  * page is marked by a bar, weight and tint, never a tint alone.
  */
 
 const SCREENS = {
   orderBoard: { label: 'Order board', href: '/admin/orders' satisfies Route, icon: SquareKanban },
+  liveMap: { label: 'Live map', href: '/admin/map' satisfies Route, icon: MapIcon },
   partners: { label: 'Partners', href: '/admin/partners' satisfies Route, icon: Bike },
 } as const;
 

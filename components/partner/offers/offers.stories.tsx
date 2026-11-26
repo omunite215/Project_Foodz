@@ -1,13 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
 import { type ReactNode, useState } from 'react';
 import type { PartnerTheme } from '@/lib/partner/text';
-import {
-  deliveredNotice,
-  endedNotice,
-  missedNotice,
-  releaseNotice,
-} from '@/lib/partner/offer-text';
-import { DeliverScreen, PickUpScreen } from '../delivery/pick-up-screen';
+import { endedNotice, missedNotice, releaseNotice } from '@/lib/partner/offer-text';
 import { GiveBackSheet, LeavingDialog } from '../delivery/give-back-sheet';
 import { PartnerRoot } from '../partner-root';
 import { LocationLine } from '../home/home-parts';
@@ -19,20 +13,14 @@ import {
 } from './idle-parts';
 import { OfferCardView } from './offer-card';
 import { OfferNotice, SoundUnlockBanner } from './offer-notices';
-import {
-  AUTO_OFFER,
-  cardFor,
-  DELIVERING,
-  PICK_UP,
-  PRACTICE_OFFER,
-  STAFF_OFFER,
-} from './offers.fixtures';
+import { AUTO_OFFER, cardFor, PRACTICE_OFFER, STAFF_OFFER } from './offers.fixtures';
 import { type SlideState, SlideToAccept } from './slide-to-accept';
 
 /*
  * F7's partner screens (design 1) in light and dark: the offer card in each variant and state,
- * the slider, the notices, the pick-up and interim screens, the give-back sheet, the leaving
- * dialog, "How offers work", the practice card and Profile's offer alerts. The card is fixed
+ * the slider, the notices, the give-back sheet, the leaving dialog, "How offers work", the
+ * practice card and Profile's offer alerts (the pick-up and deliver screens are F8's, in
+ * components/partner/delivery/delivery.stories.tsx). The card is fixed
  * to the screen in the app; here each frame holds it (a transform makes the frame its box).
  */
 
@@ -239,7 +227,6 @@ export const Notices: Story = {
       releaseNotice('cancelled', '1042'),
       releaseNotice('handedOver', '1042'),
       releaseNotice('movedBack', '1042'),
-      deliveredNotice('1042'),
     ].filter((item) => item !== null);
     return (
       <Both height={1100}>
@@ -264,71 +251,6 @@ export const IdleAdditions: Story = {
         </div>
         <HowOffersWorkLink />
       </div>
-    </Both>
-  ),
-};
-
-function Screen({ children }: { children: ReactNode }) {
-  return <div className="min-h-full bg-background px-4 pt-4 pb-6">{children}</div>;
-}
-
-const screenProps = {
-  locationOff: false,
-  onGiveBack: noop,
-  onGoOffline: noop,
-  onRetryLocation: noop,
-};
-
-export const PickUpOnTheWay: Story = {
-  render: () => (
-    <Both>
-      <Screen>
-        <PickUpScreen
-          delivery={PICK_UP}
-          distance={{ atKitchen: false, km: 0.9 }}
-          {...screenProps}
-        />
-      </Screen>
-    </Both>
-  ),
-};
-
-export const PickUpAtTheKitchen: Story = {
-  render: () => (
-    <Both>
-      <Screen>
-        <PickUpScreen
-          delivery={{ ...PICK_UP, payment: { kind: 'card', text: 'Paid by card' } }}
-          distance={{ atKitchen: true, km: 0 }}
-          {...screenProps}
-        />
-      </Screen>
-    </Both>
-  ),
-};
-
-export const PickUpLocationOff: Story = {
-  render: () => (
-    <Both height={900}>
-      <Screen>
-        <PickUpScreen
-          delivery={PICK_UP}
-          distance={null}
-          {...screenProps}
-          locationOff
-          notices={<OfferNotice words={releaseNotice('movedBack', '1042')} onDismiss={noop} />}
-        />
-      </Screen>
-    </Both>
-  ),
-};
-
-export const InterimDeliver: Story = {
-  render: () => (
-    <Both>
-      <Screen>
-        <DeliverScreen delivery={DELIVERING} />
-      </Screen>
     </Both>
   ),
 };

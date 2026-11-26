@@ -141,7 +141,7 @@ describe('row-level security on orders', () => {
 
     await runAsSystem('assign delivery', (ctx) =>
       db(ctx).delivery.create({
-        data: { orderId: orderOfA, partnerId, otpHash: 'x', status: 'ASSIGNED' },
+        data: { orderId: orderOfA, partnerId, status: 'ASSIGNED' },
       }),
     );
 
