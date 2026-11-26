@@ -146,11 +146,21 @@ function CanvasLayers({
           : pinMarkers.current.get(item.id)?.element;
       return element ? [{ item, element }] : [];
     });
+    const edge = map.getContainer().getBoundingClientRect().right - 4;
     const labels = placed.flatMap(({ item, element }, index) => {
       element.style.zIndex = String(placed.length - index);
       const label = element.querySelector<HTMLElement>('[data-label]');
       if (!label) return [];
       label.style.visibility = 'visible';
+      // Review P7: a label that would run off the right edge goes to the marker's left.
+      label.style.removeProperty('left');
+      label.style.removeProperty('right');
+      label.style.removeProperty('margin');
+      if (label.getBoundingClientRect().right > edge) {
+        label.style.left = 'auto';
+        label.style.right = '100%';
+        label.style.margin = '0 0.25rem 0 0';
+      }
       const box = label.getBoundingClientRect();
       const keep = selection?.kind === item.kind && selection.id === item.id;
       return [{ label, box: { id: `${item.kind}:${item.id}`, ...rectOf(box), keep } }];

@@ -201,6 +201,9 @@ test('a courier picks up, finds the door with the map and hands over with the co
   // Once the wait is up (20 s here), support asks him to wait: the card reads it within 2 s
   // (review S1), the detail and the live map panel show the same line (S2), and the timeline
   // names who asked (S10).
+  // The board narrows Out for delivery to a rail beside the sidebar; open it.
+  const expand = support.page.getByRole('button', { name: /^Expand Out for delivery/ });
+  if (await expand.isVisible()) await expand.click();
   const line = card(support.page, ORDER).locator('[data-delivery-state]');
   await expect(line).toHaveAttribute('data-delivery-state', 'noAnswer', { timeout: 20_000 });
   await expect(line).toHaveAttribute('data-tone', 'red', { timeout: 60_000 });
@@ -210,6 +213,10 @@ test('a courier picks up, finds the door with the map and hands over with the co
   await support.page
     .getByRole('menuitem', { name: `Ask ${OMAR.first} to wait 5 more minutes` })
     .click();
+  // The state changes when the request is done (its notice); the line follows within 2 s.
+  await expect(
+    support.page.getByText('Asked Omar H. to wait 5 more minutes for Priya.').first(),
+  ).toBeVisible();
   await expect(line).toHaveAttribute('data-delivery-state', 'askedToWait', { timeout: 2_000 });
   await expect(line.locator('span[aria-hidden]')).toHaveText(
     /^Omar H\. · Priya isn't answering · asked to wait · 0 min$/,

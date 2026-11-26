@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeliveryLine } from '@/server/modules/tracking/schema';
 import {
+  askedToWaitLine,
   attentionListLine,
   attentionLook,
   confirmOutcome,
@@ -50,6 +51,13 @@ describe('stuck deliveries (A49, A50)', () => {
       'askToWait',
       'cancelUnreachable',
     ]);
+    // Review S1: the card's line the moment "ask to wait" succeeds.
+    expect(askedToWaitLine('Luis M.', 'Priya')).toMatchObject({
+      state: 'askedToWait',
+      tone: 'amber',
+      icon: 'hourglass',
+      words: "Luis M. · Priya isn't answering · asked to wait · 0 min",
+    });
     // Asked to wait: nothing while the new 5 minutes run, the same three once they're up.
     expect(stuckActionsFor(card(line({ state: 'askedToWait', tone: 'amber' })), 'full')).toEqual(
       [],

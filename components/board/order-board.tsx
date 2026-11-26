@@ -56,7 +56,12 @@ import {
   writeCollapsed,
 } from '@/lib/board/preferences';
 import { CHIME_REPEAT_MS } from '@/lib/board/sound';
-import { askedToWaitNotice, type StuckAction, stuckActionsFor } from '@/lib/board/tracking-text';
+import {
+  askedToWaitLine,
+  askedToWaitNotice,
+  type StuckAction,
+  stuckActionsFor,
+} from '@/lib/board/tracking-text';
 import {
   COLUMN_HASHES,
   type ColumnCount,
@@ -712,6 +717,10 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
             card.courier?.shortName ?? 'the courier',
             card.masked.firstName ? null : card.firstName,
           ),
+        );
+        writer.setDelivery(
+          card.id,
+          askedToWaitLine(card.courier?.shortName ?? 'The courier', card.firstName),
         );
         void courierChanges([card.id]);
         void writer.refresh().catch(() => undefined);

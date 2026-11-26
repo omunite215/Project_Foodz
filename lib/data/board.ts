@@ -23,6 +23,7 @@ import {
   onBoardFor,
 } from '@/lib/board/model';
 import type { OrderChangedEvent } from '@/lib/realtime/events';
+import type { DeliveryLine } from '@/server/modules/tracking/schema';
 import { useHydrated } from '@/lib/use-hydrated';
 import { midpoint } from '@/lib/board/clock';
 
@@ -304,6 +305,14 @@ function writer(client: DbClient, queryClient: QueryClient) {
       refreshEvery = ms;
       // The next schedule picks the new interval up; refetching now applies it at once.
       if (ms !== false) void collection().utils.refetch();
+    },
+
+    /** F8 (review S1): a delivery line the person's own action confirmed, on its card at once. */
+    setDelivery(id: string, delivery: DeliveryLine) {
+      const target = collection();
+      const held = target.get(id);
+      if (!held) return;
+      void target.utils.writeUpsert(Object.assign(structuredClone(held), { delivery }));
     },
 
     /** A confirmed change from the person's own action, written straight to the board. */

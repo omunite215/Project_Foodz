@@ -8,6 +8,7 @@ import type {
   OpsMapDelivery,
 } from '@/server/modules/tracking/schema';
 import type { Tone } from '@/server/modules/board/timing';
+import { deliveryLineWords } from '@/server/modules/tracking/text';
 
 /*
  * The staff words for live tracking (F8 design 3.3 to 3.14): the Out-for-delivery line's spoken
@@ -123,6 +124,23 @@ export const confirmOutcome = (
   `Order ${orderNumber} will be marked delivered. We'll tell ${courierFirst} and ${customerFirst ?? 'the customer'}.`;
 export const confirmedAnnouncement = (orderNumber: string) =>
   `Order ${orderNumber} marked delivered.`;
+/**
+ * Review S1: the line a card shows the moment the person's own "ask to wait" succeeds, the
+ * server's words for that state; the next read confirms it.
+ */
+export const askedToWaitLine = (courierShort: string, customerFirst: string): DeliveryLine =>
+  deliveryLineWords({
+    state: 'askedToWait',
+    tone: 'amber',
+    courierShort,
+    customerFirst,
+    distanceToDoorM: null,
+    arrivalClock: null,
+    silentMinutes: 0,
+    waitedMinutes: 0,
+    problem: null,
+  });
+
 export const askedToWaitNotice = (courierShort: string, customerFirst: string | null) =>
   customerFirst
     ? `Asked ${courierShort} to wait 5 more minutes for ${customerFirst}.`
