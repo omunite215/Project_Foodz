@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { assignableCouriersAction, sendStaffOfferAction } from '@/server/modules/delivery/actions';
 import { startDemoDeliveryAction } from '@/server/modules/tracking/actions';
 import type {
@@ -185,6 +185,28 @@ function attentionChip(
   return null;
 }
 
+/**
+ * Review P10 (design Names): a row's parts read as a list, "Luis Moreno, Delivering 1042,
+ * arriving 7:46 pm, Scooter, 7KT 342, Updated 12 seconds ago": the dots are hidden from screen
+ * readers and a comma is spoken in their place. The name stays the row's own text.
+ */
+function Parts({ parts }: { parts: readonly ReactNode[] }) {
+  return parts.map((part, index) => (
+    // oxlint-disable-next-line react/no-array-index-key
+    <Fragment key={index}>
+      {index > 0 ? (
+        <>
+          <span aria-hidden> · </span>
+          <span className="sr-only">, </span>
+        </>
+      ) : null}
+      {part}
+    </Fragment>
+  ));
+}
+
+const COMMA = <span className="sr-only">, </span>;
+
 const ROW =
   'relative flex min-h-16 w-full gap-3 border-b border-neutral-6 px-4 py-3 text-left hover:bg-neutral-7 focus-visible:-outline-offset-2 aria-[current=true]:bg-brand-soft aria-[current=true]:before:absolute aria-[current=true]:before:inset-y-0 aria-[current=true]:before:left-0 aria-[current=true]:before:w-[3px] aria-[current=true]:before:bg-brand-strong';
 
@@ -205,7 +227,10 @@ function CourierRow({
 }) {
   const updated = staffUpdatedWords(ageSeconds(courier.at, serverNowMs));
   const chip = attentionChip(courier, serverNowMs);
-  const arriving = delivery?.etaAt ? ` · arriving ${boardClock(delivery.etaAt, timeZone)}` : '';
+  const arriving =
+    courier.state === 'delivering' && delivery?.etaAt
+      ? `arriving ${boardClock(delivery.etaAt, timeZone)}`
+      : null;
   return (
     <li>
       {/* The row's name is its text, in reading order (design "Names"). */}
@@ -222,15 +247,24 @@ function CourierRow({
           <span className="block text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
             {courier.fullName}
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-1">
-            {courier.words}
-            {courier.state === 'delivering' ? arriving : ''}
+            <Parts parts={[...courier.words.split(' · '), ...(arriving ? [arriving] : [])]} />
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-3">
-            {courier.vehicleWords} · <span aria-hidden>{updated.text}</span>
-            <span className="sr-only">{updated.spoken}</span>
+            <Parts
+              parts={[
+                ...courier.vehicleWords.split(' · '),
+                <Fragment key="updated">
+                  <span aria-hidden>{updated.text}</span>
+                  <span className="sr-only">{updated.spoken}</span>
+                </Fragment>,
+              ]}
+            />
           </span>
         </span>
+        {chip ? COMMA : null}
         {chip ? (
           <span
             className={cn(
@@ -273,6 +307,7 @@ function DeliveryRow({
             <span className="text-body-4 font-semibold text-neutral-1 tabular-nums">
               Order {delivery.number}
             </span>
+            {COMMA}
             <span
               className={cn(
                 'inline-flex h-6 items-center rounded-md px-2 text-caption font-medium text-neutral-1',
@@ -282,12 +317,19 @@ function DeliveryRow({
               {lateChip(delivery.lateMinutes)}
             </span>
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-1">
-            {delivery.courierShortName} · {delivery.stateWords}
-            {delivery.etaAt ? ` · arriving ${boardClock(delivery.etaAt, timeZone)}` : ''}
+            <Parts
+              parts={[
+                delivery.courierShortName,
+                delivery.stateWords,
+                ...(delivery.etaAt ? [`arriving ${boardClock(delivery.etaAt, timeZone)}`] : []),
+              ]}
+            />
           </span>
+          {COMMA}
           <span className="block text-body-5 text-neutral-3">
-            {delivery.customerFirstName} · {delivery.areaWords}
+            <Parts parts={[delivery.customerFirstName, delivery.areaWords]} />
           </span>
         </span>
       </button>

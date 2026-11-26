@@ -234,6 +234,10 @@ test('a courier picks up, finds the door with the map and hands over with the co
   await open(live, '/admin/map');
   const rows = live.getByRole('navigation', { name: 'Couriers and deliveries' });
   const row = rows.getByRole('button', { name: new RegExp(`^${OMAR.name}`) });
+  // Review P10: the row reads its parts as a list, no dots, nothing that isn't on screen.
+  await expect(row).toHaveAccessibleName(
+    /^Omar Haddad\s*,\s*(No answer\s*,\s*S1105|No location\s*,\s*\d+ min)\s*,\s*Car\s*,\s*5OH 318\s*,\s*Updated /,
+  );
   await row.click();
   const panel = live.getByRole('dialog', { name: 'Courier' });
   await expect(panel.locator('[data-sheet-handle]')).toBeAttached();
