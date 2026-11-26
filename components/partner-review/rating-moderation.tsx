@@ -159,6 +159,8 @@ export function ModerationButton({
   return (
     <div className="flex shrink-0 flex-col items-start gap-1">
       <Button
+        // The visible words first, then which rating (design, Names); one name, no stray space.
+        aria-label={slow ? undefined : excludeButtonName(row, timeZone, excluded)}
         ref={buttonRef}
         type="button"
         variant="outline"
@@ -187,12 +189,7 @@ export function ModerationButton({
             Including…
           </>
         ) : (
-          <>
-            {label}
-            <span className="sr-only">
-              {excludeButtonName(row, timeZone, excluded).slice(label.length)}
-            </span>
-          </>
+          label
         )}
       </Button>
       {demo || offline ? (
