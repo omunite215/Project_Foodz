@@ -16,6 +16,7 @@ import { useSlowPending } from '@/components/forms/submit-button';
 import { type ActionFailure, type ActionOutcome, callAction } from '@/lib/action-result';
 import { useOnline } from '@/lib/use-online';
 import type { QuoteStatus } from './price-breakdown';
+import { retryQuote } from '@/lib/quote-retry';
 
 /*
  * The cart's price breakdown from the server (F3 B2, design 2.18). It asks when the cart opens,
@@ -114,7 +115,9 @@ export function useQuote(
     placeholderData: keepPreviousData,
     staleTime: 0,
     gcTime: 60_000,
-    retry: false,
+    retry: (failureCount, error) =>
+      retryQuote(failureCount, error instanceof QuoteFailure ? error.failure.code : null),
+    retryDelay: 1_000,
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: 'always',
