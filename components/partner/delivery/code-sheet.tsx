@@ -22,6 +22,7 @@ import {
   deliveredTitle,
   wrongCodeText,
 } from '@/lib/partner/delivery-text';
+import { deliveredTodayLine } from '@/lib/partner/earnings-text';
 import { cn } from '@/lib/utils';
 import { CallKitchenLink, FAR_M, FarCheckDialog } from './pick-up-screen';
 
@@ -355,6 +356,11 @@ export function CodeSheet({
                   {delivered.pay}
                 </b>
               </p>
+              {delivered.today ? (
+                <p className="mt-1 text-body-5 text-muted-foreground tabular-nums">
+                  {deliveredTodayLine(delivered.today)}
+                </p>
+              ) : null}
               <Button
                 ref={backRef}
                 type="button"

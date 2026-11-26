@@ -177,13 +177,18 @@ export function releaseNotice(
   kind: DeliveryNotice,
   orderNumber: string,
   /** F8: the pay for "confirmed", and the kitchen for "bring it back". */
-  extra: { pay?: string | null; kitchen?: { phone: string; address: string } | null } = {},
+  extra: {
+    pay?: string | null;
+    kitchen?: { phone: string; address: string } | null;
+    /** F9 P57.3: the delivery fee he keeps after a cancellation after pickup. */
+    feeCents?: number | null;
+  } = {},
 ): OfferNoticeWords {
   switch (kind) {
     case 'confirmed':
     case 'cancelledBringBack':
     case 'markedDelivered': {
-      const words = endingNotice(kind, orderNumber, extra.pay ?? null);
+      const words = endingNotice(kind, orderNumber, extra.pay ?? null, extra.feeCents ?? null);
       return {
         text: words.text,
         tone: words.tone === 'error' ? 'warning' : words.tone,

@@ -347,6 +347,31 @@ describe('the order he holds', () => {
     });
   });
 
+  it('adds the delivery fee he keeps once his partner state has it (F9 P57.3)', async () => {
+    dispatchStore.setState((state) => ({ ...state, delivery }));
+    routes['GET /api/v1/partner/me'] = () => ({
+      status: 200,
+      body: {
+        screen: 'home',
+        dispatch: { notice: { kind: 'cancelledBringBack', orderNumber: '1042', feeCents: 264 } },
+      },
+    });
+    const at = new Date(NOW).toISOString();
+    onDeliveryChanged({
+      orderId: 'o1',
+      status: 'CANCELLED',
+      version: 9,
+      at,
+      notice: 'cancelledBringBack',
+    });
+    await vi.waitFor(() =>
+      expect(dispatchStore.state.notice?.words.text).toBe(
+        "Order 1042 was cancelled. Bring the food back to Foodz Kitchen. You'll still get the $2.64 delivery fee.",
+      ),
+    );
+    expect(dispatchStore.state.notice?.key).toBe(at);
+  });
+
   it('picks up, refuses a moved-back order, and waits for a connection', async () => {
     dispatchStore.setState((state) => ({ ...state, delivery }));
     const path = `POST /api/v1/partner/deliveries/${delivery.deliveryId}/picked-up`;
@@ -377,11 +402,20 @@ describe('the order he holds', () => {
     expect(dispatchStore.state.delivery?.otp.locked).toBe(true);
     routes[path] = () => ({
       status: 200,
-      body: { outcome: 'delivered', payWords: 'Order 1042 delivered · You earned $7.64' },
+      body: {
+        outcome: 'delivered',
+        payWords: 'Order 1042 delivered · You earned $7.64',
+        today: { earnedCents: 1957, deliveries: 3 },
+      },
     });
     expect(await handOverCode('4821', true, false)).toEqual({ kind: 'delivered', pay: '$7.64' });
     expect(dispatchStore.state.delivery).toBeNull();
-    expect(dispatchStore.state.delivered).toEqual({ orderNumber: '1042', pay: '$7.64' });
+    // F9 P51.3: today's figures come with the answer, so the line never lags the code.
+    expect(dispatchStore.state.delivered).toEqual({
+      orderNumber: '1042',
+      pay: '$7.64',
+      today: { earnedCents: 1957, deliveries: 3 },
+    });
   });
 
   it('re-sends a code only when it never left the phone (gate S8)', async () => {
@@ -437,7 +471,12 @@ describe('the order he holds', () => {
     };
     expect(await handOverCode('4821', true, false)).toEqual({ kind: 'delivered', pay: '$7.64' });
     expect(dispatchStore.state.delivery).toBeNull();
-    expect(dispatchStore.state.delivered).toEqual({ orderNumber: '1042', pay: '$7.64' });
+    // An answer without `today` leaves the line out rather than guessing it.
+    expect(dispatchStore.state.delivered).toEqual({
+      orderNumber: '1042',
+      pay: '$7.64',
+      today: null,
+    });
   });
 
   it('reports a problem and tells Foodz nobody answered once the clock is up', async () => {

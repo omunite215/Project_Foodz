@@ -83,6 +83,10 @@ describe('partner delivery words (F8 design 2)', () => {
       tone: 'warning',
       bringBack: true,
     });
+    // F9 P57.3: the fee he keeps, when his partner state has it.
+    expect(endingNotice('cancelledBringBack', '1043', null, 264).text).toBe(
+      "Order 1043 was cancelled. Bring the food back to Foodz Kitchen. You'll still get the $2.64 delivery fee.",
+    );
     expect(endingNotice('markedDelivered', '1042', null).text).toBe(
       'Foodz marked order 1042 as delivered.',
     );

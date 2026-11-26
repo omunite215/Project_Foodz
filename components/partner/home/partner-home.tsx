@@ -82,6 +82,8 @@ import { InstallCard } from '../install';
 import { HowOffersWorkLink, PracticeOfferCard } from '../offers/idle-parts';
 import { OfferLayer, useOfferOpen } from '../offers/offer-layer';
 import { DispatchNoticeSlot, MissedOffersNotice, SoundUnlockBanner } from '../offers/offer-notices';
+import { MoneyNoticeSlot } from '../earnings/money-notices';
+import { TodayLink } from '../earnings/today-link';
 import { usePartnerTheme } from '../partner-root';
 import {
   Dock,
@@ -369,10 +371,13 @@ function lineState(sharing: SharingState, now: number): LocationLineState {
 
 export function PartnerHome({
   state,
+  userId = null,
   asOf,
   delivery = null,
 }: {
   state: Home;
+  /** For the staff money notices on his own channel (F9 design 1.10). */
+  userId?: string | null;
   asOf: string;
   /** The order he holds, read on the server so the pick-up screen is in the first HTML. */
   delivery?: PartnerDeliveryF8 | null;
@@ -520,6 +525,16 @@ export function PartnerHome({
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
   };
 
+  const holdingNotices = (
+    <>
+      <MoneyNoticeSlot userId={userId} />
+      <DispatchNoticeSlot />
+    </>
+  );
+  const todayLink = state.today ? (
+    <TodayLink partnerId={state.partner.id} initial={state.today} />
+  ) : null;
+
   let body: ReactNode;
   if (holding) {
     // P29.4: while he holds an order, Home always comes back to it.
@@ -557,7 +572,7 @@ export function PartnerHome({
       holding.status === 'PICKED_UP' ? (
         <DeliverScreen
           delivery={holding}
-          notices={<DispatchNoticeSlot />}
+          notices={holdingNotices}
           mapCard={mapCard}
           locationOff={sharing.locationOff}
           serverNow={serverNow}
@@ -571,7 +586,7 @@ export function PartnerHome({
           delivery={holding}
           distance={toKitchen}
           locationOff={sharing.locationOff}
-          notices={<DispatchNoticeSlot />}
+          notices={holdingNotices}
           mapCard={mapCard}
           atKitchenAtLoad={atKitchenAtLoad}
           onGiveBack={() => {
@@ -592,6 +607,7 @@ export function PartnerHome({
         {demoBanner}
         <SoundUnlockBanner />
         <MissedOffersNotice />
+        <MoneyNoticeSlot userId={userId} />
         <DispatchNoticeSlot />
         {battery !== null ? (
           <PartnerNotice tone="warning" icon={BatteryLow}>
@@ -645,6 +661,7 @@ export function PartnerHome({
               {onlineSinceLine(clockAt(sharing.onlineSince, kitchen.timeZone))}
             </p>
           ) : null}
+          {todayLink ? <div className="mt-3">{todayLink}</div> : null}
         </div>
         <div>
           <div className="divide-y divide-border rounded-2xl border border-border bg-card">
@@ -679,6 +696,7 @@ export function PartnerHome({
         <div className="space-y-3">
           {demoBanner}
           {sharing.notice ? <NoticeView notice={sharing.notice} onDismiss={clearNotice} /> : null}
+          <MoneyNoticeSlot userId={userId} />
           <DispatchNoticeSlot />
         </div>
         {sharing.help ? (
@@ -692,6 +710,7 @@ export function PartnerHome({
           <p className="mt-2 text-body-4 text-muted-foreground">
             Go online to start getting orders.
           </p>
+          {todayLink ? <div className="mt-4 flex justify-center">{todayLink}</div> : null}
           <div className="mt-4">
             <KitchenChip open={kitchen.isOpen} line={kitchen.offlineLine} />
           </div>

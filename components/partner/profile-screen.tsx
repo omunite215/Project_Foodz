@@ -36,6 +36,7 @@ import {
 } from '@/lib/partner/sharing';
 import { PARTNER_COPY } from '@/lib/partner/text';
 import { monthDayYear, type PartnerTheme } from '@/lib/partner/text';
+import { ratingsCount, ratingsRowLine } from '@/lib/partner/earnings-text';
 import { cn } from '@/lib/utils';
 import { LeavingDialog } from './delivery/give-back-sheet';
 import { PinnedConnectionBanner, usePartnerSession } from './home/partner-home';
@@ -43,6 +44,7 @@ import { SuspensionCover } from './home/home-parts';
 import { OfferAlertsSection } from './offers/idle-parts';
 import { OfferLayer, useOfferOpen } from './offers/offer-layer';
 import { DispatchNoticeSlot } from './offers/offer-notices';
+import { MoneyNoticeSlot } from './earnings/money-notices';
 import { usePartnerTheme } from './partner-root';
 import { PartnerFrame, PartnerNotice, PartnerTabBar, StatusHeader } from './shell';
 
@@ -123,7 +125,16 @@ function KeepScreenOn() {
   );
 }
 
-export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
+export function ProfileScreen({
+  state,
+  asOf,
+  userId = null,
+}: {
+  state: Home;
+  asOf: string;
+  /** For the staff money notices on his own channel (F9 design 1.10). */
+  userId?: string | null;
+}) {
   const { sharing, online, holding } = usePartnerSession(state, asOf);
   const offerOpen = useOfferOpen();
   const signOut = useSignOut();
@@ -158,6 +169,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
           tabBar={<PartnerTabBar current="profile" />}
           mainClassName="pt-6 space-y-8"
         >
+          <MoneyNoticeSlot userId={userId} />
           <DispatchNoticeSlot />
           {holding ? (
             // F8 P45.1: the order he holds comes first; Home always brings him back to it.
@@ -203,7 +215,7 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
               {partner.rating ? (
                 <span className="inline-flex items-center gap-1">
                   <Star className="size-3.5" aria-hidden />
-                  {partner.rating.average.toFixed(1)} · {partner.rating.count} ratings
+                  {partner.rating.average.toFixed(1)} · {ratingsCount(partner.rating.count)}
                 </span>
               ) : (
                 'New partner'
@@ -237,6 +249,19 @@ export function ProfileScreen({ state, asOf }: { state: Home; asOf: string }) {
             aria-label="Account"
             className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card"
           >
+            <Link
+              href="/partner/profile/ratings"
+              className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted focus-visible:-outline-offset-2"
+            >
+              <Star className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-body-4 text-strong">Your ratings</span>
+                <span className="mt-0.5 block text-body-5 text-muted-foreground tabular-nums">
+                  {ratingsRowLine(partner.rating)}
+                </span>
+              </span>
+              <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+            </Link>
             <Link href="/account/security" className={rowClass}>
               <Settings className="size-5 text-muted-foreground" aria-hidden />
               <span className="flex-1">Account settings</span>
