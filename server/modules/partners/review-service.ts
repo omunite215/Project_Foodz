@@ -10,6 +10,8 @@ import { AppError, forbidden } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
 import { activeDeliveryOf, partnerLeaving } from '@/server/modules/delivery/service';
+import { partnerListMoney } from '@/server/modules/earnings/service';
+import type { PartnerListMoney } from '@/server/modules/earnings/schema';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import { passStepUp, stepUpFreshUntilFor, stepUpRequired } from '@/server/modules/staff/service';
 import { objectSize, presignDownload } from '@/server/storage/s3';
@@ -295,12 +297,22 @@ export async function listPartnerApplications(
     return { ...listed, counts: await countTabs(ctx), page: current, pageCount: pages };
   });
   const points = await readPoints(rows.filter((row) => row.isOnline).map((row) => row.id));
+  // F9 (A57): rating, this week and cash for approved and suspended partners.
+  const moneyIds = rows
+    .filter((row) => row.status === 'APPROVED' || row.status === 'SUSPENDED')
+    .map((row) => row.id);
+  const money =
+    moneyIds.length > 0
+      ? await partnerListMoney(actor, moneyIds, now)
+      : new Map<string, PartnerListMoney>();
   return {
     asOf: now.toISOString(),
     query: { ...query, page },
     counts,
     rows: rows.map((row) =>
-      listRow(row, points.get(row.id)?.acceptedAt ?? null, now, timeZone, today),
+      Object.assign(listRow(row, points.get(row.id)?.acceptedAt ?? null, now, timeZone, today), {
+        money: money.get(row.id) ?? null,
+      }),
     ),
     total,
     page,

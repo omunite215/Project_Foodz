@@ -728,7 +728,9 @@ DECLARE
   n integer;
   s bigint;
 BEGIN
-  SELECT rating_base_avg, rating_base_count INTO m FROM menu_items WHERE id = target FOR UPDATE;
+  -- NO KEY UPDATE: a rating's insert holds a key-share lock on the dish through its foreign key,
+  -- which this must not wait on (it would deadlock with another rating of the same dish).
+  SELECT rating_base_avg, rating_base_count INTO m FROM menu_items WHERE id = target FOR NO KEY UPDATE;
   IF NOT FOUND THEN
     RETURN;
   END IF;
@@ -754,7 +756,7 @@ BEGIN
     INTO p
   FROM delivery_partners dp JOIN users u ON u.id = dp.user_id
   WHERE dp.id = target
-  FOR UPDATE OF dp;
+  FOR NO KEY UPDATE OF dp;
   IF NOT FOUND THEN
     RETURN;
   END IF;
@@ -879,6 +881,27 @@ BEGIN
   UPDATE partner_ratings SET user_id = NULL, comment = NULL WHERE user_id = me;
   GET DIAGNOSTICS b = ROW_COUNT;
   RETURN a + b;
+END
+$$;
+
+-- Account deletion for a partner (U22): refused while his balance isn't zero, under the ledger
+-- row lock so a payout can't slip in; once settled his online sessions go (not accounting data).
+CREATE OR REPLACE FUNCTION app_settle_own_partner_for_deletion() RETURNS boolean
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+  AS $$
+DECLARE
+  me uuid := app_partner_id();
+  bal bigint;
+BEGIN
+  IF me IS NULL THEN
+    RETURN true;
+  END IF;
+  SELECT balance_cents INTO bal FROM partner_ledgers WHERE partner_id = me FOR UPDATE;
+  IF coalesce(bal, 0) <> 0 THEN
+    RETURN false;
+  END IF;
+  DELETE FROM partner_online_sessions WHERE partner_id = me;
+  RETURN true;
 END
 $$;
 
@@ -1096,47 +1119,52 @@ $$;
 
 -- ---------------------------------------------------------------- row-level security (E9, V9)
 
-CREATE OR REPLACE FUNCTION app_can_read_ledger(target uuid, row_pool text) RETURNS boolean
-  LANGUAGE sql STABLE
-  AS $$
-    SELECT app_role() = 'system'
-      OR (target IS NOT NULL AND target = app_partner_id())
-      OR (app_role() IN ('support', 'admin') AND NOT app_is_demo() AND row_pool = 'REAL')
-      OR (app_role() = 'admin' AND app_is_demo() AND row_pool = 'DEMO')
-  $$;
-
-CREATE OR REPLACE FUNCTION app_can_read_rating(owner uuid, row_pool text) RETURNS boolean
-  LANGUAGE sql STABLE
-  AS $$
-    SELECT app_role() = 'system'
-      OR (owner IS NOT NULL AND owner = app_user_id())
-      OR (app_role() IN ('support', 'admin') AND NOT app_is_demo() AND row_pool = 'REAL')
-      OR (app_role() = 'admin' AND app_is_demo() AND row_pool = 'DEMO')
-  $$;
+-- The request's settings are read once per query (scalar subqueries become init plans), so a
+-- report over a year of day rows doesn't look the caller up again for every row (A63.6).
 
 DROP POLICY partner_earnings_access ON "partner_earnings";
 CREATE POLICY partner_earnings_read ON "partner_earnings" FOR SELECT
-  USING (app_can_read_ledger(partner_id, pool));
+  USING (
+    (SELECT app_role()) = 'system'
+    OR partner_id = (SELECT app_partner_id())
+    OR ((SELECT app_role()) IN ('support', 'admin') AND NOT (SELECT app_is_demo()) AND pool = 'REAL')
+    OR ((SELECT app_role()) = 'admin' AND (SELECT app_is_demo()) AND pool = 'DEMO')
+  );
 
 ALTER TABLE "partner_earning_staff" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY partner_earning_staff_read ON "partner_earning_staff" FOR SELECT
-  USING (app_role() = 'system' OR (app_role() IN ('support', 'admin') AND NOT app_is_demo()));
+  USING ((SELECT app_role()) = 'system' OR ((SELECT app_role()) IN ('support', 'admin') AND NOT (SELECT app_is_demo())));
 
 ALTER TABLE "partner_ledgers" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY partner_ledgers_read ON "partner_ledgers" FOR SELECT
-  USING (app_can_read_ledger(partner_id, pool));
+  USING (
+    (SELECT app_role()) = 'system'
+    OR partner_id = (SELECT app_partner_id())
+    OR ((SELECT app_role()) IN ('support', 'admin') AND NOT (SELECT app_is_demo()) AND pool = 'REAL')
+    OR ((SELECT app_role()) = 'admin' AND (SELECT app_is_demo()) AND pool = 'DEMO')
+  );
 
 ALTER TABLE "partner_ledger_days" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY partner_ledger_days_read ON "partner_ledger_days" FOR SELECT
-  USING (app_can_read_ledger(partner_id, pool));
+  USING (
+    (SELECT app_role()) = 'system'
+    OR partner_id = (SELECT app_partner_id())
+    OR ((SELECT app_role()) IN ('support', 'admin') AND NOT (SELECT app_is_demo()) AND pool = 'REAL')
+    OR ((SELECT app_role()) = 'admin' AND (SELECT app_is_demo()) AND pool = 'DEMO')
+  );
 
 ALTER TABLE "partner_online_sessions" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY partner_online_sessions_read ON "partner_online_sessions" FOR SELECT
-  USING (app_role() = 'system' OR partner_id = app_partner_id());
+  USING ((SELECT app_role()) = 'system' OR partner_id = (SELECT app_partner_id()));
 
 ALTER TABLE "reviews" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY reviews_read ON "reviews" FOR SELECT
-  USING (app_can_read_rating(user_id, pool));
+  USING (
+    (SELECT app_role()) = 'system'
+    OR (user_id IS NOT NULL AND user_id = (SELECT app_user_id()))
+    OR ((SELECT app_role()) IN ('support', 'admin') AND NOT (SELECT app_is_demo()) AND pool = 'REAL')
+    OR ((SELECT app_role()) = 'admin' AND (SELECT app_is_demo()) AND pool = 'DEMO')
+  );
 CREATE POLICY reviews_insert ON "reviews" FOR INSERT
   WITH CHECK (
     app_role() = 'system' OR (
@@ -1158,7 +1186,12 @@ CREATE POLICY reviews_update ON "reviews" FOR UPDATE
 
 ALTER TABLE "partner_ratings" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY partner_ratings_read ON "partner_ratings" FOR SELECT
-  USING (app_can_read_rating(user_id, pool));
+  USING (
+    (SELECT app_role()) = 'system'
+    OR (user_id IS NOT NULL AND user_id = (SELECT app_user_id()))
+    OR ((SELECT app_role()) IN ('support', 'admin') AND NOT (SELECT app_is_demo()) AND pool = 'REAL')
+    OR ((SELECT app_role()) = 'admin' AND (SELECT app_is_demo()) AND pool = 'DEMO')
+  );
 CREATE POLICY partner_ratings_insert ON "partner_ratings" FOR INSERT
   WITH CHECK (
     app_role() = 'system' OR (
@@ -1187,8 +1220,7 @@ REVOKE ALL ON FUNCTION app_store_zone(), app_append_entry(uuid, "EarningType", i
   app_order_has_dish(uuid, uuid), app_rateable_courier(uuid), app_recalc_dish_rating(uuid),
   app_recalc_partner_rating(uuid), app_skip_rating(uuid), app_my_rating_summary(timestamp(3), timestamp(3)),
   app_unlink_own_ratings(), app_reconcile_earnings(), app_reset_demo_f9(),
-  app_store_date(timestamp(3)), app_store_day_start(date), app_can_read_ledger(uuid, text),
-  app_can_read_rating(uuid, text)
+  app_store_date(timestamp(3)), app_store_day_start(date), app_settle_own_partner_for_deletion()
   FROM PUBLIC;
 REVOKE ALL ON ledger_expected_entries FROM PUBLIC;
 
@@ -1196,13 +1228,12 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foodz_app') THEN
     GRANT EXECUTE ON FUNCTION app_store_zone(), app_store_date(timestamp(3)), app_store_day_start(date),
-      app_can_read_ledger(uuid, text), app_can_read_rating(uuid, text),
       app_record_staff_entry(uuid, text, integer, text, text, text, text, text, text, date, text, integer, text),
       app_set_daily_goal(integer), app_partner_delivery_facts(uuid[]), app_rating_open(uuid),
       app_order_has_dish(uuid, uuid), app_rateable_courier(uuid), app_recalc_dish_rating(uuid),
       app_recalc_partner_rating(uuid), app_skip_rating(uuid),
       app_my_rating_summary(timestamp(3), timestamp(3)), app_unlink_own_ratings(),
-      app_reconcile_earnings(), app_reset_demo_f9()
+      app_reconcile_earnings(), app_reset_demo_f9(), app_settle_own_partner_for_deletion()
       TO foodz_app;
     -- The ledger is append-only and written only by the definer functions (E1.1).
     REVOKE ALL ON "partner_earnings", "partner_earning_staff", "partner_ledgers", "partner_ledger_days",

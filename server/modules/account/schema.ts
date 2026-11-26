@@ -164,11 +164,33 @@ export interface AccountExport {
   }[];
   /** Saved cards: brand, last 4 and expiry only (F4 S6.14). */
   savedCards: { brand: string; last4: string; expires: string }[];
+  /** F9 (S9.6): her own ratings, with their tags and comments. */
+  ratings?: {
+    orderNumber: string;
+    about: string;
+    stars: number;
+    tags: string[];
+    comment: string | null;
+    createdAt: string;
+    editedAt: string | null;
+  }[];
   /**
    * The partner application or partner record (F6 P15.5). Never the full ID number or the
    * images: "To get copies of your ID details, contact us."
    */
-  partner?: PartnerExport;
+  partner?: PartnerExport & {
+    /** F9: his ledger and goal; never a rating about him (U14). */
+    earnings?: {
+      dailyGoalCents: number | null;
+      entries: {
+        at: string;
+        kind: string;
+        amountCents: number;
+        message: string | null;
+        reference: string | null;
+      }[];
+    };
+  };
 }
 
 export interface PartnerExport {

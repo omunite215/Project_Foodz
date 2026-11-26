@@ -31,6 +31,8 @@ import { publish } from '@/server/realtime/pusher';
 import { redis } from '@/server/redis';
 import { deliveryCodeContext, deliveryCodeHash } from '@/server/security/code-hash';
 import { decryptField, encryptField } from '@/server/security/field-encryption';
+import { announceEarnings } from '@/server/modules/earnings/effects';
+import { todayLineIn } from '@/server/modules/earnings/service';
 import * as repo from './repo';
 import type { TrackedDelivery } from './repo';
 import { neighborhoodOf, ridePoints, routeBetween } from './routing';
@@ -217,6 +219,8 @@ async function afterDelivered(result: {
       result.notice,
     ),
   );
+  // F9: his figures moved; the open app refetches (no amounts on the channel).
+  await safely('earnings', () => announceEarnings(result.partnerId));
   await safely('delivered', () =>
     inngest.send(
       deliveryDelivered.create(
@@ -591,17 +595,24 @@ export async function checkCode(
   const id = z.uuid().parse(deliveryId);
   const body = handOverInput.parse(input);
   await partnerOf(actor);
-  const result = handOverOutcome.parse(
-    await runAs(actor, (ctx) =>
-      repo.handOver(
+  const { result, today } = await runAs(actor, async (ctx) => {
+    const outcome = handOverOutcome.parse(
+      await repo.handOver(
         ctx,
         id,
         deliveryCodeHash(id, body.code),
         Boolean(body.cashCollected),
         Boolean(body.confirmFar),
       ),
-    ),
-  );
+    );
+    return {
+      result: outcome,
+      today:
+        outcome.outcome === 'delivered' && outcome.partnerId
+          ? await todayLineIn(ctx, outcome.partnerId)
+          : null,
+    };
+  });
   logger.info({ deliveryId: id, outcome: result.outcome }, 'hand-over');
   switch (result.outcome) {
     case 'not-assigned':
@@ -647,7 +658,11 @@ export async function checkCode(
     });
   }
   return {
-    result: { outcome: 'delivered', payWords: deliveredWords(result.orderNumber, result.payCents) },
+    result: {
+      outcome: 'delivered',
+      payWords: deliveredWords(result.orderNumber, result.payCents),
+      today,
+    },
     counts: false,
   };
 }
@@ -1433,6 +1448,7 @@ export async function cancelUnreachable(
   );
   if (result.partnerId) {
     const partnerId = result.partnerId;
+    await safely('earnings', () => announceEarnings(partnerId));
     await safely('assignment-ended', () =>
       inngest.send(
         deliveryAssignmentEnded.create(

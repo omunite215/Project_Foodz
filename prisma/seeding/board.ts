@@ -1,5 +1,6 @@
 import { v5 as uuidv5 } from 'uuid';
 import type { Prisma, PrismaClient } from '../../server/db/generated/client';
+import { clearEarningsForOrders } from './earnings';
 
 /*
  * The staff order board's fixtures (F5 story "Board fixtures"): S1101 to S1108, placed relative
@@ -221,6 +222,15 @@ export async function resetBoardFixtures(tx: Tx, people: BoardPeople, now: Date)
   const at = (minutes: number) => new Date(now.getTime() + minutes * MINUTE_MS);
   const ids = BOARD_FIXTURE_NUMBERS.map(boardFixtureId);
   const existing = await tx.order.count({ where: { id: { in: ids } } });
+  // F9: the ledger keeps a delivery (RESTRICT), so the fixtures' entries go first.
+  const fixtureOrders = await tx.order.findMany({
+    where: { OR: [{ id: { in: ids } }, { number: { in: [...BOARD_FIXTURE_NUMBERS] } }] },
+    select: { id: true },
+  });
+  await clearEarningsForOrders(
+    tx,
+    fixtureOrders.map((order) => order.id),
+  );
   await tx.order.deleteMany({
     where: { OR: [{ id: { in: ids } }, { number: { in: [...BOARD_FIXTURE_NUMBERS] } }] },
   });

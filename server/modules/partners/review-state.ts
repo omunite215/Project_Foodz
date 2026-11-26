@@ -70,6 +70,9 @@ const SORT_WORDS: Record<PartnerSort, { asc: string; desc: string }> = {
   sent: { asc: 'oldest first', desc: 'newest first' },
   decided: { asc: 'earliest decision first', desc: 'latest decision first' },
   changed: { asc: 'earliest change first', desc: 'latest change first' },
+  rating: { asc: 'lowest rating first', desc: 'highest rating first' },
+  week: { asc: 'least earned this week first', desc: 'most earned this week first' },
+  cash: { asc: 'least cash owed first', desc: 'most cash owed first' },
 };
 
 const sortWords = (sort: PartnerSort, dir: 'asc' | 'desc') => SORT_WORDS[sort][dir];

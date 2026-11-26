@@ -115,6 +115,8 @@ export interface CandidateFacts {
   secondChance: boolean;
   isDemo: boolean;
   unseenInRow: number;
+  /** F9 B10: the partner is the order's own customer; never offered his own food. */
+  ownOrder?: boolean;
 }
 
 export type NotOfferable =
@@ -127,10 +129,11 @@ export type NotOfferable =
   | 'excluded'
   | 'already-offered'
   | 'other-pool'
-  | 'paused';
+  | 'paused'
+  | 'own-order';
 
 /**
- * W2.1's ten conditions, in order; the first that fails is the reason. The database query
+ * W2.1's ten conditions plus F9's own-order rule (B10), in order; the first that fails is the reason. The database query
  * applies the same conditions (B3); this is the one place their meaning is written down and
  * unit-tested, and the assign dialog's disabled reasons come from it.
  */
@@ -145,6 +148,7 @@ export function notOfferable(
   },
 ): NotOfferable | null {
   if (partner.status !== 'APPROVED' || partner.banned) return 'not-approved';
+  if (partner.ownOrder) return 'own-order';
   if (!partner.isOnline) return 'offline';
   if (
     !partner.lastPointAt ||

@@ -11,6 +11,7 @@ import {
   readyOrder,
   type TestPartner,
 } from './support/dispatch';
+import { clearBulkEarnings, seedBulkEarnings } from './support/earnings';
 import { signedInAgo, type StaffMember, staffMember } from './support/staff';
 
 /*
@@ -519,7 +520,11 @@ describe('the partner page and the report (A59, A63, A66)', () => {
     ).toBe(764);
     const hidden = demo.rows.find((candidate) => candidate.partnerId === luis.partnerId);
     expect(hidden).toMatchObject({ hidden: true, figures: null, name: 'L•••' });
-    expect(demo.totals.earnedCents).toBe(764);
+    // Totals cover demo partners only (other suites in this run may add demo partners too).
+    expect(demo.totals.earnedCents).toBe(
+      demo.rows.reduce((total, candidate) => total + (candidate.figures?.earnedCents ?? 0), 0),
+    );
+    expect(demo.rows.every((candidate) => candidate.hidden || candidate.figures)).toBe(true);
     await expect(
       asBrowser(daniel.browser, () =>
         earnings.getEarningsReport(daniel.actor, { from: '2099-01-01', to: '2099-01-02' }),
@@ -655,20 +660,7 @@ describe('every figure agrees to the cent (E4.2)', () => {
 
 describe('the report at scale (A63.6)', () => {
   it('renders a year of days for 500 partners within 2 seconds', async () => {
-    await migrator.$executeRaw`
-      WITH people AS (
-        INSERT INTO users (id, name, email, role, created_at, updated_at)
-        SELECT gen_random_uuid(), 'Scale Partner ' || g, 'scale-' || g || '-' || gen_random_uuid() || '@test.dev', 'partner', now(), now()
-        FROM generate_series(1, 500) g
-        RETURNING id
-      ), partners AS (
-        INSERT INTO delivery_partners (id, user_id, status, vehicle_type, approved_at, updated_at)
-        SELECT gen_random_uuid(), id, 'APPROVED', 'SCOOTER', now(), now() FROM people
-        RETURNING id
-      )
-      INSERT INTO partner_ledger_days (partner_id, day, pool, deliveries, delivery_pay_cents, tips_cents, net_cents)
-      SELECT p.id, app_store_date(app_now()) - d, 'REAL', 5, 1500, 400, 1900
-      FROM partners p CROSS JOIN generate_series(0, 364) d`;
+    await seedBulkEarnings(migrator, 500);
     const today = (await earnings.getEarningsSummary(luis.actor)).today.date;
     const from = new Date(Date.parse(`${today}T00:00:00Z`) - 365 * 86_400_000)
       .toISOString()
@@ -680,9 +672,6 @@ describe('the report at scale (A63.6)', () => {
     expect(performance.now() - started).toBeLessThan(2_000);
     expect(report.total).toBeGreaterThanOrEqual(500);
     expect(report.rows).toHaveLength(50);
-    // Day totals written straight in have no entries behind them: remove them for later suites.
-    await migrator.$executeRaw`
-      DELETE FROM partner_ledger_days d USING delivery_partners p, users u
-      WHERE d.partner_id = p.id AND u.id = p.user_id AND u.name LIKE 'Scale Partner %'`;
+    await clearBulkEarnings(migrator);
   }, 120_000);
 });

@@ -1,3 +1,4 @@
+import type { StaffOrderFeedback } from '@/server/modules/ratings/schema';
 import type {
   BoardCourier,
   CouriersCount,
@@ -710,6 +711,11 @@ export interface FullOrderDetail extends DetailBase {
     decline: { code: string | null; declineCode: string | null } | null;
     paidLate: boolean;
   };
+  /**
+   * F9 (A65): customer feedback for SUPPORT and ADMIN (demo orders only for the demo admin).
+   * Never on the kitchen's shape. Optional so older fixtures still type-check.
+   */
+  feedback?: StaffOrderFeedback | null;
 }
 
 export type StaffOrderDetail = KitchenOrderDetail | FullOrderDetail;

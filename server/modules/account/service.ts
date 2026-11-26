@@ -1,4 +1,6 @@
 import 'server-only';
+import { earningsExportFor, settlePartnerForDeletionIn } from '@/server/modules/earnings/service';
+import { ratingsExportIn, unlinkRatingsIn } from '@/server/modules/ratings/service';
 import { verifyPassword } from 'better-auth/crypto';
 import { displayPhone, parsePhone } from '@/lib/phone';
 import { can, isRole, isStaff } from '@/server/auth/roles';
@@ -239,6 +241,9 @@ export async function exportMyData(
   const orders = await exportMyOrders(actor);
   const savedCards = await exportSavedCards(actor);
   const partner = await partnerExportFor(actor);
+  // F9 (S9.6, V9.2): her ratings; for a partner, his ledger and goal.
+  const ratings = await runAs(actor, (ctx) => ratingsExportIn(ctx, actor.userId));
+  const earnings = partner ? await earningsExportFor(actor) : null;
   if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
 
   const data: AccountExport = {
@@ -276,7 +281,8 @@ export async function exportMyData(
     favorites,
     orders,
     savedCards,
-    ...(partner && { partner }),
+    ratings,
+    ...(partner && { partner: { ...partner, ...(earnings && { earnings }) } }),
   };
 
   await runAs(actor, (ctx) =>
@@ -354,6 +360,9 @@ export async function deleteAccount(
     if (again.paying) throw paymentConfirming(again.paying);
     const profile = await findProfile(ctx, actor.userId);
     if (!profile) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.', 401);
+    // F9 (U22, V9.2): a partner's balance must be settled; a customer's stars stay, unlinked.
+    await settlePartnerForDeletionIn(ctx);
+    await unlinkRatingsIn(ctx);
     const partner = await erasePartnerData(ctx);
     if (partner.outcome === 'withdrawn' && partner.partnerId) {
       await audit(ctx, {

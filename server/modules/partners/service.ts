@@ -1,4 +1,6 @@
 import 'server-only';
+import { todayLineIn } from '@/server/modules/earnings/service';
+import { partnerRatingLineIn } from '@/server/modules/ratings/service';
 import { v7 as uuidv7 } from 'uuid';
 import type { z } from 'zod';
 import { displayPhone } from '@/lib/phone';
@@ -358,15 +360,25 @@ export async function getMyPartnerState(
       ...offlineNotice(reason, row.offlineAt.toISOString(), timeZone, closed?.at ?? null, opensAt),
     };
   }
+  // F9: his rating as of the end of yesterday (V8) and today's line (P51.3).
+  const { rating, todayLine } = await runAs(actor, async (ctx) => ({
+    rating: actor.isDemo
+      ? row.ratingCount > 0
+        ? { average: row.ratingAvg, count: row.ratingCount }
+        : null
+      : await partnerRatingLineIn(ctx, now),
+    todayLine: await todayLineIn(ctx, row.id, actor.isDemo),
+  }));
   return {
     screen: 'home',
+    today: todayLine,
     partner: {
       id: row.id,
       name: account.name,
       firstName,
       vehicleWords: vehicleLine(row.vehicleType, row.vehiclePlate),
       photo: await ownImage(row.photoUploadId, row.userId),
-      rating: row.ratingCount > 0 ? { average: row.ratingAvg, count: row.ratingCount } : null,
+      rating,
       partnerSince: (row.approvedAt ?? row.createdAt).toISOString(),
       isDemo: actor.isDemo,
     },

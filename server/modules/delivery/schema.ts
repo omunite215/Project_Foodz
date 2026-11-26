@@ -279,7 +279,13 @@ export interface PartnerDispatchState {
   offersPausedSince: string | null;
   howOffersWork: { reachesKm: number[]; offerSeconds: number; missLimit: number };
   delivery: { deliveryId: string; orderNumber: string; status: PartnerDelivery['status'] } | null;
-  notice: { kind: DeliveryNotice; orderNumber: string; at: string } | null;
+  notice: {
+    kind: DeliveryNotice;
+    orderNumber: string;
+    at: string;
+    /** F9 P57.3: the delivery fee he keeps after a cancellation after pickup. */
+    feeCents?: number | null;
+  } | null;
 }
 
 // ------------------------------------------------------------------ staff DTOs

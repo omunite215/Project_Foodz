@@ -22,6 +22,7 @@
     "db:seed": "prisma db seed",
     "seed:board": "tsx prisma/seed-board.ts",
     "seed:partners": "tsx prisma/seed-partners.ts",
+    "seed:earnings": "tsx prisma/seed-earnings.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",

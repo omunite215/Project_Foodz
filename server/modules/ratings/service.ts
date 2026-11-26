@@ -81,13 +81,20 @@ async function storeZone(now: Date) {
 
 // ------------------------------------------------------------------ the customer's card (S1–S9)
 
-async function viewIn(
+interface ViewDraft {
+  view: OrderRatingView;
+  courierId: string | null;
+  courierRating: Awaited<ReturnType<typeof repo.ownCourierRating>>;
+}
+
+/** The card from the customer's own rows, in her transaction; the courier is filled after. */
+async function draftIn(
   ctx: DbContext,
   order: repo.OrderForRating,
   isDemo: boolean,
   now: Date,
   timeZone: string,
-): Promise<OrderRatingView> {
+): Promise<ViewDraft> {
   const dishes = await repo.orderDishes(ctx, order.id);
   const ratings = await repo.ownDishRatings(ctx, order.id);
   const courierRating = await repo.ownCourierRating(ctx, order.id);
@@ -104,23 +111,7 @@ async function viewIn(
     timings().windowDays,
   );
   const byDish = new Map(ratings.map((rating) => [rating.menuItemId, rating]));
-  let courier: OrderRatingView['courier'] = null;
-  if (courierId && card.state !== 'none') {
-    const facts = await runAsSystem('rating courier', (system) =>
-      repo.courierFacts(system, courierId),
-    );
-    if (facts) {
-      courier = {
-        firstName: firstNameOf(facts.user.name),
-        hasPhoto: Boolean(facts.photoUploadId),
-        stars: asStars(courierRating?.rating),
-        tags: (courierRating?.tags ?? []).filter(isCourierTag),
-        comment: courierRating?.comment ?? null,
-        editedAt: courierRating?.editedAt?.toISOString() ?? null,
-      };
-    }
-  }
-  return {
+  const view: OrderRatingView = {
     state: card.state,
     editable: card.editable,
     closesAt: card.closesAt?.toISOString() ?? null,
@@ -143,7 +134,29 @@ async function viewIn(
               editedAt: rating?.editedAt?.toISOString() ?? null,
             };
           }),
-    courier,
+    courier: null,
+  };
+  return { view, courierId: card.state === 'none' ? null : courierId, courierRating };
+}
+
+/** The courier's first name and photo flag, read as the platform outside her transaction. */
+async function finish(draft: ViewDraft): Promise<OrderRatingView> {
+  const { courierId, courierRating } = draft;
+  if (!courierId) return draft.view;
+  const facts = await runAsSystem('rating courier', (system) =>
+    repo.courierFacts(system, courierId),
+  );
+  if (!facts) return draft.view;
+  return {
+    ...draft.view,
+    courier: {
+      firstName: firstNameOf(facts.user.name),
+      hasPhoto: Boolean(facts.photoUploadId),
+      stars: asStars(courierRating?.rating),
+      tags: (courierRating?.tags ?? []).filter(isCourierTag),
+      comment: courierRating?.comment ?? null,
+      editedAt: courierRating?.editedAt?.toISOString() ?? null,
+    },
   };
 }
 
@@ -155,10 +168,11 @@ export async function getOrderRatingView(
 ): Promise<OrderRatingView | null> {
   if (isStaff(actor.role)) return null;
   const timeZone = await storeZone(now);
-  return runAs(actor, async (ctx) => {
+  const draft = await runAs(actor, async (ctx) => {
     const order = await repo.findOwnOrder(ctx, orderId, actor.userId);
-    return order ? viewIn(ctx, order, actor.isDemo, now, timeZone) : null;
+    return order ? draftIn(ctx, order, actor.isDemo, now, timeZone) : null;
   });
+  return draft ? finish(draft) : null;
 }
 
 /** `OrderSummary.rating` for a page of the Orders list (S6.1). */
@@ -247,9 +261,9 @@ export async function rateOrder(
     throw invalidInput(RATING_ERRORS.demoComment, { comment: [RATING_ERRORS.demoComment] });
   }
   let dishesMoved = false;
-  let view: OrderRatingView;
+  let draft: ViewDraft;
   try {
-    view = await runAs(actor, async (ctx) => {
+    draft = await runAs(actor, async (ctx) => {
       const order = await repo.findOwnOrder(ctx, values.orderId, actor.userId);
       if (!order) throw orderNotFound();
       openOrThrow(order, now, timeZone);
@@ -295,7 +309,7 @@ export async function rateOrder(
         });
         if (saved.changed) await repo.recalcPartner(ctx, courierId);
       }
-      return viewIn(ctx, order, actor.isDemo, now, timeZone);
+      return draftIn(ctx, order, actor.isDemo, now, timeZone);
     });
   } catch (error) {
     if (isRlsRefusal(error)) throw notOpen('closed', null);
@@ -303,7 +317,7 @@ export async function rateOrder(
   }
   if (dishesMoved) expireMenuCache();
   await settle(values.orderId, 'rated');
-  return view;
+  return finish(draft);
 }
 
 /** S3, V2.2: no reminder for this order; rating later is still allowed. */
@@ -315,7 +329,7 @@ export async function skipRating(
   const { orderId } = skipRatingInput.parse(input);
   await requireCustomer(actor);
   const timeZone = await storeZone(now);
-  const view = await runAs(actor, async (ctx) => {
+  const draft = await runAs(actor, async (ctx) => {
     const result = await repo.skipRating(ctx, orderId);
     if (result.outcome === 'not-found') throw orderNotFound();
     if (result.outcome === 'cancelled') throw notOpen('cancelled', null);
@@ -323,10 +337,10 @@ export async function skipRating(
     const order = await repo.findOwnOrder(ctx, orderId, actor.userId);
     if (!order) throw orderNotFound();
     if (result.outcome === 'closed') openOrThrow(order, now, timeZone);
-    return viewIn(ctx, order, actor.isDemo, now, timeZone);
+    return draftIn(ctx, order, actor.isDemo, now, timeZone);
   });
   await settle(orderId, 'skipped');
-  return view;
+  return finish(draft);
 }
 
 async function settle(orderId: string, how: 'rated' | 'skipped') {
@@ -470,6 +484,10 @@ export async function getPartnerRatings(
 ): Promise<PartnerRatingsPage | null> {
   const { partnerId, cursor } = partnerRatingsInput.parse(input);
   const viewer = await moderator(actor, false);
+  // The demo admin can't read partner rows: a demo partner's figures come from the platform.
+  const [demoFigures] = viewer.isDemo
+    ? await runAsSystem('demo partner ratings', (system) => repo.partnerFigures(system, partnerId))
+    : [];
   return runAs(actor, async (ctx) => {
     const [figures] = await repo.partnerFigures(ctx, partnerId);
     if (!figures) return null;
@@ -484,15 +502,8 @@ export async function getPartnerRatings(
       nextCursor: null,
     };
     if (viewer.isDemo && !figures.isDemo) return empty;
-    let average = figures.ratingAvg;
-    let count = figures.ratingCount;
-    if (viewer.isDemo) {
-      const demo = await runAsSystem('demo partner ratings', (system) =>
-        repo.partnerFigures(system, partnerId),
-      );
-      average = demo[0]?.ratingAvg ?? 0;
-      count = demo[0]?.ratingCount ?? 0;
-    }
+    const average = demoFigures?.ratingAvg ?? figures.ratingAvg;
+    const count = demoFigures?.ratingCount ?? figures.ratingCount;
     const stats = await repo.partnerRatingStats(
       ctx,
       partnerId,

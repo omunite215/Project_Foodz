@@ -188,6 +188,22 @@ export function listSessions(ctx: DbContext, partnerId: string, from: Date, to: 
   });
 }
 
+/** The delivery fee a partner keeps for an order cancelled after pickup (P57.3). */
+export async function cancelledFee(
+  ctx: DbContext,
+  partnerId: string,
+  orderNumber: string,
+): Promise<number | null> {
+  const rows = await db(ctx).$queryRaw<{ amount: number }[]>`
+    SELECT e.amount_cents AS amount
+    FROM partner_earnings e
+    JOIN deliveries d ON d.id = e.delivery_id
+    JOIN orders o ON o.id = d.order_id
+    WHERE e.partner_id = ${partnerId}::uuid AND e.reason = 'cancelled-after-pickup' AND o.number = ${orderNumber}
+    LIMIT 1`;
+  return rows[0]?.amount ?? null;
+}
+
 // ------------------------------------------------------------------ staff reads
 
 export interface StaffPartnerRow {
@@ -425,6 +441,13 @@ export function demoPartnerRatings(ctx: DbContext, partnerIds: readonly string[]
     where: { id: { in: [...partnerIds] }, user: { isDemo: true } },
     select: { id: true, ratingAvg: true, ratingCount: true },
   });
+}
+
+/** U22: false while the partner's balance isn't zero; otherwise his sessions are removed. */
+export async function settleForDeletion(ctx: DbContext): Promise<boolean> {
+  const rows = await db(ctx).$queryRaw<{ ok: boolean }[]>`
+    SELECT app_settle_own_partner_for_deletion() AS ok`;
+  return rows[0]?.ok ?? false;
 }
 
 // ------------------------------------------------------------------ nightly jobs (E7, U20)

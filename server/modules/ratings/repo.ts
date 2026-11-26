@@ -53,7 +53,7 @@ export function orderDishes(ctx: DbContext, orderId: string): Promise<OrderDish[
     FROM order_items i
     WHERE i.order_id = ${orderId}::uuid
     GROUP BY i.menu_item_id
-    ORDER BY min(i.id)`;
+    ORDER BY min(i.id::text)`;
 }
 
 export async function rateableCourier(ctx: DbContext, orderId: string): Promise<string | null> {
@@ -133,11 +133,11 @@ export async function upsertCourierRating(
 }
 
 export async function recalcDish(ctx: DbContext, menuItemId: string) {
-  await db(ctx).$queryRaw`SELECT app_recalc_dish_rating(${menuItemId}::uuid)`;
+  await db(ctx).$executeRaw`SELECT app_recalc_dish_rating(${menuItemId}::uuid)`;
 }
 
 export async function recalcPartner(ctx: DbContext, partnerId: string) {
-  await db(ctx).$queryRaw`SELECT app_recalc_partner_rating(${partnerId}::uuid)`;
+  await db(ctx).$executeRaw`SELECT app_recalc_partner_rating(${partnerId}::uuid)`;
 }
 
 export async function skipRating(ctx: DbContext, orderId: string) {

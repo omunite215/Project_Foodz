@@ -534,22 +534,13 @@ export async function todayLineIn(
   return { earnedCents: day ? earnedOf(day) : 0, deliveries: day?.deliveries ?? 0 };
 }
 
-/** P57.3: the fee he keeps for an order cancelled after pickup, from his own entries. */
-export async function cancelledFeeIn(
+/** P57.3: the fee he keeps for an order cancelled after pickup, in the caller's transaction. */
+export function cancelledFeeIn(
   ctx: DbContext,
   partnerId: string,
   orderNumber: string,
 ): Promise<number | null> {
-  const entries = (await repo.listEntries(ctx, partnerId, {}))
-    .filter((entry) => entry.reason === 'cancelled-after-pickup' && entry.deliveryId)
-    .slice(-10);
-  const facts = await repo.partnerDeliveryFacts(
-    ctx,
-    entries.flatMap((entry) => (entry.deliveryId ? [entry.deliveryId] : [])),
-  );
-  const match = facts.find((fact) => fact.orderNumber === orderNumber);
-  const entry = match && entries.find((candidate) => candidate.deliveryId === match.deliveryId);
-  return entry ? entry.amountCents : null;
+  return repo.cancelledFee(ctx, partnerId, orderNumber);
 }
 
 // ------------------------------------------------------------------ staff: who may read (A57–A66)
@@ -1287,15 +1278,17 @@ export async function exportPartnerEntries(
  * The money columns for a page of the partners list, keyed by partner. Real partners' money is
  * hidden from the demo admin (A66.1).
  */
-export async function partnerListMoneyIn(
-  ctx: DbContext,
-  viewer: { role: UserActor['role']; isDemo: boolean },
+export async function partnerListMoney(
+  actor: UserActor,
   partnerIds: readonly string[],
   now: Date,
 ): Promise<Map<string, PartnerListMoney>> {
-  const clock = await repo.storeClock(ctx);
-  const monday = mondayOf(clock.today);
-  const rows = await repo.listMoney(ctx, partnerIds, { from: monday, to: addDays(monday, 6) });
+  const viewer = { role: actor.role, isDemo: actor.isDemo };
+  const rows = await runAs(actor, async (ctx) => {
+    const clock = await repo.storeClock(ctx);
+    const monday = mondayOf(clock.today);
+    return repo.listMoney(ctx, partnerIds, { from: monday, to: addDays(monday, 6) });
+  });
   const demoRatings = viewer.isDemo
     ? new Map(
         (
@@ -1364,4 +1357,35 @@ export async function resetDemoEarnings() {
   if (result.orders < 0)
     logger.warn({ alert: 'demo-reset-orders' }, 'demo orders kept: something still points at them');
   return result;
+}
+
+// ------------------------------------------------------------------ account tie-ins (U22, F2)
+
+export const BALANCE_NOT_SETTLED =
+  "Your Foodz balance isn't settled yet. Call Foodz Kitchen before deleting your account.";
+
+/** P61.2: in the deletion's transaction; refuses while the balance isn't zero. */
+export async function settlePartnerForDeletionIn(ctx: DbContext): Promise<void> {
+  if (!(await repo.settleForDeletion(ctx))) {
+    throw new AppError('BALANCE_NOT_SETTLED', BALANCE_NOT_SETTLED, 409);
+  }
+}
+
+/** The partner's part of "Download my data": his entries and goal, never a rating about him. */
+export async function earningsExportFor(actor: UserActor) {
+  return runAs(actor, async (ctx) => {
+    const own = await repo.findOwnPartner(ctx, actor.userId);
+    if (!own) return null;
+    const entries = await repo.listEntries(ctx, own.id, {});
+    return {
+      dailyGoalCents: own.dailyGoalCents,
+      entries: entries.map((entry) => ({
+        at: entry.at.toISOString(),
+        kind: entryWords(entry.kind, entry.reason, entry.amountCents, entry.method),
+        amountCents: entry.amountCents,
+        message: entry.message,
+        reference: entry.reference,
+      })),
+    };
+  });
 }
