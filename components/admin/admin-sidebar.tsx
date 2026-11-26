@@ -1,6 +1,6 @@
 'use client';
 
-import { Bike, LogOut, Map as MapIcon, Settings, SquareKanban, Store } from 'lucide-react';
+import { Bike, LogOut, Map as MapIcon, Settings, SquareKanban, Store, Wallet } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -23,6 +23,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { usePartnerBadge } from '@/components/partner-review/queries';
@@ -36,8 +38,8 @@ import { roleLabel, useStaffShell } from './staff-shell-context';
  * The staff sidebar (F5 design 1.2): SUPPORT, ADMIN and the demo admin. 256 px expanded, a
  * 72 px icon rail, a 288 px drawer on phones. It lists only screens that exist for this role:
  * "Order board", "Live map" (F8 A46.1) and "Partners" for SUPPORT, ADMIN and the demo admin
- * (F6 A18.1). The current
- * page is marked by a bar, weight and tint, never a tint alone.
+ * (F6 A18.1), with F9's "Earnings and payouts" under Partners for ADMIN and the demo admin.
+ * The current page is marked by a bar, weight and tint, never a tint alone.
  */
 
 const SCREENS = {
@@ -78,11 +80,30 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
+/** F9 design 3.1: the payouts report, a sub-item of Partners (`earnings: report`). */
+const REPORT = {
+  label: 'Earnings and payouts',
+  href: '/admin/partners/earnings' satisfies Route,
+} as const;
+
+const isReport = (pathname: string) =>
+  pathname === REPORT.href || pathname.startsWith(`${REPORT.href}/`);
+
+/** Partners is current on its list and a partner's page, never on the report (design 3.1). */
+function isCurrent(href: string, pathname: string): boolean {
+  if (href === SCREENS.partners.href && isReport(pathname)) return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 const NAV_BUTTON =
   'relative h-11 gap-3 rounded-lg px-3 text-body-4 text-neutral-2 hover:bg-neutral-7 hover:text-neutral-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid focus-visible:ring-0 group-data-[collapsible=icon]:size-12! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! [&_svg]:size-5!';
 
 const CURRENT =
   'bg-neutral-7 font-semibold text-neutral-1 before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-strong [&_svg]:text-brand-strong';
+
+/** The sub-item: its words line up with the parent's label (design 3.1). */
+const SUB_BUTTON =
+  'relative flex h-10 min-w-0 items-center rounded-lg pr-3 pl-11 text-body-5 text-neutral-2 outline-none hover:bg-neutral-7 hover:text-neutral-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid';
 
 export function AdminSidebar() {
   const shell = useStaffShell();
@@ -92,6 +113,9 @@ export function AdminSidebar() {
   const { signOut, request, onCloseAutoFocus } = useStaffSignOut();
   const accountRef = useRef<HTMLButtonElement>(null);
   const toReview = useReviewCount(shell.screens.includes('partners'));
+  // ADMIN and the demo admin (both the admin role) read the report; SUPPORT never sees it.
+  const report = shell.screens.includes('partners') && shell.user.role === 'admin';
+  const onReport = isReport(pathname);
 
   // The drawer closes on navigation (design 1.2).
   const closeDrawer = () => setOpenMobile(false);
@@ -136,7 +160,7 @@ export function AdminSidebar() {
               {shell.screens.map((screen) => {
                 const item = SCREENS[screen];
                 const Icon = item.icon;
-                const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const current = isCurrent(item.href, pathname);
                 const count = screen === 'partners' ? toReview : 0;
                 return (
                   <SidebarMenuItem key={screen}>
@@ -158,9 +182,43 @@ export function AdminSidebar() {
                         <CountBadge count={count} />
                       </Link>
                     </SidebarMenuButton>
+                    {screen === 'partners' && report ? (
+                      // Hidden on the rail (shadcn hides sub-items there): its own button follows.
+                      <SidebarMenuSub className="mx-0 mt-1 translate-x-0 border-l-0 px-0 py-0">
+                        <SidebarMenuSubItem>
+                          <Link
+                            href={REPORT.href}
+                            aria-current={onReport ? 'page' : undefined}
+                            onClick={closeDrawer}
+                            className={cn(SUB_BUTTON, onReport && CURRENT)}
+                          >
+                            {REPORT.label}
+                          </Link>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    ) : null}
                   </SidebarMenuItem>
                 );
               })}
+              {report ? (
+                // The rail (1024 to 1279 px) can't show sub-items, so the report gets its own icon.
+                <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+                  <SidebarMenuButton
+                    asChild
+                    tooltip={REPORT.label}
+                    className={cn(NAV_BUTTON, onReport && CURRENT)}
+                  >
+                    <Link
+                      href={REPORT.href}
+                      aria-current={onReport ? 'page' : undefined}
+                      onClick={closeDrawer}
+                    >
+                      <Wallet aria-hidden />
+                      <span className="sr-only">{REPORT.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
             </SidebarMenu>
           </SidebarGroup>
         </nav>

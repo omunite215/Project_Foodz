@@ -89,6 +89,16 @@ export function reportHref(query: EarningsReportQuery): Route {
   return isSitePath(href) ? href : REPORT_PATH;
 }
 
+/** A report row's partner page, Earnings first, on the report's range (design 3.3, 3.13). */
+export function partnerEarningsHref(
+  partnerId: string,
+  range: { from: IsoDate; to: IsoDate },
+): Route {
+  const params = new URLSearchParams({ view: 'earnings', from: range.from, to: range.to });
+  const href = `/admin/partners/${encodeURIComponent(partnerId)}?${params.toString()}`;
+  return isSitePath(href) ? href : REPORT_PATH;
+}
+
 /** Which preset the range is, or "custom". */
 export function presetOf(range: { from: IsoDate; to: IsoDate }, today: IsoDate): ReportPreset {
   for (const preset of REPORT_PRESETS) {

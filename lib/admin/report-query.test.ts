@@ -5,6 +5,7 @@ import {
   exportBody,
   hasReportFilters,
   isIsoDate,
+  partnerEarningsHref,
   presetOf,
   reportHref,
   reportQueryFromSearch,
@@ -111,6 +112,17 @@ describe('reportHref', () => {
       }),
     ).toBe(
       '/admin/partners/earnings?from=2026-11-09&to=2026-11-15&filter=owes-foodz&q=lu&sort=closing&dir=desc&page=3',
+    );
+  });
+
+  it("opens a partner's Earnings on the report's range", () => {
+    expect(
+      partnerEarningsHref('0193a000-0000-7000-8000-000000000001', {
+        from: '2026-11-16',
+        to: '2026-11-22',
+      }),
+    ).toBe(
+      '/admin/partners/0193a000-0000-7000-8000-000000000001?view=earnings&from=2026-11-16&to=2026-11-22',
     );
   });
 
