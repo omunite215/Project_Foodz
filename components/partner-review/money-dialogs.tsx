@@ -592,7 +592,8 @@ function MoneyForm({
 
   const form = useForm({
     defaultValues: defaults,
-    validationLogic: revalidateLogic({ mode: 'blur', modeAfterSubmission: 'blur' }),
+    // After a failed send, errors clear as they're fixed, so nothing jumps under a tap at blur.
+    validationLogic: revalidateLogic({ mode: 'blur', modeAfterSubmission: 'change' }),
     validators: {
       onDynamic: ({ value }) => {
         const fields = problemsOf(kind, value, { name, figures, today });
