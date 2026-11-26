@@ -232,12 +232,47 @@ describe('the location pipeline (L1 to L3)', () => {
       freshness: 'hollow',
     });
     const board = await tracking.boardTracking({ isDemo: false }, 'America/New_York', at(250));
-    expect(board.lines.get(order.id)).toMatchObject({ state: 'noLocation', tone: 'amber' });
+    expect(board.lines.get(order.id)).toMatchObject({
+      state: 'noLocation',
+      tone: 'amber',
+      // QA A48.1: the board reads it again when it turns red, by the same clock.
+      changesAt: new Date(Date.parse(capped) + 600_000).toISOString(),
+    });
+    expect(
+      (await tracking.boardTracking({ isDemo: false }, 'America/New_York', at(130))).lines.get(
+        order.id,
+      )?.changesAt,
+    ).toBe(new Date(Date.parse(capped) + 120_000).toISOString());
     expect(
       published('courier.position')
         .map(([, , data]) => (data as { at: string }).at)
         .every((value) => value <= capped),
     ).toBe(true);
+  });
+
+  it("tells her page when he's almost there, about 2 minutes at most (QA S4.1)", async () => {
+    const { order, deliveryId } = await heldOrder();
+    await tracking.pickUp(luis.actor, deliveryId, {});
+    await migrator.delivery.update({ where: { id: deliveryId }, data: { routeDurationSec: 240 } });
+    const door = await migrator.order.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { addressLat: true, addressLng: true },
+    });
+    mocks.publish.mockClear();
+    await tracking.pointAccepted({
+      partnerId: luis.partnerId,
+      isDemo: false,
+      point: point(door.addressLat, door.addressLng),
+      acceptedAt: new Date(),
+    });
+    expect(
+      published('delivery.changed').some(([channel]) => channel === channels.order(order.id)),
+    ).toBe(true);
+    const notice = await migrator.notification.findFirstOrThrow({
+      where: { userId: priya.userId, type: 'order.almost-here' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(notice.body).toMatch(/^Luis is about [12] minutes? away\./);
   });
 
   it('stores a straight-line estimate, flagged as estimated', async () => {
@@ -465,6 +500,16 @@ describe('door problems and staff (P43, A50)', () => {
       kind: 'locked',
       words: `Order ${order.number}: the delivery code is locked after 5 wrong tries.`,
     });
+    // QA A50.1: after a lock, support may also ask him to wait 5 more minutes.
+    const locked = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+    const wait = await asBrowser(morgan.browser, () =>
+      actions.askToWaitAction({ orderId: order.id, expectedVersion: locked.version }),
+    );
+    expect(wait?.serverError).toBeUndefined();
+    expect(
+      (await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } }))
+        .noAnswerWaitRestartedAt,
+    ).not.toBeNull();
     // The live map carries the same banners and the kitchen's pin (design 3.3, 3.9).
     const map = await asBrowser(daniel.browser, () => actions.opsMapAction());
     expect(map?.data?.attention?.[0]).toMatchObject({ kind: 'locked', orderNumber: order.number });
@@ -500,6 +545,32 @@ describe('the live map and the demo run (A46, A54, L10)', () => {
     const prepared = await tracking.demoPrepare(runId);
     expect(prepared?.points).toBeGreaterThan(0);
     expect(await migrator.orderItem.count({ where: { orderId: prepared?.orderId } })).toBe(2);
+    // Design 3.7 and B9: the run's order is D-1, D-2…, and its start is audited.
+    expect(
+      (await migrator.order.findUniqueOrThrow({ where: { id: prepared!.orderId } })).number,
+    ).toMatch(/^D-\d+$/);
+    expect(
+      await migrator.auditLog.count({
+        where: { action: 'tracking.demo-run-started', targetId: runId },
+      }),
+    ).toBe(1);
+    // QA A54.2, L10.4: real staff never read the run's order, on the board, its cards, Find or
+    // the detail; the demo admin does.
+    const board = await import('@/server/modules/board/service');
+    const boardActions = await import('@/server/modules/board/actions');
+    const realBoard = await asBrowser(morgan.browser, () => board.getBoard(morgan.actor));
+    expect(realBoard.cards.map((card) => card.id)).not.toContain(prepared!.orderId);
+    const realCards = await asBrowser(morgan.browser, () =>
+      boardActions.boardCardsAction({ orderIds: [prepared!.orderId] }),
+    );
+    expect(realCards?.data?.cards ?? []).toEqual([]);
+    expect(
+      await asBrowser(daniel.browser, () =>
+        board.getStaffOrderDetail(daniel.actor, prepared!.orderId),
+      ),
+    ).toBeNull();
+    const demoBoard = await asBrowser(demoAdmin.browser, () => board.getBoard(demoAdmin.actor));
+    expect(demoBoard.cards.map((card) => card.id)).toContain(prepared!.orderId);
     const demoMap = await asBrowser(demoAdmin.browser, () => actions.opsMapAction());
     expect(demoMap?.data?.pool).toBe('DEMO');
     expect(demoMap?.data?.couriers.map((courier) => courier.fullName)).toEqual(['Jamie Courier']);

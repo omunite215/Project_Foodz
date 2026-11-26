@@ -801,6 +801,23 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     return () => clearInterval(timer);
   }, [outForDelivery, meta.view, writer]);
 
+  // A48.1 (QA): a line that turns by time alone ("no location for 2 min") is read again when it
+  // does, in step with the customer's page, not at the next 30 s refresh.
+  const nextLineChange = useMemo(() => {
+    const times = cards.flatMap((card) =>
+      card.status === 'PICKED_UP' && card.delivery?.changesAt
+        ? [Date.parse(card.delivery.changesAt)]
+        : [],
+    );
+    return times.length ? Math.min(...times) : null;
+  }, [cards]);
+  useEffect(() => {
+    if (nextLineChange === null || meta.view !== 'full') return undefined;
+    const wait = Math.max(2_000, nextLineChange - serverNow(offset).getTime() + 500);
+    const timer = setTimeout(() => void writer.refresh().catch(() => undefined), wait);
+    return () => clearTimeout(timer);
+  }, [nextLineChange, meta.view, offset, writer]);
+
   const banner = connectionBanner(connection.kind);
   const offline = connection.kind === 'offline';
   const blocked = meta.can.readOnly ? 'demo' : offline ? 'offline' : null;

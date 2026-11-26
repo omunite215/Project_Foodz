@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DeliveryLine } from '@/server/modules/tracking/schema';
 import {
   askedToWaitLine,
+  bringBackRefundLine,
   attentionListLine,
   attentionLook,
   confirmOutcome,
@@ -69,6 +70,7 @@ describe('stuck deliveries (A49, A50)', () => {
     ]);
     expect(stuckActionsFor(card(line({ state: 'locked', tone: 'red' })), 'full')).toEqual([
       'confirmHandover',
+      'askToWait',
       'cancelUnreachable',
     ]);
     expect(stuckActionsFor(card(line({ state: 'problem' })), 'full')).toEqual([
@@ -145,5 +147,30 @@ describe('the live map (A46)', () => {
         (iso) => iso.slice(11, 16),
       ),
     ).toEqual(['Accepted 00:40', 'At the kitchen 00:41']);
+  });
+});
+
+const paidBy = (
+  payment: Partial<{ method: 'cash' | 'card'; status: 'PAID' | 'UNPAID'; sample: boolean }>,
+) => ({
+  view: 'full' as const,
+  payment: {
+    method: 'card' as const,
+    status: 'PAID' as const,
+    totalCents: 5397,
+    refundedCents: 0,
+    ...payment,
+  },
+});
+
+describe('the bring-back refund line (QA, A50.1)', () => {
+  it('words the refund from what was actually paid', () => {
+    expect(bringBackRefundLine(paidBy({}))).toBe("We'll refund $53.97 to the card in full.");
+    expect(bringBackRefundLine(paidBy({ sample: true }))).toBe(
+      "Sample order: there's no card payment to refund.",
+    );
+    expect(bringBackRefundLine(paidBy({ method: 'cash', status: 'UNPAID' }))).toBe(
+      "Nothing was charged, so there's nothing to refund.",
+    );
   });
 });

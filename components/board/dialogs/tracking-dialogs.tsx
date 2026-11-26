@@ -18,6 +18,7 @@ import { announce } from '@/lib/announce';
 import { cashCollectedLabel, stepUpLockedText } from '@/lib/board/text';
 import {
   bringBackOutcome,
+  bringBackRefundLine,
   bringBackTitle,
   CONFIRM_REASON_LABELS,
   confirmedAnnouncement,
@@ -25,7 +26,6 @@ import {
   firstOfShort,
   UNREACHABLE_REASON,
 } from '@/lib/board/tracking-text';
-import { formatPrice } from '@/lib/format';
 import { ActionDialog } from './action-dialog';
 import {
   focusFirstProblem,
@@ -246,17 +246,6 @@ export function ConfirmHandoverDialog({
 const UNREACHABLE = ['customer-unreachable'] as const;
 const STEP_UP_PROMPT = 'Enter a code from your authenticator app to continue.';
 
-/** The refund line from the board's card (F5 3.3's words, without the preview's card label). */
-function refundLine(card: BoardCard): string {
-  if (card.view !== 'full') return '';
-  const paidCard =
-    card.payment.method === 'card' &&
-    (card.payment.status === 'PAID' || card.payment.status === 'PARTIALLY_REFUNDED');
-  if (!paidCard) return "Nothing was charged, so there's nothing to refund.";
-  const amount = formatPrice(card.payment.totalCents - card.payment.refundedCents);
-  return `We'll refund ${amount} to the card in full.`;
-}
-
 export function CancelBringBackDialog({
   card,
   timeZone,
@@ -404,7 +393,9 @@ export function CancelBringBackDialog({
               onChange={(code) => setStepUp((value) => ({ ...value, code }))}
             />
           ) : null}
-          <OutcomeBox lines={[refundLine(card), bringBackOutcome(courierFirst)].filter(Boolean)} />
+          <OutcomeBox
+            lines={[bringBackRefundLine(card), bringBackOutcome(courierFirst)].filter(Boolean)}
+          />
         </>
       )}
     </ActionDialog>

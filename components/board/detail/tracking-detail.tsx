@@ -99,7 +99,7 @@ export function stuckFromSteps(
   waitSeconds = 300,
 ): StuckAction[] {
   if (steps.deliveredAt) return [];
-  if (steps.codeLockedAt) return ['confirmHandover', 'cancelUnreachable'];
+  if (steps.codeLockedAt) return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   if (steps.noAnswerSince && serverNowMs - Date.parse(steps.noAnswerSince) >= waitSeconds * 1000) {
     return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   }

@@ -7,7 +7,9 @@ import type {
   OpsMapCourier,
   OpsMapDelivery,
 } from '@/server/modules/tracking/schema';
+import type { FullBoardCard } from '@/server/modules/board/schema';
 import type { Tone } from '@/server/modules/board/timing';
+import { formatPrice } from '@/lib/format';
 import { deliveryLineWords } from '@/server/modules/tracking/text';
 
 /*
@@ -45,7 +47,8 @@ export function stuckActionsFor(
 ): StuckAction[] {
   const line = card.delivery;
   if (view !== 'full' || card.status !== 'PICKED_UP' || !line) return [];
-  if (line.state === 'locked') return ['confirmHandover', 'cancelUnreachable'];
+  // A50.1 (design 3.10): after a lock, all three, as after 5 minutes of no answer.
+  if (line.state === 'locked') return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   if ((line.state === 'noAnswer' || line.state === 'askedToWait') && line.tone === 'red') {
     return ['confirmHandover', 'askToWait', 'cancelUnreachable'];
   }
@@ -147,6 +150,28 @@ export const askedToWaitNotice = (courierShort: string, customerFirst: string | 
     : `Asked ${courierShort} to wait 5 more minutes.`;
 export const bringBackTitle = (orderNumber: string) =>
   `Cancel order ${orderNumber} and bring it back?`;
+/** "Cancel and bring it back": the refund line from the order's actual payment (F5 3.3's words). */
+export function bringBackRefundLine(
+  card:
+    | { view: 'kitchen' }
+    | {
+        view: 'full';
+        payment: Pick<
+          FullBoardCard['payment'],
+          'method' | 'status' | 'totalCents' | 'refundedCents' | 'sample'
+        >;
+      },
+): string {
+  if (card.view !== 'full') return '';
+  const paidCard =
+    card.payment.method === 'card' &&
+    (card.payment.status === 'PAID' || card.payment.status === 'PARTIALLY_REFUNDED');
+  if (!paidCard) return "Nothing was charged, so there's nothing to refund.";
+  // QA: a sample order has no card payment behind it.
+  if (card.payment.sample) return "Sample order: there's no card payment to refund.";
+  return `We'll refund ${formatPrice(card.payment.totalCents - card.payment.refundedCents)} to the card in full.`;
+}
+
 export const bringBackOutcome = (courierFirst: string) =>
   `We'll tell ${courierFirst} to bring the food back to Foodz Kitchen.`;
 export const UNREACHABLE_REASON = "Customer couldn't be reached";

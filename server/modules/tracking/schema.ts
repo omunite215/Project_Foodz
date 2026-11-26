@@ -300,6 +300,11 @@ export interface DeliveryLine {
   tone: 'neutral' | 'positive' | 'amber' | 'red';
   icon: 'truck' | 'pin' | 'signal-off' | 'door' | 'hourglass' | 'lock' | 'alert';
   spoken: string;
+  /**
+   * When the line turns by time alone (no location at 2 minutes, red at 10, the no-answer wait
+   * running out), so the board reads it again then rather than at its next 30 s refresh (QA).
+   */
+  changesAt?: string | null;
 }
 
 /** A49: one stuck delivery, oldest first on the board. */

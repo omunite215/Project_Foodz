@@ -80,6 +80,7 @@ import {
   CADENCE,
   cancelUnreachableInput,
   confirmHandoverInput,
+  FRESHNESS,
   handOverInput,
   pickedUpInput,
   PROBLEM_KINDS,
@@ -847,7 +848,9 @@ export async function pointAccepted(input: {
       );
     }
     if (work.almost) {
-      const minutes = Math.max(1, Math.ceil((row.routeDurationSec ?? 60) / 60));
+      // S4.1: it fires within about 200 m or 2 minutes, so never more than "about 2 minutes"
+      // (the stored estimate can be a refresh behind).
+      const minutes = Math.min(2, Math.max(1, Math.ceil((row.routeDurationSec ?? 60) / 60)));
       const notice = customerNotices.almostHere(
         row.orderNumber,
         firstNameOf(row.partnerName ?? 'Your courier'),
@@ -862,6 +865,10 @@ export async function pointAccepted(input: {
           link: `/orders/${row.orderId}`,
           order: { orderId: row.orderId, orderNumber: row.orderNumber, status: 'pickedUp' },
         }),
+      );
+      // QA S4.1, S3.4: her open page reads "almost there" and highlights the code at once.
+      await safely('changed', () =>
+        publishChanged({ orderId: row.orderId, status: 'PICKED_UP', version: row.version }, []),
       );
     }
     const coordinates = ROUTE_LINE.safeParse(row.routeGeojson).data?.coordinates ?? null;
@@ -1073,14 +1080,14 @@ function deliveryLineOf(
   live?: StoredPoint,
 ): DeliveryLine {
   const facts = lineFacts(row, now, live);
-  const state = deliveryLineState(facts, now, timings().noAnswerSeconds);
+  const waitSeconds = timings().noAnswerSeconds;
+  const state = deliveryLineState(facts, now, waitSeconds);
   const name = row.partnerName ?? 'Courier';
   const silent = facts.lastPointAt
     ? Math.floor((now.getTime() - Date.parse(facts.lastPointAt)) / 60_000)
     : 0;
-  return withLate(
-    row,
-    deliveryLineWords({
+  return withLate(row, {
+    ...deliveryLineWords({
       ...state,
       courierShort: shortName(viewer.isDemo ? maskName(name) : name),
       customerFirst: firstNameOf(row.contactName),
@@ -1097,7 +1104,31 @@ function deliveryLineOf(
         : 0,
       problem: facts.problem?.kind ?? null,
     }),
-  );
+    changesAt: lineChangesAt(state, facts, waitSeconds),
+  });
+}
+
+const after = (from: string | null, seconds: number) =>
+  from ? new Date(Date.parse(from) + seconds * 1000).toISOString() : null;
+
+/** When a line turns by time alone, by the same freshness rule as the customer's page. */
+function lineChangesAt(
+  state: Pick<DeliveryLine, 'state' | 'tone'>,
+  facts: DeliveryFacts,
+  waitSeconds: number,
+): string | null {
+  switch (state.state) {
+    case 'onTheWay':
+    case 'almost':
+      return after(facts.lastPointAt, FRESHNESS.staleSeconds);
+    case 'noLocation':
+      return state.tone === 'amber' ? after(facts.lastPointAt, FRESHNESS.redSeconds) : null;
+    case 'noAnswer':
+    case 'askedToWait':
+      return state.tone === 'amber' ? after(facts.noAnswerSince, waitSeconds) : null;
+    default:
+      return null;
+  }
 }
 
 /** A48, A49: the Out-for-delivery lines and the stuck-delivery list for the board. */
@@ -1539,6 +1570,13 @@ export async function startDemoDelivery(
         nextAt: verdict.nextAt,
       });
     await repo.insertDemoRun(ctx, { id: runId, endsAt, requestedBy: viewer.userId });
+    // B9: the demo run start is audited, with who asked.
+    await audit(ctx, {
+      action: 'tracking.demo-run-started',
+      targetType: 'demo_run',
+      targetId: runId,
+      data: { requestedBy: viewer.userId },
+    });
   });
   await inngest.send(
     demoDeliveryRequested.create(
