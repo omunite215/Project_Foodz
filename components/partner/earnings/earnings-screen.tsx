@@ -189,7 +189,7 @@ export function SuspendedEarnings({
   );
 }
 
-interface FrameParts {
+export interface FrameParts {
   header: ReactNode;
   pinned: ReactNode;
   tabBar: ReactNode;
@@ -228,7 +228,7 @@ function RetryButton({ onPress }: { onPress: () => void }) {
 const LOAD_FAILED = "Couldn't load your earnings.";
 
 /** P59.4: the summary failed. The cash card is never drawn from a guess. */
-function EarningsErrorFrame({ frame }: { frame: FrameParts }) {
+export function EarningsErrorFrame({ frame }: { frame: FrameParts }) {
   const router = useRouter();
   return (
     <PartnerFrame
@@ -299,7 +299,8 @@ function usePracticeGoal(practice: boolean) {
   return [goal, setGoal] as const;
 }
 
-function EarningsBody({
+/** The tab inside a given frame; exported for stories, which seed its reads. */
+export function EarningsBody({
   partnerKey,
   initial,
   view,

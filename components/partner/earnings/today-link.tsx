@@ -30,6 +30,11 @@ export function TodayLink({ partnerId, initial }: { partnerId: string; initial: 
   useChannelEvent(channel, 'delivery.changed', (event) => {
     if (event.status === 'DELIVERED' || event.status === 'CANCELLED') refresh();
   });
+  return <TodayLinkView today={today} />;
+}
+
+/** The line itself (also for stories): the words, the icon and a spoken ", see earnings". */
+export function TodayLinkView({ today }: { today: TodayLine }) {
   return (
     <Link
       href="/partner/earnings"

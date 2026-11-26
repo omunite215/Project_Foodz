@@ -8,6 +8,7 @@ import { announce } from '@/lib/announce';
 import {
   addMoneyNotice,
   dismissMoneyNotice,
+  type MoneyNotice,
   type MoneyNoticeKind,
   moneyNoticeOf,
   moneyNoticeStore,
@@ -43,6 +44,17 @@ export function MoneyNoticeSlot({
     const notice = moneyNoticeOf(event);
     if (notice && addMoneyNotice(notice)) announce(notice.text);
   });
+  return <MoneyNoticeList items={items} onEarnings={onEarnings} />;
+}
+
+/** The notices themselves (also for stories). */
+export function MoneyNoticeList({
+  items,
+  onEarnings,
+}: {
+  items: readonly MoneyNotice[];
+  onEarnings: boolean;
+}) {
   if (items.length === 0) return null;
   return (
     <div className="space-y-3">
