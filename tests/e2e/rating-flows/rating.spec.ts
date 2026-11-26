@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { Client } from 'pg';
 import { ACCOUNTS, DEMO_PASSWORD, signIn } from '../account/support';
 import { expect, expectNoAxeViolations, open, SAMPLE_PASSWORD, test } from '../admin/support';
@@ -58,6 +58,12 @@ const orderRow = (page: Page, number: string) =>
 
 const card = (page: Page) => page.locator('section#rate');
 
+/** Taps a star as a finger does: on its label (the radio itself is visually hidden). */
+async function pick(radio: Locator) {
+  await radio.locator('xpath=ancestor::label[1]').click();
+  await expect(radio).toBeChecked();
+}
+
 test('Priya rates her order from the list, sees her summary, edits it and finds it rated', async ({
   page,
 }, testInfo) => {
@@ -94,7 +100,7 @@ test('Priya rates her order from the list, sees her summary, edits it and finds 
   const dish = card(page)
     .getByRole('group', { name: /^Rate / })
     .first();
-  await dish.getByRole('radio', { name: '2 stars, Poor' }).check();
+  await pick(dish.getByRole('radio', { name: '2 stars, Poor' }));
   await expect(card(page).getByText('What could be better?')).toBeVisible();
   await card(page).getByRole('button', { name: 'Cold' }).click();
   await expect(card(page).getByRole('button', { name: 'Cold' })).toHaveAttribute(
@@ -102,7 +108,7 @@ test('Priya rates her order from the list, sees her summary, edits it and finds 
     'true',
   );
   // Crossing the 3 | 4 line swaps the set and clears the presses.
-  await dish.getByRole('radio', { name: '5 stars, Great' }).check();
+  await pick(dish.getByRole('radio', { name: '5 stars, Great' }));
   await expect(card(page).getByText('What was good?')).toBeVisible();
   await expect(card(page).getByRole('button', { name: 'Cold' })).toHaveCount(0);
   await card(page).getByRole('button', { name: 'Tasty' }).click();
@@ -125,7 +131,8 @@ test('Priya rates her order from the list, sees her summary, edits it and finds 
   const summary = page.getByRole('heading', { name: 'Your ratings' });
   await expect(summary).toBeFocused({ timeout: 15_000 });
   await expect(
-    page.getByText('Thanks, Priya. Every rating helps the kitchen.', { exact: true }),
+    // The card's line (the live region reads the same words once).
+    card(page).getByText('Thanks, Priya. Every rating helps the kitchen.', { exact: true }),
   ).toBeVisible();
   const list = page.getByRole('list', { name: 'Your ratings for order S1107' });
   await expect(list.getByText('5 stars, Great')).toBeAttached();
@@ -139,11 +146,12 @@ test('Priya rates her order from the list, sees her summary, edits it and finds 
   await expect(
     card(page).getByRole('textbox', { name: /^Comment about .* \(optional\)$/ }),
   ).toHaveValue('Crispy edges <b>and</b> plenty of lettuce.\nThanks!');
-  await card(page)
-    .getByRole('group', { name: /^Rate / })
-    .first()
-    .getByRole('radio', { name: '4 stars, Good' })
-    .check();
+  await pick(
+    card(page)
+      .getByRole('group', { name: /^Rate / })
+      .first()
+      .getByRole('radio', { name: '4 stars, Good' }),
+  );
   await card(page).getByRole('button', { name: 'Save changes' }).click();
   await expect(summary).toBeFocused({ timeout: 15_000 });
   await expect(list.getByText('4 stars, Good')).toBeAttached();
@@ -151,7 +159,7 @@ test('Priya rates her order from the list, sees her summary, edits it and finds 
   // S1.5: the same state after a reload; the thanks line was a moment, not a state.
   await open(page, `/orders/${priyaOrder}`);
   await expect(summary).toBeVisible();
-  await expect(page.getByText(/^Thanks, Priya/)).toHaveCount(0);
+  await expect(card(page).getByText(/^Thanks, Priya/)).toHaveCount(0);
 
   // S6.1: "Rated" joins the row's date line; "Rate" is gone.
   await open(page, '/account/orders');
@@ -194,11 +202,12 @@ test('the demo customer rates without comments, skips, and can still rate later'
   await open(page, `/orders/${danaOrder}`);
   await page.getByRole('button', { name: 'Rate this order' }).click();
   await expect(heading).toBeFocused();
-  await card(page)
-    .getByRole('group', { name: /^Rate / })
-    .first()
-    .getByRole('radio', { name: '4 stars, Good' })
-    .check();
+  await pick(
+    card(page)
+      .getByRole('group', { name: /^Rate / })
+      .first()
+      .getByRole('radio', { name: '4 stars, Good' }),
+  );
   await card(page).getByRole('button', { name: 'Send ratings' }).click();
   await expect(page.getByRole('heading', { name: 'Your ratings' })).toBeFocused({
     timeout: 15_000,
