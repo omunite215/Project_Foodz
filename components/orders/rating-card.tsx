@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, CircleAlert, Info, Lock, ShieldCheck, SquarePen, Star } from 'lucide-react';
+import { Check, CircleAlert, Info, Lock, ShieldCheck, Soup, SquarePen, Star } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { rateOrderAction, skipRatingAction } from '@/server/modules/ratings/actions';
 import type {
@@ -188,7 +188,19 @@ function DishRow(props: {
   });
   return (
     <RatingRowFrame
-      media={<DishPlate src={dish.imageUrl} sizes="48px" className="size-12" />}
+      media={
+        dish.imageUrl ? (
+          <DishPlate src={dish.imageUrl} sizes="48px" className="size-12 rounded-lg" />
+        ) : (
+          // Design 2.4: a 48 px rounded square, the same slot as a photo (review P10).
+          <span
+            aria-hidden
+            className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-neutral-7"
+          >
+            <Soup className="size-6 text-neutral-4" strokeWidth={1.5} />
+          </span>
+        )
+      }
       name={dishName(dish.title, dish.quantity)}
       word={fields.word}
       stars={fields.stars}
@@ -308,7 +320,8 @@ export function RatingCard({
     if (window.location.hash !== '#rate') return;
     const heading = rootRef.current?.querySelector<HTMLElement>('[data-focus]');
     if (!heading) return;
-    heading.scrollIntoView({
+    // The card itself comes into view, with its scroll-mt-6 margin above it (review P8).
+    (rootRef.current?.querySelector<HTMLElement>('#rate') ?? heading).scrollIntoView({
       behavior: prefersReducedMotion() ? 'instant' : 'smooth',
       block: 'start',
     });
