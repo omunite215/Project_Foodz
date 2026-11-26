@@ -144,8 +144,10 @@ test('Luis reads today, the week and the cash card, and they match his figures',
       await page.waitForTimeout(600);
       const header = await page.locator('header').first().boundingBox();
       const stuck = await focused.boundingBox();
+      // The status header stays at the top; the day header never slides under it (it sits right
+      // below it, or lower when the list is too short to scroll that far).
       expect(header?.y).toBe(0);
-      expect(Math.abs((stuck?.y ?? 0) - (header?.height ?? 0))).toBeLessThanOrEqual(1);
+      expect(stuck?.y ?? 0).toBeGreaterThanOrEqual((header?.height ?? 0) - 1);
     }
   } else {
     await expect(page.getByRole('button', { name: /^Previous week, / })).toHaveAttribute(

@@ -313,7 +313,8 @@ function RowView({
           {rowFirstLine(row, timeZone)}
         </span>
         {second ? (
-          <span className="mt-0.5 block text-body-5 text-muted-foreground [overflow-wrap:anywhere]">
+          // On a row's hover fill the grey line would drop under 4.5:1, so it darkens too.
+          <span className="mt-0.5 block text-body-5 text-muted-foreground group-hover:text-foreground [overflow-wrap:anywhere]">
             {second}
           </span>
         ) : null}
@@ -342,7 +343,7 @@ function RowView({
           onClick={(event) => onOpen(row, event.currentTarget)}
           className={cn(
             rowClass,
-            'hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
+            'group hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
           )}
         >
           {/* Read as one sentence from its parts; the visible lines stay visual. */}

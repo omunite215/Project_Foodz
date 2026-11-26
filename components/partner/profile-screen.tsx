@@ -251,12 +251,12 @@ export function ProfileScreen({
           >
             <Link
               href="/partner/profile/ratings"
-              className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted focus-visible:-outline-offset-2"
+              className="group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted focus-visible:-outline-offset-2"
             >
               <Star className="size-5 shrink-0 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block text-body-4 text-strong">Your ratings</span>
-                <span className="mt-0.5 block text-body-5 text-muted-foreground tabular-nums">
+                <span className="mt-0.5 block text-body-5 text-muted-foreground tabular-nums group-hover:text-foreground">
                   {ratingsRowLine(partner.rating)}
                 </span>
               </span>

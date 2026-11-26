@@ -112,7 +112,7 @@ export function WeekBlock({
                   if (!inactive) onDay(day.date);
                 }}
                 className={cn(
-                  'flex h-full w-full flex-col items-center justify-end gap-1.5 rounded-lg pb-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid',
+                  'group flex h-full w-full flex-col items-center justify-end gap-1.5 rounded-lg pb-1 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid',
                   inactive ? 'cursor-default' : 'hover:bg-muted',
                 )}
               >
@@ -123,7 +123,10 @@ export function WeekBlock({
                   aria-hidden
                   className={cn(
                     'text-caption',
-                    today ? 'font-semibold text-strong' : 'text-muted-foreground',
+                    // On the hover fill the grey label would drop under 4.5:1: it darkens too.
+                    today
+                      ? 'font-semibold text-strong'
+                      : cn('text-muted-foreground', !inactive && 'group-hover:text-foreground'),
                   )}
                 >
                   {dayLabel(day)}
