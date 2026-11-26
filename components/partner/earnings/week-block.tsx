@@ -107,7 +107,6 @@ export function WeekBlock({
             <li key={day.date} className="min-w-0">
               <button
                 type="button"
-                aria-label={dayButtonName(day)}
                 aria-disabled={inactive || undefined}
                 onClick={() => {
                   if (!inactive) onDay(day.date);
@@ -118,6 +117,8 @@ export function WeekBlock({
                 )}
               >
                 {marker}
+                {/* The name from its parts; the short label stays visual (WCAG 2.5.3). */}
+                <span className="sr-only">{dayButtonName(day)}</span>
                 <span
                   aria-hidden
                   className={cn(

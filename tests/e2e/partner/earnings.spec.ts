@@ -43,6 +43,12 @@ async function ready(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 30_000 });
 }
 
+/** Presses a segment's label, as a thumb does (the radio itself is visually hidden). */
+async function showPeriod(page: Page, name: 'Today' | 'Week') {
+  await page.getByRole('group', { name: 'Show' }).getByText(name, { exact: true }).click();
+  await expect(page.getByRole('radio', { name })).toBeChecked();
+}
+
 async function summaryOf(page: Page): Promise<Summary> {
   const response = await page.request.get('/api/v1/partner/earnings/summary');
   expect(response.ok()).toBe(true);
@@ -110,7 +116,7 @@ test('Luis reads today, the week and the cash card, and they match his figures',
   }
 
   // P54: the week, seven day buttons, in the address so reload keeps it.
-  await page.getByRole('radio', { name: 'Week' }).check();
+  await showPeriod(page, 'Week');
   await expect(page).toHaveURL(/view=week/);
   await expect(page.getByText('This week', { exact: true })).toBeVisible();
   await expect(page.getByRole('list', { name: /^Days, / }).getByRole('button')).toHaveCount(7);
@@ -135,7 +141,7 @@ test('Luis reads today, the week and the cash card, and they match his figures',
   // P55.2: a delivery's sheet opens from its row and gives focus back to it.
   const row = page.getByRole('button', { name: /^Order [\w-]+, \d{1,2}:\d{2} [ap]m, \$/ }).first();
   if (await row.isVisible().catch(() => false)) {
-    const name = (await row.getAttribute('aria-label')) ?? '';
+    const name = (await row.locator('.sr-only').textContent()) ?? '';
     const order = /^Order ([\w-]+),/.exec(name)?.[1] ?? '';
     await row.click();
     const sheet = page.getByRole('dialog', { name: `Order ${order}` });
@@ -173,7 +179,7 @@ test('Earnings in the dark theme, and Home links to it', async ({ page, context,
   await expect(page).toHaveURL(/\/partner\/earnings$/);
   await expect(page.locator('.partner')).toHaveClass(/\bdark\b/);
   await expectNoAxeViolationsAtEnd(page);
-  await page.getByRole('radio', { name: 'Week' }).check();
+  await showPeriod(page, 'Week');
   await expectNoAxeViolationsAtEnd(page);
 });
 
@@ -197,7 +203,7 @@ test('Luis sets a daily goal, sees the ring, then removes it', async ({ page }, 
   await custom.fill('40');
   await sheet.getByRole('button', { name: 'Save' }).click();
   await expect(sheet).toBeHidden();
-  await expect(page.getByText('Goal saved.')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Goal saved.')).toBeVisible();
   await expect(page.getByText('of $40 goal')).toBeVisible();
   await expect(
     page.getByText(/^Today \$[\d,.]+(, goal of \$40 reached| of your \$40 goal, \d+ percent)$/),
@@ -223,7 +229,7 @@ test('Lena has nothing yet: all square and the strolling empty state', async ({ 
   await expect(page.getByRole('button', { name: 'How this is worked out' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'No earnings yet' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Go to Home' })).toHaveAttribute('href', '/partner');
-  await page.getByRole('radio', { name: 'Week' }).check();
+  await showPeriod(page, 'Week');
   await expect(page.getByText('No deliveries this week.')).toBeVisible();
   await expectNoAxeViolationsAtEnd(page);
 });
@@ -264,7 +270,7 @@ test('Riley sees a practice week and a goal for this session only', async ({ pag
   await expect(page.getByText('of $50 goal')).toBeVisible();
   await open(page, '/partner/profile/ratings');
   await expect(page.getByText("Practice data. These aren't real ratings.")).toBeVisible();
-  await expect(page.getByText('126 ratings')).toBeVisible();
+  await expect(page.getByRole('main').getByText('126 ratings', { exact: true })).toBeVisible();
 });
 
 test('Victor, suspended, sees his earnings read-only', async ({ page }) => {

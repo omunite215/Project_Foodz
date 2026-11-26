@@ -339,14 +339,17 @@ function RowView({
       {sheet ? (
         <button
           type="button"
-          aria-label={deliveryRowName(row, timeZone)}
           onClick={(event) => onOpen(row, event.currentTarget)}
           className={cn(
             rowClass,
             'hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
           )}
         >
-          {content}
+          {/* Read as one sentence from its parts; the visible lines stay visual. */}
+          <span className="sr-only">{deliveryRowName(row, timeZone)}</span>
+          <span aria-hidden className="contents">
+            {content}
+          </span>
         </button>
       ) : (
         <div className={rowClass}>{content}</div>
