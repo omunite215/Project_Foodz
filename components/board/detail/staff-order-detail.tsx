@@ -80,6 +80,7 @@ import {
   TimeBlock,
 } from '../card-parts';
 import { CourierSection } from '../courier-parts';
+import { CustomerFeedbackSection } from './customer-feedback';
 import { stuckFromSteps, TrackingDetail } from './tracking-detail';
 import { BoardDialogs, type DialogKind, type DialogState } from '../dialogs/board-dialogs';
 import { StaffTimeline } from './staff-timeline';
@@ -878,6 +879,18 @@ export function StaffOrderDetailView({
           <PaymentSection detail={detail} level={level} timeZone={timeZone} />
         ) : null}
         {detail.view === 'full' ? <CustomerSection detail={detail} level={level} /> : null}
+        {detail.view === 'full' && detail.feedback ? (
+          // F9 A65: SUPPORT and ADMIN only; the kitchen's shape has no feedback at all.
+          <CustomerFeedbackSection
+            feedback={detail.feedback}
+            level={level}
+            timeZone={timeZone}
+            now={now}
+            offline={!online}
+            onChanged={refresh}
+            onSignedOut={onSignedOut}
+          />
+        ) : null}
         <StaffTimeline
           entries={detail.timeline}
           now={now}
