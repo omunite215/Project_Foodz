@@ -25,6 +25,7 @@ import { acceptOffer, getCurrentDelivery } from '@/server/modules/delivery/servi
 import { cityAndZip, firstNameOf, shortName, courierVehicle } from '@/server/modules/delivery/text';
 import { notify } from '@/server/modules/notifications/service';
 import { type OrderEffect, runEffects } from '@/server/modules/orders/effects';
+import { staffChannelOf } from '@/server/modules/orders/live';
 import {
   readPoint,
   readPoints,
@@ -172,7 +173,7 @@ async function publishChanged(
     version: facts.version,
     at: new Date().toISOString(),
   };
-  await publish(channels.ops, 'delivery.changed', data);
+  await publish(await staffChannelOf(facts.orderId), 'delivery.changed', data);
   await publish(channels.order(facts.orderId), 'delivery.changed', data);
   await Promise.all(
     partnerIds.map((id) =>
@@ -1084,7 +1085,7 @@ function deliveryLineOf(
   const state = deliveryLineState(facts, now, waitSeconds);
   const name = row.partnerName ?? 'Courier';
   const silent = facts.lastPointAt
-    ? Math.floor((now.getTime() - Date.parse(facts.lastPointAt)) / 60_000)
+    ? Math.max(0, Math.floor((now.getTime() - Date.parse(facts.lastPointAt)) / 60_000))
     : 0;
   return withLate(row, {
     ...deliveryLineWords({
@@ -1099,8 +1100,9 @@ function deliveryLineOf(
             .replace(' PM', ' pm')
         : null,
       silentMinutes: silent,
+      // The database's clock can run a moment ahead of this one: never "-1 min".
       waitedMinutes: row.noAnswerSince
-        ? Math.floor((now.getTime() - row.noAnswerSince.getTime()) / 60_000)
+        ? Math.max(0, Math.floor((now.getTime() - row.noAnswerSince.getTime()) / 60_000))
         : 0,
       problem: facts.problem?.kind ?? null,
     }),

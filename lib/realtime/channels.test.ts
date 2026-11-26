@@ -20,6 +20,7 @@ describe('parseChannel', () => {
     expect(parseChannel(channels.user(ID))).toEqual({ kind: 'user', id: ID });
     expect(parseChannel(channels.partner(ID))).toEqual({ kind: 'partner', id: ID });
     expect(parseChannel(channels.ops)).toEqual({ kind: 'ops' });
+    expect(parseChannel(channels.opsDemo)).toEqual({ kind: 'opsDemo' });
   });
 
   it.each([

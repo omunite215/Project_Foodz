@@ -16,6 +16,11 @@ export const channels = {
   /** Every order and courier, for the kitchen board and the live ops map. */
   ops: 'private-ops',
   /**
+   * F8 (L10.4): a demo run's orders and deliveries, for demo staff only. Real staff never hear
+   * about a demo run; the demo admin listens here as well as on `private-ops`.
+   */
+  opsDemo: 'private-ops-demo',
+  /**
    * F8: the courier's live position for one order, from pickup to delivery. The order's customer
    * only: never staff, never a partner (L2, L9; positions for staff go on the map channels).
    */
@@ -28,11 +33,12 @@ export const channels = {
 
 export type ParsedChannel =
   | { kind: 'order' | 'user' | 'partner' | 'track'; id: string }
-  | { kind: 'ops' | 'opsMap' | 'opsMapDemo' };
+  | { kind: 'ops' | 'opsDemo' | 'opsMap' | 'opsMapDemo' };
 
 /** Returns null for anything that is not exactly one of the channels above. */
 export function parseChannel(name: string): ParsedChannel | null {
   if (name === channels.ops) return { kind: 'ops' };
+  if (name === channels.opsDemo) return { kind: 'opsDemo' };
   if (name === channels.opsMap) return { kind: 'opsMap' };
   if (name === channels.opsMapDemo) return { kind: 'opsMapDemo' };
   const match = SCOPED.exec(name);

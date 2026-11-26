@@ -586,6 +586,20 @@ describe('the live map and the demo run (A46, A54, L10)', () => {
     expect((await migrator.demoRun.findUniqueOrThrow({ where: { id: runId } })).status).toBe(
       'done',
     );
+    // L10.4 (acceptance): the run's events reach demo staff only, never a real staff channel.
+    const aboutRun = mocks.publish.mock.calls.filter(
+      ([, , data]) => (data as { orderId?: string } | undefined)?.orderId === prepared!.orderId,
+    );
+    expect(aboutRun.some(([channel]) => channel === channels.opsDemo)).toBe(true);
+    expect(aboutRun.filter(([channel]) => channel === channels.ops)).toEqual([]);
+    expect(await canSubscribe(sub(morgan.userId, 'support'), channels.opsDemo)).toBe(false);
+    expect(await canSubscribe(sub(demoAdmin.userId, 'admin', true), channels.opsDemo)).toBe(true);
+    expect(await canSubscribe(sub(daniel.userId, 'admin'), channels.order(prepared!.orderId))).toBe(
+      false,
+    );
+    expect(
+      await canSubscribe(sub(demoAdmin.userId, 'admin', true), channels.order(prepared!.orderId)),
+    ).toBe(true);
     vi.unstubAllEnvs();
   });
 });

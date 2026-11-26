@@ -782,10 +782,17 @@ export function LiveMapPage({
     if (!writer.position(event)) throttler.maybeExecute();
   });
   useChannelEvent(mapChannel, 'demo.run-changed', () => throttler.maybeExecute());
-  useChannelEvent(opsChannel, 'delivery.changed', (event) => {
+  const onDeliveryChanged = (event: { at: string }) => {
     setLastUpdate(event.at);
     throttler.maybeExecute();
-  });
+  };
+  useChannelEvent(opsChannel, 'delivery.changed', onDeliveryChanged);
+  // F8 (L10.4): the demo run's deliveries come on the demo staff channel only.
+  useChannelEvent(
+    hydrated && demo ? channels.opsDemo : null,
+    'delivery.changed',
+    onDeliveryChanged,
+  );
   const connected = realtime.status === 'connected';
   const paused = realtime.status === 'reconnecting' && realtime.everConnected;
   const wasConnected = useRef(false);

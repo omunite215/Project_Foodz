@@ -75,7 +75,9 @@ import {
 } from '@/lib/board/text';
 import { addUnseen, clearUnseen, useUnseen } from '@/lib/board/unseen';
 import { onBoardReadFailure, useBoard, useBoardWriter } from '@/lib/data/board';
+import { channels } from '@/lib/realtime/channels';
 import { useChannelEvent } from '@/lib/realtime/client';
+import type { DeliveryChangedEvent, OrderChangedEvent } from '@/lib/realtime/events';
 import { isSitePath } from '@/lib/navigation';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { cn } from '@/lib/utils';
@@ -469,7 +471,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     return () => clearTimeout(timer);
   }, [backOnline]);
 
-  useChannelEvent(connection.channel, 'order.board-changed', (event) => {
+  // F8 (L10.4): the demo admin also hears demo runs, which real staff channels never carry.
+  const demoChannel = connection.channel && shell.user.isDemo ? channels.opsDemo : null;
+  const onBoardChanged = (event: OrderChangedEvent) => {
     setLastUpdate(event.at);
     const verdict = writer.verdict(event);
     if (verdict === 'ignore') return;
@@ -496,7 +500,9 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
     }
     // The card still exists: if it held focus, focus follows it to its new column.
     if (hadFocus) focusCardOrColumn(next.id, COLUMN_OF[next.status]);
-  });
+  };
+  useChannelEvent(connection.channel, 'order.board-changed', onBoardChanged);
+  useChannelEvent(demoChannel, 'order.board-changed', onBoardChanged);
 
   useChannelEvent(connection.channel, 'menu.availability-changed', (event) => {
     writer.markDish(event.dishId, !event.available);
@@ -547,11 +553,13 @@ export function OrderBoard({ initial }: { initial: BoardSnapshot }) {
       }),
     [writer],
   );
-  useChannelEvent(connection.channel, 'delivery.changed', (event) => {
+  const onDeliveryChanged = (event: DeliveryChangedEvent) => {
     setLastUpdate(event.at);
     if (writer.card(event.orderId)) courierBatcher.addItem(event.orderId);
     countThrottler.maybeExecute();
-  });
+  };
+  useChannelEvent(connection.channel, 'delivery.changed', onDeliveryChanged);
+  useChannelEvent(demoChannel, 'delivery.changed', onDeliveryChanged);
   // A35.1: a partner went online or offline; the chip reads the count at once, and a burst
   // of changes costs one read a second at most.
   const couriersCountThrottler = useMemo(
