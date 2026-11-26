@@ -15,6 +15,7 @@ import { prefersReducedMotion } from '@/lib/motion';
 import { clearDelivered, dispatchStore, handOverCode } from '@/lib/partner/dispatch';
 import {
   cashTickLabel,
+  codeRetry,
   codeTitle,
   DELIVERY_COPY,
   deliveredAnnouncement,
@@ -35,6 +36,7 @@ const SHEET =
   'inset-x-0 bottom-0 mx-auto max-h-[90dvh] max-w-md overflow-y-auto rounded-t-2xl bg-card px-4 pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] text-foreground data-[state=open]:slide-in-from-bottom-6 motion-reduce:data-[state=open]:slide-in-from-bottom-0';
 
 const RETRY_MS = 2_000;
+const LIMIT_TEXT = 'Too many tries for now. Call Foodz Kitchen.';
 const CLOSE_AFTER_MS = 8_000;
 
 /** One input drawn as four boxes; the caret's box is marked. */
@@ -105,6 +107,8 @@ type Message =
   | { kind: 'enterAll' }
   | { kind: 'wrong'; triesLeft: number }
   | { kind: 'limit' }
+  | { kind: 'offline' }
+  | { kind: 'unavailable' }
   | { kind: 'failed' }
   | null;
 
@@ -139,6 +143,8 @@ export function CodeSheet({
   const boxesRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Automatic re-sends of the current try (gate S8: only when it never left, at most 5). */
+  const retries = useRef(0);
   const messageId = useId();
   const cashErrorId = useId();
   const deliveryId = delivery?.deliveryId ?? null;
@@ -195,7 +201,8 @@ export function CodeSheet({
 
   const send = async (confirmFar: boolean) => {
     const outcome = await handOverCode(digits, cash, confirmFar);
-    if (outcome.kind === 'offline') {
+    if (codeRetry(outcome.kind, retries.current) === 'retry') {
+      retries.current += 1;
       setWaiting(true);
       retry.current = setTimeout(() => void send(confirmFar), RETRY_MS);
       return;
@@ -225,7 +232,17 @@ export function CodeSheet({
         return;
       case 'limit':
         setMessage({ kind: 'limit' });
-        announce(DELIVERY_COPY.locked, { assertive: true });
+        announce(LIMIT_TEXT, { assertive: true });
+        return;
+      case 'offline':
+        // Still no connection after the re-sends: say so and stop.
+        setMessage({ kind: 'offline' });
+        announce(DELIVERY_COPY.noConnection, { assertive: true });
+        return;
+      case 'unavailable':
+        // A server error or no answer in time: never sent again by itself (it may have counted).
+        setMessage({ kind: 'unavailable' });
+        announce(DELIVERY_COPY.cantCheck, { assertive: true });
         return;
       case 'gone':
         onOpenChange(false);
@@ -262,7 +279,18 @@ export function CodeSheet({
     setFar(null);
     setPending(true);
     setMessage(null);
+    retries.current = 0;
     void send(confirmFar);
+  };
+
+  /** Closing the sheet stops any re-send that was waiting for a connection. */
+  const stopRetrying = () => {
+    if (retry.current) clearTimeout(retry.current);
+    retry.current = null;
+    if (waiting) {
+      setWaiting(false);
+      setPending(false);
+    }
   };
 
   const messageText =
@@ -271,17 +299,23 @@ export function CodeSheet({
       : message?.kind === 'enterAll'
         ? DELIVERY_COPY.enterAll
         : message?.kind === 'limit'
-          ? 'Too many tries for now. Call Foodz Kitchen.'
-          : message?.kind === 'failed'
-            ? 'Something went wrong. Please try again.'
-            : null;
+          ? LIMIT_TEXT
+          : message?.kind === 'offline'
+            ? DELIVERY_COPY.noConnection
+            : message?.kind === 'unavailable'
+              ? DELIVERY_COPY.cantCheck
+              : message?.kind === 'failed'
+                ? 'Something went wrong. Please try again.'
+                : null;
 
   return (
     <>
       <Sheet
         open={showOpen}
         onOpenChange={(next) => {
-          if (!next && pending) return;
+          // It always closes (gate S8): a re-send waiting for a connection stops; an answer on
+          // its way still lands.
+          if (!next) stopRetrying();
           if (!next && delivered) clearDelivered();
           onOpenChange(next);
         }}
@@ -398,6 +432,11 @@ export function CodeSheet({
                     <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
                     {messageText}
                   </p>
+                ) : null}
+                {!locked && (message?.kind === 'unavailable' || message?.kind === 'limit') ? (
+                  <div className="mt-3">
+                    <CallKitchenLink phone={delivery.kitchen.phone} />
+                  </div>
                 ) : null}
               </div>
               <div className="mt-4">

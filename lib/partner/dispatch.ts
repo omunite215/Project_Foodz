@@ -152,14 +152,34 @@ const deviceOnline = () => {
   return onLine !== false;
 };
 
+/**
+ * Why a request got no answer (gate S8): `network` when `fetch` failed before any response (the
+ * request most likely never reached the server), `timeout` when the 8 s ran out (it may have).
+ */
+type Sent = { answer: Answer } | { failure: 'network' | 'timeout' };
+
 async function request(
   method: 'GET' | 'POST',
   path: string,
   body?: unknown,
   timeoutMs = 8_000,
 ): Promise<Answer | null> {
+  const sent = await send(method, path, body, timeoutMs);
+  return 'answer' in sent ? sent.answer : null;
+}
+
+async function send(
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+  timeoutMs = 8_000,
+): Promise<Sent> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   try {
     const common: RequestInit = {
       credentials: 'same-origin',
@@ -184,12 +204,14 @@ async function request(
       parsed = null;
     }
     return {
-      status: response.status,
-      body: parsed,
-      retryAfter: response.headers.get('retry-after'),
+      answer: {
+        status: response.status,
+        body: parsed,
+        retryAfter: response.headers.get('retry-after'),
+      },
     };
   } catch {
-    return null;
+    return { failure: timedOut ? 'timeout' : 'network' };
   } finally {
     clearTimeout(timer);
   }
@@ -849,12 +871,16 @@ export async function confirmPickUp(confirmFar: boolean): Promise<StepOutcome | 
   return 'failed';
 }
 
+/**
+ * `offline`: the code never left the phone, so it may be sent again. `unavailable`: a server
+ * error, or no answer in time (it may have been checked): never sent again by itself (gate S8).
+ */
 export type HandOverOutcome =
   | { kind: 'delivered'; pay: string }
   | { kind: 'wrong'; triesLeft: number }
   | { kind: 'locked' }
   | { kind: 'cash' }
-  | { kind: 'offline' | 'gone' | 'limit' | 'failed' };
+  | { kind: 'offline' | 'unavailable' | 'gone' | 'limit' | 'failed' };
 
 function handOverResult(body: unknown): HandOverResult | null {
   const outcome = field(body, 'outcome');
@@ -876,14 +902,17 @@ export async function handOverCode(
   if (!held) return { kind: 'gone' };
   if (!deviceOnline()) return { kind: 'offline' };
   handingOver = held.deliveryId;
-  const answer = await request('POST', deliveryPath(held.deliveryId, 'hand-over'), {
+  const sent = await send('POST', deliveryPath(held.deliveryId, 'hand-over'), {
     code,
     ...(held.payment.kind === 'cash' ? { cashCollected } : {}),
     ...(confirmFar ? { confirmFar: true } : {}),
   }).finally(() => {
     handingOver = null;
   });
-  if (!answer || answer.status >= 500) return { kind: 'offline' };
+  if ('failure' in sent) return { kind: sent.failure === 'network' ? 'offline' : 'unavailable' };
+  const answer = sent.answer;
+  // A 503 (the code fence is down, fail-closed) or any other server error.
+  if (answer.status >= 500) return { kind: 'unavailable' };
   if (answer.status === 200) {
     const result = handOverResult(answer.body);
     if (!result) return { kind: 'failed' };

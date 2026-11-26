@@ -1087,11 +1087,14 @@ model AppInstance {
 /// F8 (U4): the delivery code, encrypted for the customer's page and hashed for the check. Read
 /// only by the order's customer and the platform; written by the definer functions.
 model DeliveryCode {
-  deliveryId String   @id @map("delivery_id") @db.Uuid
-  codeEnc    String   @map("code_enc")
-  codeHash   String   @map("code_hash")
-  createdAt  DateTime @default(now()) @map("created_at")
-  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  deliveryId    String    @id @map("delivery_id") @db.Uuid
+  codeEnc       String    @map("code_enc")
+  codeHash      String    @map("code_hash")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  /// Gate S8: the last wrong try, so a re-send of it within seconds isn't counted again.
+  lastWrongHash String?   @map("last_wrong_hash")
+  lastWrongAt   DateTime? @map("last_wrong_at")
+  delivery      Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@map("delivery_codes")
 }

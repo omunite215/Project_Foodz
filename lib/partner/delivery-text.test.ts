@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   clockLeft,
+  CODE_RETRIES,
+  codeRetry,
   earnedOf,
   endingNotice,
   farDescription,
@@ -84,5 +86,15 @@ describe('partner delivery words (F8 design 2)', () => {
     expect(endingNotice('markedDelivered', '1042', null).text).toBe(
       'Foodz marked order 1042 as delivered.',
     );
+  });
+
+  it('re-sends a code only when it never left the phone, and at most 5 times (gate S8)', () => {
+    expect(CODE_RETRIES).toBe(5);
+    expect(codeRetry('offline', 0)).toBe('retry');
+    expect(codeRetry('offline', 4)).toBe('retry');
+    expect(codeRetry('offline', 5)).toBe('stop');
+    expect(codeRetry('unavailable', 0)).toBe('stop');
+    expect(codeRetry('wrong', 0)).toBe('stop');
+    expect(codeRetry('delivered', 0)).toBe('stop');
   });
 });

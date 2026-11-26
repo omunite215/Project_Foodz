@@ -384,6 +384,45 @@ describe('the order he holds', () => {
     expect(dispatchStore.state.delivered).toEqual({ orderNumber: '1042', pay: '$7.64' });
   });
 
+  it('re-sends a code only when it never left the phone (gate S8)', async () => {
+    const held = { ...delivery, status: 'PICKED_UP' as const, stage: 'delivering' as const };
+    dispatchStore.setState((state) => ({ ...state, delivery: held }));
+    const path = `POST /api/v1/partner/deliveries/${delivery.deliveryId}/hand-over`;
+    // A server error (the fail-closed code fence answers 503): can't check, never re-sent.
+    routes[path] = () => ({ status: 503, body: { code: 'UNAVAILABLE', message: 'Try later' } });
+    expect(await handOverCode('1111', true, false)).toEqual({ kind: 'unavailable' });
+    routes[path] = () => ({ status: 500, body: { code: 'INTERNAL', message: 'Oops' } });
+    expect(await handOverCode('1111', true, false)).toEqual({ kind: 'unavailable' });
+    // fetch failed before any answer: it never got there, so it may be sent again.
+    routes[path] = () => 'network';
+    expect(await handOverCode('1111', true, false)).toEqual({ kind: 'offline' });
+    // The phone knows it's offline: nothing is sent at all.
+    const before = calls.length;
+    vi.stubGlobal('navigator', { onLine: false });
+    expect(await handOverCode('1111', true, false)).toEqual({ kind: 'offline' });
+    expect(calls).toHaveLength(before);
+    vi.stubGlobal('navigator', { onLine: true });
+  });
+
+  it("treats no answer in 8 s as can't check, since the code may have counted (gate S8)", async () => {
+    const held = { ...delivery, status: 'PICKED_UP' as const, stage: 'delivering' as const };
+    dispatchStore.setState((state) => ({ ...state, delivery: held }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_path: string, init?: RequestInit) =>
+          new Promise<Response>((_, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    const answer = handOverCode('1111', true, false);
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(await answer).toEqual({ kind: 'unavailable' });
+  });
+
   it('shows his pay even when the delivered event beats the answer', async () => {
     const held = { ...delivery, status: 'PICKED_UP' as const, stage: 'delivering' as const };
     dispatchStore.setState((state) => ({ ...state, delivery: held }));

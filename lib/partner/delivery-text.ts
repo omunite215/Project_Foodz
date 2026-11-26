@@ -22,6 +22,8 @@ export const DELIVERY_COPY = {
   completeDelivery: 'Complete delivery',
   completing: 'Completing…',
   waitingConnection: 'Waiting for a connection…',
+  noConnection: "You're offline, so the code wasn't sent. Try again when you're back online.",
+  cantCheck: "We can't check codes right now. Call Foodz Kitchen.",
   codeLabel: 'Delivery code',
   codeName: 'Delivery code, 4 digits',
   enterAll: 'Enter all 4 digits.',
@@ -253,3 +255,16 @@ export const locationOffTitle = (orderNumber: string, customerFirst: string) =>
   `You still have order ${orderNumber}. Turn location back on so ${customerFirst} can see you coming.`;
 
 export const callName = (name: string, display: string) => `Call ${name}, ${display}`;
+
+// ------------------------------------------------------------------ re-sending a code (gate S8)
+
+/** A code that never left the phone is sent again every 2 s, at most this many times. */
+export const CODE_RETRIES = 5;
+
+/**
+ * After a hand-over answer: send again only when the code never left the phone (`offline`)
+ * and the retries aren't used up; anything else stops and says so.
+ */
+export function codeRetry(kind: string, retriesSoFar: number): 'retry' | 'stop' {
+  return kind === 'offline' && retriesSoFar < CODE_RETRIES ? 'retry' : 'stop';
+}

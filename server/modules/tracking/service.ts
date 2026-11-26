@@ -68,6 +68,7 @@ import type {
   TrackingRefusalDetails,
   TrackingRoute,
 } from './schema';
+import type { CheckedCode } from './code-fence';
 import {
   askToWaitInput,
   CADENCE,
@@ -267,8 +268,10 @@ const handOverOutcome = z.discriminatedUnion('outcome', [
   z.object({
     outcome: z.literal('wrong'),
     triesLeft: z.number(),
-    orderId: z.string(),
-    version: z.number(),
+    orderId: z.string().optional(),
+    version: z.number().optional(),
+    /** Gate S8: the same wrong code again within seconds (a re-send): not counted. */
+    repeat: z.boolean().optional(),
   }),
   z.object({
     outcome: z.literal('locked'),
@@ -571,6 +574,18 @@ export async function handOver(
   deliveryId: string,
   input: unknown,
 ): Promise<HandOverResult> {
+  return (await checkCode(actor, deliveryId, input)).result;
+}
+
+/**
+ * The code check with whether it told anything about the code (gate S9): the courier's route
+ * gives the `delivery.otp` point back when it didn't (a right code, a repeat not counted).
+ */
+export async function checkCode(
+  actor: UserActor,
+  deliveryId: string,
+  input: unknown,
+): Promise<CheckedCode> {
   const id = z.uuid().parse(deliveryId);
   const body = handOverInput.parse(input);
   await partnerOf(actor);
@@ -593,14 +608,18 @@ export async function handOver(
       const message = 'Tick this once you have the cash.';
       throw invalidInput(message, { cashCollected: [message] });
     }
-    case 'wrong':
-      await safely('changed', () =>
-        publishChanged(
-          { orderId: result.orderId, status: 'PICKED_UP', version: result.version },
-          [],
-        ),
-      );
-      return { outcome: 'wrong', triesLeft: result.triesLeft };
+    case 'wrong': {
+      const { orderId, version } = result;
+      if (!result.repeat && orderId && version !== undefined) {
+        await safely('changed', () =>
+          publishChanged({ orderId, status: 'PICKED_UP', version }, []),
+        );
+      }
+      return {
+        result: { outcome: 'wrong', triesLeft: result.triesLeft },
+        counts: !result.repeat,
+      };
+    }
     case 'locked':
       if (result.justLocked && result.orderId && result.version !== undefined) {
         const { orderId, version } = result;
@@ -609,7 +628,7 @@ export async function handOver(
           publishChanged({ orderId, status: 'PICKED_UP', version }, []),
         );
       }
-      return { outcome: 'locked' };
+      return { result: { outcome: 'locked' }, counts: true };
     default:
       break;
   }
@@ -625,7 +644,10 @@ export async function handOver(
       how: actor.isDemo ? 'demo' : 'code',
     });
   }
-  return { outcome: 'delivered', payWords: deliveredWords(result.orderNumber, result.payCents) };
+  return {
+    result: { outcome: 'delivered', payWords: deliveredWords(result.orderNumber, result.payCents) },
+    counts: false,
+  };
 }
 
 /** P43.1: a problem at the door; "isn't answering" starts the 5-minute clock. */

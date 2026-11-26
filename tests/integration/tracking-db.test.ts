@@ -163,7 +163,9 @@ describe('the delivery code (L6, P42, U4)', () => {
     const { deliveryId } = await assigned();
     await pickUp(luis, deliveryId);
     expect(await handOver(deliveryId, '1111')).toMatchObject({ outcome: 'wrong', triesLeft: 4 });
-    const together = await Promise.all([1, 2, 3, 4, 5].map(() => handOver(deliveryId, '2222')));
+    // Five different wrong codes (the same one again within seconds isn't counted, gate S8).
+    const wrongCodes = ['2222', '3333', '4444', '5555', '6666'];
+    const together = await Promise.all(wrongCodes.map((code) => handOver(deliveryId, code)));
     const outcomes = together.map((result) => result.outcome);
     expect(outcomes.filter((outcome) => outcome === 'locked')).toHaveLength(2);
     const row = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
@@ -173,7 +175,30 @@ describe('the delivery code (L6, P42, U4)', () => {
     const events = await migrator.orderEvent.findMany({
       where: { type: { in: ['otp-wrong', 'otp-locked'] } },
     });
-    expect(JSON.stringify(events)).not.toContain('2222');
+    for (const code of wrongCodes) expect(JSON.stringify(events)).not.toContain(code);
+  });
+
+  it("doesn't count a re-send of the same wrong code within seconds (gate S8)", async () => {
+    const { deliveryId } = await assigned();
+    await pickUp(luis, deliveryId);
+    expect(await handOver(deliveryId, '1111')).toMatchObject({ outcome: 'wrong', triesLeft: 4 });
+    expect(await handOver(deliveryId, '1111')).toMatchObject({
+      outcome: 'wrong',
+      triesLeft: 4,
+      repeat: true,
+    });
+    expect(await handOver(deliveryId, '2222')).toMatchObject({ outcome: 'wrong', triesLeft: 3 });
+    let row = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+    expect(row.otpWrongTries).toBe(2);
+    // After the window the same wrong code counts again.
+    await migrator.$executeRaw`UPDATE delivery_codes SET last_wrong_at = last_wrong_at - interval '20 seconds' WHERE delivery_id = ${deliveryId}::uuid`;
+    expect(await handOver(deliveryId, '2222')).toMatchObject({ outcome: 'wrong', triesLeft: 2 });
+    row = await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+    expect(row.otpWrongTries).toBe(3);
+    const events = await migrator.orderEvent.findMany({
+      where: { orderId: row.orderId, type: 'otp-wrong' },
+    });
+    expect(events).toHaveLength(3);
   });
 
   it('needs the cash tick, then delivers: order paid, code deleted, end time stamped', async () => {
