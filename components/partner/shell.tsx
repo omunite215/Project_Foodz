@@ -26,6 +26,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useSlowPending } from '@/components/forms/submit-button';
 import { announce } from '@/lib/announce';
+import { plainHeaderClass, statusHeaderClass } from '@/lib/partner/shell-classes';
 import { cn } from '@/lib/utils';
 
 /*
@@ -277,8 +278,6 @@ export function PartnerTabBar({ current }: { current: PartnerTab }) {
 
 // ------------------------------------------------------------------ headers (design 2.2)
 
-const HEADER_BASE = 'sticky top-0 z-30 pt-[env(safe-area-inset-top)] box-content';
-
 /** Links outside the app open in the browser when installed; they say so there. */
 function ExternalMark() {
   return (
@@ -363,12 +362,7 @@ export function PlainHeader({
   menu?: boolean;
 }) {
   return (
-    <header
-      className={cn(
-        HEADER_BASE,
-        'flex h-14 items-center gap-1 border-b border-border bg-background px-1',
-      )}
-    >
+    <header className={plainHeaderClass}>
       <HeaderStartButton start={start} />
       <p className="min-w-0 flex-1 truncate text-body-3 font-semibold text-strong">{title}</p>
       {menu ? <PartnerAccountMenu /> : <span aria-hidden className="size-12" />}
@@ -431,15 +425,7 @@ export function StatusHeader({
   const Icon = online ? Navigation : NavigationOff;
   const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '';
   return (
-    <header
-      className={cn(
-        HEADER_BASE,
-        'relative isolate flex h-14 items-center gap-3 px-4',
-        online
-          ? 'bg-status-online text-status-online-foreground'
-          : 'bg-status-offline text-status-offline-foreground',
-      )}
-    >
+    <header className={statusHeaderClass(online)}>
       <p className="flex items-center gap-2 text-body-2 font-semibold">
         <Icon className="size-6" aria-hidden />
         <span aria-hidden>{online ? 'Online' : 'Offline'}</span>

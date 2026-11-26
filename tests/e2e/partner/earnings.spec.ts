@@ -130,6 +130,23 @@ test('Luis reads today, the week and the cash card, and they match his figures',
     await ready(page);
     await expect(page.getByText('Last week', { exact: true })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Week' })).toBeChecked();
+    // P54.2 and review S1: a day bar moves focus to its header, which sticks right under the
+    // status header; the status header stays at the top, with no rows showing above the day.
+    const day = page
+      .getByRole('list', { name: /^Days, / })
+      .getByRole('button')
+      .and(page.locator(':not([aria-disabled])'))
+      .first();
+    if (await day.count()) {
+      await day.click();
+      const focused = page.locator('h3:focus');
+      await expect(focused).toBeFocused();
+      await page.waitForTimeout(600);
+      const header = await page.locator('header').first().boundingBox();
+      const stuck = await focused.boundingBox();
+      expect(header?.y).toBe(0);
+      expect(Math.abs((stuck?.y ?? 0) - (header?.height ?? 0))).toBeLessThanOrEqual(1);
+    }
   } else {
     await expect(page.getByRole('button', { name: /^Previous week, / })).toHaveAttribute(
       'aria-disabled',
