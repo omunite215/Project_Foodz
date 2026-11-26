@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, CircleAlert, Info, Lock, ShieldCheck, SquarePen, Star } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { rateOrderAction, skipRatingAction } from '@/server/modules/ratings/actions';
 import type {
   OrderRatingView,
@@ -68,8 +68,6 @@ const ACTIONS: RatingClient = {
 const EMPTY_ROW: RowDraft = { stars: null, tags: [], comment: '', commentOpen: false };
 const CARD =
   'mt-6 scroll-mt-6 rounded-2xl border border-neutral-6 bg-white p-5 focus:outline-none md:p-6';
-const HEADING_ID = 'rate-title';
-const ERROR_ID = 'rate-error';
 
 type FocusTarget = 'heading' | 'summary' | 'rateButton' | 'editButton' | 'closed' | 'firstStar';
 
@@ -98,6 +96,7 @@ function CourierAvatar({ firstName, photoUrl }: { firstName: string; photoUrl: s
 }
 
 function useRowFields({
+  idBase,
   rowKey,
   kind,
   subject,
@@ -106,24 +105,27 @@ function useRowFields({
   showError,
   onChange,
 }: {
+  /** The card's own id, so two cards on one screen never share ids or radio groups. */
+  idBase: string;
   rowKey: string;
   kind: 'dish' | 'courier';
   subject: RatingSubject;
   row: RowDraft;
   demo: boolean;
-  showError: boolean;
+  /** The empty-send line's id, while it shows. */
+  showError: string | null;
   onChange: (next: RowDraft) => void;
 }) {
-  // Tags and comments rise in only after her own pick on this visit.
+  // Tags rise in only after her own pick on this visit.
   const [pickedHere, setPickedHere] = useState(false);
-  const id = `${kind}-${rowKey}`;
+  const id = `${idBase}-${kind}-${rowKey}`;
   return {
     stars: (
       <StarInput
-        name={`rate-${rowKey}`}
+        name={`${idBase}-rate-${rowKey}`}
         subject={subject}
         value={row.stars}
-        describedBy={showError ? ERROR_ID : undefined}
+        describedBy={showError ?? undefined}
         onChange={(stars: Stars) => {
           setPickedHere(true);
           onChange({ ...row, stars, tags: keepTags(kind, stars, row.tags) });
@@ -156,12 +158,7 @@ function useRowFields({
             subject={subject}
             open={row.commentOpen}
             value={row.comment}
-            onOpen={() => {
-              onChange({ ...row, commentOpen: true });
-              requestAnimationFrame(() =>
-                document.querySelector<HTMLTextAreaElement>(`#comment-${id}`)?.focus(),
-              );
-            }}
+            onOpen={() => onChange({ ...row, commentOpen: true })}
             onChange={(comment) => onChange({ ...row, comment })}
           />
         )}
@@ -171,14 +168,16 @@ function useRowFields({
 }
 
 function DishRow(props: {
+  idBase: string;
   dish: RatingDishRow;
   row: RowDraft;
   demo: boolean;
-  showError: boolean;
+  showError: string | null;
   onChange: (next: RowDraft) => void;
 }) {
-  const { dish, row, demo, showError, onChange } = props;
+  const { idBase, dish, row, demo, showError, onChange } = props;
   const fields = useRowFields({
+    idBase,
     rowKey: dish.menuItemId,
     kind: 'dish',
     subject: { kind: 'dish', title: dish.title },
@@ -200,15 +199,17 @@ function DishRow(props: {
 }
 
 function CourierRow(props: {
+  idBase: string;
   courier: RatingCourierRow;
   photoUrl: string | null;
   row: RowDraft;
   demo: boolean;
-  showError: boolean;
+  showError: string | null;
   onChange: (next: RowDraft) => void;
 }) {
-  const { courier, photoUrl, row, demo, showError, onChange } = props;
+  const { idBase, courier, photoUrl, row, demo, showError, onChange } = props;
   const fields = useRowFields({
+    idBase,
     rowKey: 'courier',
     kind: 'courier',
     subject: { kind: 'courier', firstName: courier.firstName },
@@ -251,6 +252,11 @@ export function RatingCard({
   client?: RatingClient;
 }) {
   const online = useOnline();
+  const idBase = `rate${useId().replaceAll(/[^\w-]/g, '')}`;
+  const headingId = `${idBase}-title`;
+  const errorId = `${idBase}-error`;
+  const courierHeadingId = `${idBase}-courier`;
+  const offlineId = `${idBase}-offline`;
   const [draft, setDraft] = useState<RatingDraft>(() =>
     rating ? draftFrom(rating) : { dishes: {}, courier: null },
   );
@@ -474,7 +480,7 @@ export function RatingCard({
   } else if (mode === 'summary') {
     const closed = !editable;
     body = (
-      <section id="rate" aria-labelledby={HEADING_ID} className={CARD}>
+      <section id="rate" aria-labelledby={headingId} className={CARD}>
         <div className="flex items-start gap-3">
           <span
             aria-hidden
@@ -484,7 +490,7 @@ export function RatingCard({
           </span>
           <div className="min-w-0">
             <h2
-              id={HEADING_ID}
+              id={headingId}
               data-focus="summary"
               tabIndex={-1}
               className="font-heading text-title-2 leading-tight text-neutral-1 focus:outline-none"
@@ -547,9 +553,9 @@ export function RatingCard({
   } else {
     const busy = pending !== null;
     body = (
-      <section id="rate" aria-labelledby={HEADING_ID} className={CARD}>
+      <section id="rate" aria-labelledby={headingId} className={CARD}>
         <h2
-          id={HEADING_ID}
+          id={headingId}
           data-focus="heading"
           tabIndex={-1}
           className="font-heading text-title-1 leading-tight text-neutral-1 focus:outline-none"
@@ -557,7 +563,7 @@ export function RatingCard({
           {cardHeading(orderNumber)}
         </h2>
         {empty ? (
-          <p id={ERROR_ID} className="mt-2 flex gap-2 text-body-5 text-destructive">
+          <p id={errorId} className="mt-2 flex gap-2 text-body-5 text-destructive">
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
             {RATING_COPY.nothingPicked}
           </p>
@@ -567,10 +573,11 @@ export function RatingCard({
             {rating.dishes.map((dish) => (
               <DishRow
                 key={dish.menuItemId}
+                idBase={idBase}
                 dish={dish}
                 row={rowOf(dish.menuItemId)}
                 demo={rating.demo}
-                showError={empty}
+                showError={empty ? errorId : null}
                 onChange={(next) => setRow(dish.menuItemId, next)}
               />
             ))}
@@ -580,16 +587,20 @@ export function RatingCard({
             {RATING_COPY.whoReads}
           </p>
           {rating.courier ? (
-            <section aria-labelledby="rate-courier" className="mt-6 border-t border-neutral-6 pt-6">
-              <h3 id="rate-courier" className="text-body-3 font-semibold text-neutral-1">
+            <section
+              aria-labelledby={courierHeadingId}
+              className="mt-6 border-t border-neutral-6 pt-6"
+            >
+              <h3 id={courierHeadingId} className="text-body-3 font-semibold text-neutral-1">
                 {courierHeading(rating.courier.firstName)}
               </h3>
               <CourierRow
+                idBase={idBase}
                 courier={rating.courier}
                 photoUrl={courierPhotoUrl}
                 row={draft.courier ?? EMPTY_ROW}
                 demo={rating.demo}
-                showError={empty}
+                showError={empty ? errorId : null}
                 onChange={setCourier}
               />
               <p className="flex gap-2 text-body-5 text-neutral-3">
@@ -617,7 +628,7 @@ export function RatingCard({
             pendingLabel={isEdit ? RATING_COPY.saving : RATING_COPY.sending}
             blocked={!online}
             onBlockedPress={() => announce(RATING_COPY.offline)}
-            aria-describedby={online ? undefined : 'rate-offline'}
+            aria-describedby={online ? undefined : offlineId}
             className="w-full uppercase md:w-auto"
             onClick={() => void send()}
           >
@@ -652,7 +663,7 @@ export function RatingCard({
           )}
         </div>
         {online ? null : (
-          <p id="rate-offline" className="mt-2 text-body-5 text-neutral-3 md:text-right">
+          <p id={offlineId} className="mt-2 text-body-5 text-neutral-3 md:text-right">
             {RATING_COPY.offline}
           </p>
         )}

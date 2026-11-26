@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, MessageSquarePlus, Star } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { RATING_RULES, type Stars } from '@/server/modules/ratings/schema';
 import { Textarea } from '@/components/ui/textarea';
 import { useMotion } from '@/lib/motion';
@@ -197,13 +197,24 @@ export function CommentField({
   const fieldId = `comment-${id}`;
   const hintId = `${fieldId}-hint`;
   const counter = commentCounter(value.length);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  // The field replaces the button and takes focus; a saved comment just shows (2.6).
+  const pressed = useRef(false);
+  useEffect(() => {
+    if (!open || !pressed.current) return;
+    pressed.current = false;
+    fieldRef.current?.focus();
+  }, [open]);
   if (!open) {
     return (
       <button
         type="button"
         aria-expanded={false}
         aria-controls={fieldId}
-        onClick={onOpen}
+        onClick={() => {
+          pressed.current = true;
+          onOpen();
+        }}
         className="col-span-full inline-flex min-h-11 items-center gap-1.5 self-start justify-self-start text-button-2 font-medium text-neutral-1 underline underline-offset-4"
       >
         <MessageSquarePlus className="size-4" aria-hidden />
@@ -218,6 +229,7 @@ export function CommentField({
         {commentLabel(subject)}
       </label>
       <Textarea
+        ref={fieldRef}
         id={fieldId}
         rows={3}
         maxLength={RATING_RULES.commentMax}

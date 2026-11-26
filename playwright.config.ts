@@ -159,6 +159,27 @@ export default defineConfig({
             timeout: 180_000,
             use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
           },
+          // F9: rating a delivered order. It resets the board's fixtures and delivers two of them
+          // by hand, so it runs after everything else, at 1440 and at the design's 375 × 667.
+          {
+            name: 'rating-flows-1440',
+            testMatch: /rating-flows\/.*\.spec\.ts/,
+            dependencies: ['admin-timing-1440'],
+            timeout: 120_000,
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+          },
+          {
+            name: 'rating-flows-375',
+            testMatch: /rating-flows\/.*\.spec\.ts/,
+            dependencies: ['rating-flows-1440'],
+            timeout: 120_000,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 375, height: 667 },
+              isMobile: true,
+              hasTouch: true,
+            },
+          },
         ]
       : []),
   ],
