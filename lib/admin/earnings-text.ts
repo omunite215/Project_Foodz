@@ -382,6 +382,25 @@ export const payoutActionLabel = (amountCents: number | null) =>
 export const amountText = (cents: number | null) =>
   cents === null || cents <= 0 ? '' : (cents / 100).toFixed(2);
 
+/**
+ * The amount after the figures changed under an open dialog (review S3): an amount he typed
+ * stays; the untouched default follows the new figures, so it never asks for more than the
+ * partner now holds or is owed. Cash: what he owes, capped at what he holds; payout: the balance.
+ */
+export function amountAfterChange(
+  kind: 'cash' | 'adjust' | 'payout',
+  typed: string,
+  startText: string,
+  figures: { balanceCents: number; holdingCents: number },
+): string {
+  if (kind === 'adjust' || typed.trim() !== startText.trim()) return typed;
+  if (kind === 'payout') return amountText(figures.balanceCents);
+  const owed = Math.max(0, -figures.balanceCents);
+  return amountText(
+    owed > 0 && figures.holdingCents > 0 ? Math.min(owed, figures.holdingCents) : null,
+  );
+}
+
 // ------------------------------------------------------------------ ratings (3.10, 3.11)
 
 export const ratingsCount = (count: number) => plural(count, 'rating');

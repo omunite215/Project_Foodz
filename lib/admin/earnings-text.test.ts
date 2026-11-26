@@ -4,6 +4,7 @@ import type { StaffRatingRow } from '@/server/modules/ratings/schema';
 import {
   adjustActionLabel,
   adjustOutcome,
+  amountAfterChange,
   amountText,
   balanceHeading,
   balanceText,
@@ -386,5 +387,27 @@ describe("the order's feedback (design 3.16)", () => {
       'No ratings for cancelled orders',
     );
     expect(feedbackStateLine({ state: 'rated', closesAt: null }, TZ)).toBeNull();
+  });
+});
+
+describe('the amount after the figures changed (review S3)', () => {
+  it('moves the untouched default to the new figures', () => {
+    // Morgan recorded $50.00 from Diego while Daniel's dialog held $142.70.
+    expect(
+      amountAfterChange('cash', '142.70', '142.70', { balanceCents: -9_270, holdingCents: 11_480 }),
+    ).toBe('92.70');
+    expect(
+      amountAfterChange('payout', '67.05', '67.05', { balanceCents: 0, holdingCents: 0 }),
+    ).toBe('');
+    expect(
+      amountAfterChange('payout', '67.05', '67.05', { balanceCents: 7_005, holdingCents: 0 }),
+    ).toBe('70.05');
+  });
+
+  it('keeps what was typed, and never touches an adjustment', () => {
+    expect(
+      amountAfterChange('cash', '20', '142.70', { balanceCents: -9_270, holdingCents: 11_480 }),
+    ).toBe('20');
+    expect(amountAfterChange('adjust', '', '', { balanceCents: 100, holdingCents: 0 })).toBe('');
   });
 });

@@ -157,8 +157,12 @@ test('ADMIN adjusts Luis, then records the payout that clears the balance', asyn
   await expect(page.getByText('Recorded a payout of $121.38 to Luis M.').first()).toBeVisible({
     timeout: 15_000,
   });
+  // Review S3: when focus reaches the balance it already reads the new figure, at once.
+  const balance = page.locator('[data-balance-heading]');
+  await expect(balance).toBeFocused({ timeout: 15_000 });
+  await expect(balance).toHaveText('All square', { timeout: 500 });
   // The button gives way to its line; focus went to the balance (design 3.9).
-  await expect(page.getByText('All square', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('All square', { exact: true })).toBeVisible();
   await expect(page.getByText("Foodz doesn't owe Luis anything right now.")).toBeVisible();
   await expect(page.getByRole('button', { name: 'Record payout' })).toHaveCount(0);
   await expect(page.locator('[data-balance-heading]')).toBeFocused();
@@ -195,6 +199,8 @@ test('SUPPORT excludes a rating with a reason, then includes it again', async ({
   await expect(
     page.getByText(/^Excluded · About the food, not the courier · /).first(),
   ).toBeVisible();
+  // Review S7: the summary follows the exclusion without a reload (8 ratings become 7).
+  await expect(page.getByText('7 ratings', { exact: true })).toBeVisible({ timeout: 5_000 });
   const include = page.getByRole('button', { name: /^Include again: 3 stars, .+, order S2205$/ });
   await expect(include).toBeFocused();
 
@@ -208,4 +214,5 @@ test('SUPPORT excludes a rating with a reason, then includes it again', async ({
   await expect(
     page.getByRole('button', { name: /^Exclude from average: 3 stars, .+, order S2205$/ }),
   ).toBeFocused();
+  await expect(page.getByText('8 ratings', { exact: true })).toBeVisible({ timeout: 5_000 });
 });

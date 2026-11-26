@@ -45,6 +45,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { type ActionFailure, callAction } from '@/lib/action-result';
 import {
   adjustActionLabel,
+  amountAfterChange,
   type AdjustDirection,
   adjustOutcome,
   adjustTitle,
@@ -132,7 +133,10 @@ export interface MoneyDialogProps {
   onClose: () => void;
   /** Where focus goes on close: the opener, or the balance heading once the opener has gone. */
   onCloseFocus: () => boolean;
-  onDone: (result: MoneyActionResult) => void;
+  /** After a send: the page refetches before this resolves, then the dialog closes (review S3). */
+  onDone: (result: MoneyActionResult) => Promise<void> | void;
+  /** The figures changed under the dialog: the page behind refetches too (A67.2). */
+  onChanged?: () => Promise<unknown> | void;
   onSignedOut: () => void;
   /** Opens in a known state: an answer already shown, or the form already sent (stories). */
   start?: MoneyDialogStart;
@@ -544,6 +548,7 @@ function MoneyForm({
   onClose,
   onCloseFocus,
   onDone,
+  onChanged,
   onSignedOut,
   start,
 }: MoneyDialogProps & { opening: MoneyDialogOpening; title: string }) {
@@ -633,12 +638,13 @@ function MoneyForm({
       setServerErrors({});
       setAlert(null);
       const outcome = await sending;
-      setPending(false);
       if (outcome.ok) {
         showBoardNotice(outcome.data.boardNotice);
-        onDone(outcome.data);
+        // Still pending while the page behind refetches, so focus never lands on an old figure.
+        await onDone(outcome.data);
         return;
       }
+      setPending(false);
       handleFailure(outcome.error);
     },
   });
@@ -652,6 +658,7 @@ function MoneyForm({
         return;
       case 'LEDGER_CHANGED':
         if (isChanged(details)) {
+          void onChanged?.();
           if (details.closeOnly) {
             setCloseOnlyText(details.words);
             announce(details.words);
@@ -663,6 +670,10 @@ function MoneyForm({
             balanceCents: details.balanceCents,
             holdingCents: details.holdingCents,
           });
+          form.setFieldValue(
+            'amount',
+            amountAfterChange(kind, form.state.values.amount, defaults.amount, details),
+          );
           showAlert({ tone: 'warning', text: details.words });
           return;
         }

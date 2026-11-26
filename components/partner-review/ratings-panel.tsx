@@ -205,7 +205,10 @@ export function PartnerRatingsPanel({
           : data,
       );
     }
-    void queryClient.invalidateQueries({ queryKey: ratingsKey(partnerId) });
+    // The summary, spread and tags move with an exclusion (A58.2, review S7): read every page
+    // again now, and the list's row for this partner too.
+    void queryClient.refetchQueries({ queryKey: ratingsKey(partnerId), type: 'all' });
+    void queryClient.invalidateQueries({ queryKey: ['partners', 'list'] });
   };
 
   const heading = (

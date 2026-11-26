@@ -337,13 +337,18 @@ export function PartnerEarningsPanel({
     if (page) mirrorParams(next, page.week);
   };
 
-  const done = (kind: MoneyDialogKind, result: MoneyActionResult) => {
+  /** The balance, tiles and ledger read again (A67.2, 3.6 to 3.8). */
+  const refetchPage = () => queryClient.invalidateQueries({ queryKey: earningsKey(partnerId) });
+
+  const done = async (kind: MoneyDialogKind, result: MoneyActionResult) => {
     // The opener goes when its action no longer applies (a payout to $0.00, all cash in).
     focusBalance.current =
       (kind === 'payout' && result.balanceCents <= 0) ||
       (kind === 'cash' && result.holdingCents <= 0);
+    // The new figures land before the dialog closes, so focus reads them (review S3).
+    await refetchPage().catch(() => undefined);
     setDialog(null);
-    void queryClient.invalidateQueries({ queryKey: ['partners'] });
+    void queryClient.invalidateQueries({ queryKey: ['partners', 'list'] });
   };
 
   const heading = (
@@ -455,6 +460,7 @@ export function PartnerEarningsPanel({
             return true;
           }}
           onDone={(result) => done(dialog, result)}
+          onChanged={refetchPage}
           onSignedOut={onSignedOut}
         />
       ) : null}
