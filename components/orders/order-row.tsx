@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Check,
   ChevronRight,
@@ -8,13 +10,15 @@ import {
   type LucideIcon,
   PackageCheck,
   ShoppingBag,
+  Star,
   TimerOff,
   TriangleAlert,
   Truck,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import type { Ref } from 'react';
+import { type Ref, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
 import type { OrderStatusWord, OrderSummary } from '@/server/modules/orders/schema';
 import { formatPrice } from '@/lib/format';
 import {
@@ -26,6 +30,7 @@ import {
   chipWord,
 } from '@/lib/order-text';
 import { arrivalText } from '@/lib/order-progress';
+import { RATING_COPY, rateHref, rateOrderName } from '@/lib/rating-text';
 import { cn } from '@/lib/utils';
 import { OrderAgainButton } from './use-reorder';
 
@@ -88,7 +93,21 @@ export function OrderRow({
   timeZone: string;
   linkRef?: Ref<HTMLAnchorElement>;
 }) {
-  const date = `${orderDateText(order.createdAt, now, timeZone)} · ${methodWord(order.method)}`;
+  // F9 (S6.1): "Rated" joins the date line, so the link's description says it too.
+  const date = [
+    orderDateText(order.createdAt, now, timeZone),
+    methodWord(order.method),
+    ...(order.rating === 'rated' ? [RATING_COPY.rated] : []),
+  ].join(' · ');
+  const rate = order.rating === 'rate';
+  const rowRef = useRef<HTMLDivElement>(null);
+  const rateHadFocus = useRef(false);
+  // S6.2: "Rate" leaving while focused (rated in another tab) sends focus to the row's link.
+  useEffect(() => {
+    if (rate || !rateHadFocus.current) return;
+    rateHadFocus.current = false;
+    rowRef.current?.querySelector<HTMLAnchorElement>('[data-row-link]')?.focus();
+  }, [rate]);
   const dishes = dishesText(order.dishes, order.moreCount);
   // F5 design 7.2: the order page's arrival on rows in progress.
   const arrival = arrivalText(order.arrival, null, timeZone);
@@ -99,11 +118,13 @@ export function OrderRow({
   // everything on one line from 1280 px.
   return (
     <div
+      ref={rowRef}
       data-order-row
       className="group relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-2xl border border-neutral-6 bg-white p-4 transition-colors has-[a:hover]:border-neutral-5 has-[a:hover]:bg-neutral-8 md:p-5 xl:grid-cols-[9.5rem_minmax(0,1fr)_7.5rem_10.5rem_8.5rem] xl:items-center xl:gap-x-6"
     >
       <Link
         ref={linkRef}
+        data-row-link=""
         href={orderHref(order.id)}
         aria-describedby={metaId}
         className="col-start-1 row-start-1 block rounded-md text-body-3 font-semibold text-neutral-1 tabular-nums after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-offset-4"
@@ -145,7 +166,36 @@ export function OrderRow({
           {order.moneyFlag ? <MoneyChip flag={order.moneyFlag} /> : null}
         </span>
       </div>
-      {order.reorderable ? (
+      {rate ? (
+        // F9 design 2.13: below 1280 px "Rate" and "Order again" get the row's last line (the
+        // total and both don't fit at 375); from 1280 px they stack in the action column.
+        <div className="relative z-10 col-span-2 row-start-5 mt-3 flex flex-wrap items-start justify-end gap-2 xl:col-span-1 xl:col-start-5 xl:row-span-2 xl:row-start-1 xl:mt-0 xl:flex-col xl:flex-nowrap xl:items-stretch xl:self-center">
+          <Button asChild variant="outline" size="touch" className="bg-white">
+            <Link
+              href={rateHref(order.id)}
+              aria-label={rateOrderName(order.number)}
+              onFocus={() => {
+                rateHadFocus.current = true;
+              }}
+              onBlur={() => {
+                rateHadFocus.current = false;
+              }}
+            >
+              <Star className="size-4" aria-hidden />
+              {RATING_COPY.rate}
+            </Link>
+          </Button>
+          {order.reorderable ? (
+            <OrderAgainButton
+              orderId={order.id}
+              number={order.number}
+              variant="outline"
+              onRow
+              className="xl:items-stretch"
+            />
+          ) : null}
+        </div>
+      ) : order.reorderable ? (
         <OrderAgainButton
           orderId={order.id}
           number={order.number}

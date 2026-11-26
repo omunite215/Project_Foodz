@@ -12,7 +12,7 @@ import {
 
 const event = (
   orderId: string,
-  status: 'accepted' | 'ready' | 'cancelled' = 'accepted',
+  status: 'accepted' | 'ready' | 'cancelled' | 'rate' = 'accepted',
   id = `${orderId}-${status}`,
 ): NotificationCreatedEvent => ({
   id,
@@ -34,6 +34,14 @@ describe('order notices (F5 design 9)', () => {
     });
     // Cancellations stay until dismissed.
     expect(noticeFrom(event('1042', 'cancelled'))?.leftMs).toBeNull();
+  });
+
+  it('shows the rating reminder like a step notice, off its order page and the list (F9 S4)', () => {
+    const reminder = noticeFrom(event('1042', 'rate'));
+    expect(reminder).toMatchObject({ status: 'rate', leftMs: NOTICE_VISIBLE_MS });
+    expect(noticeHiddenOn('/orders/1042', '1042')).toBe(true);
+    expect(noticeHiddenOn('/account/orders', '1042')).toBe(true);
+    expect(noticeHiddenOn('/menu', '1042')).toBe(false);
   });
 
   it('keeps one notice per order, replacing its text in place', () => {
