@@ -207,6 +207,8 @@ const STAFF_ROLES: readonly BoardStaffRole[] = ['kitchen', 'support', 'admin'];
 const SYSTEM_SOURCES = new Set(['system', 'expiry-job', 'refund-job']);
 const STRIPE_SOURCES = new Set(['stripe', 'check']);
 const STRIPE_EVENTS = new Set(['refunded', 'dispute-opened', 'dispute-closed']);
+/** Hand-overs staff confirm for a courier at the door (A50): their notes are about the door. */
+const DOOR_REASONS = new Set<unknown>(['courier-app-down', 'customer-confirmed']);
 
 /** The person or system behind an event, from its snapshot (`by`) or its source (`actor`). */
 export function actorOf(event: Pick<EventFacts, 'type' | 'data'>): TimelineActor {
@@ -492,7 +494,9 @@ export function timelineOf(
             reason: staff ? 'staff' : data.actor === 'customer' ? 'customer' : 'payment-expired',
             code: staff ? oneOf(CANCEL_CODES, data.reason) : null,
             dishes: staff ? dishTitles(lines, stringList(data.lineIds)) : [],
-            note: staff ? note : null,
+            // F8 (gate S13): A50's "Cancel and bring it back" note is about the door or the
+            // customer, which the kitchen never sees.
+            note: staff && !(kitchen && data.reason === 'customer-unreachable') ? note : null,
           },
         ];
       }
@@ -520,9 +524,11 @@ export function timelineOf(
             ...base,
             type: 'delivered',
             reason: oneOf(HANDOVER_REASONS, data.reason),
-            // F8 (A47, gate S12): a staff hand-over's note is about the door or the customer,
-            // which the kitchen never sees.
-            note: kitchen && data.actor === 'staff' ? null : note,
+            // F8 (A47, gates S12 and S13): a staff hand-over's note is about the door or the
+            // customer, which the kitchen never sees. ADMIN's Mark delivered while a courier holds
+            // the order (F5's handOver) writes no actor, so its reasons are checked too.
+            note:
+              kitchen && (data.actor === 'staff' || DOOR_REASONS.has(data.reason)) ? null : note,
             cashCollectedCents: kitchen ? null : count(data.cashCollectedCents),
           },
         ];

@@ -82,6 +82,9 @@ const viewer = (role: Viewer['role']): Viewer => ({ userId: 'u1', role, isDemo: 
 const deliveredRow = (role: Viewer['role']) =>
   timelineOf(viewer(role), order, [], [staffDelivered]).find((row) => row.type === 'delivered');
 
+const rowOf = (role: Viewer['role'], event: EventFacts) =>
+  timelineOf(viewer(role), order, [], [event]).find((row) => row.type === event.type);
+
 describe('a staff hand-over on the timeline (gate S12)', () => {
   it("never shows the kitchen the staff member's note about the door", () => {
     const row = deliveredRow('kitchen');
@@ -95,6 +98,46 @@ describe('a staff hand-over on the timeline (gate S12)', () => {
     });
     expect(deliveredRow('admin')).toMatchObject({
       note: 'Left with the concierge at the front desk',
+    });
+  });
+});
+
+describe('the other door notes on the timeline (gate S13)', () => {
+  /** A50 "Cancel and bring it back": staff couldn't reach the customer at the door. */
+  const unreachable: EventFacts = {
+    ...staffDelivered,
+    id: '0193a000-0000-7000-8000-000000000202',
+    type: 'cancelled',
+    toStatus: 'CANCELLED',
+    data: {
+      actor: 'staff',
+      reason: 'customer-unreachable',
+      note: 'Buzzer at 4B broken, no answer on the phone',
+      by: { name: 'Morgan Diaz', role: 'support' },
+    },
+  };
+  /** ADMIN's Mark delivered while a courier holds the order: F5's handOver writes no actor. */
+  const adminHandOver: EventFacts = {
+    ...staffDelivered,
+    id: '0193a000-0000-7000-8000-000000000203',
+    data: {
+      reason: 'courier-app-down',
+      note: 'Courier says he left it at the side door',
+      by: { name: 'Avery Lee', role: 'admin' },
+    },
+  };
+
+  it('never shows the kitchen the note on a "Cancel and bring it back"', () => {
+    expect(rowOf('kitchen', unreachable)).toMatchObject({ type: 'cancelled', note: null });
+    expect(rowOf('support', unreachable)).toMatchObject({
+      note: 'Buzzer at 4B broken, no answer on the phone',
+    });
+  });
+
+  it("never shows the kitchen the note on ADMIN's hand-over for a courier", () => {
+    expect(rowOf('kitchen', adminHandOver)).toMatchObject({ type: 'delivered', note: null });
+    expect(rowOf('admin', adminHandOver)).toMatchObject({
+      note: 'Courier says he left it at the side door',
     });
   });
 });
