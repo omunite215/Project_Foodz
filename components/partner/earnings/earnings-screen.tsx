@@ -386,10 +386,13 @@ export function EarningsBody({
     writeAddress(nextPeriod, nextWeek);
     pendingAnnouncement.current =
       nextPeriod === 'today' ? 'Today' : weekTitle(nextWeek, currentWeek);
-    // A content swap, not travel: the window jumps to the block.
-    requestAnimationFrame(() =>
-      document.getElementById('period')?.scrollIntoView({ block: 'start', behavior: 'auto' }),
-    );
+    // A content swap, not travel: when he has scrolled past it, the window jumps to the block.
+    requestAnimationFrame(() => {
+      const block = document.getElementById('period');
+      if (block && block.getBoundingClientRect().top < 64) {
+        block.scrollIntoView({ block: 'start', behavior: 'auto' });
+      }
+    });
   };
 
   const saveGoal: SaveGoal = async (cents) => {
