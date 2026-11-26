@@ -2,7 +2,7 @@
 
 import { AlarmClock, Banknote, Ellipsis, Star, Wallet } from 'lucide-react';
 import Link from 'next/link';
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import type { PartnerListMoney } from '@/server/modules/earnings/schema';
 import type { PartnerListQuery, PartnerListRow } from '@/server/modules/partners/review-schema';
 import { Button } from '@/components/ui/button';
@@ -105,7 +105,15 @@ export function CashBlock({
         )}
         aria-hidden
       />
-      <span aria-hidden>{words.text}</span>
+      {/* Each part stays whole ("Owes $142.70", "since Nov 17"); it wraps after the dot (P3). */}
+      <span aria-hidden>
+        {words.text.split(' · ').map((part, index) => (
+          <Fragment key={part}>
+            {index > 0 ? ' · ' : null}
+            <span className="whitespace-nowrap">{part}</span>
+          </Fragment>
+        ))}
+      </span>
       <span className="sr-only">{words.spoken}</span>
     </span>
   );

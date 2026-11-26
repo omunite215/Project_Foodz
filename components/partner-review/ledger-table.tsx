@@ -349,17 +349,17 @@ function RangeForm({
         <Button type="submit" variant="outline" size="touch" className="bg-white">
           Show
         </Button>
-        {isThisWeek ? null : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="touch"
-            className="text-neutral-1 underline underline-offset-4"
-            onClick={() => onShow({ from: week.start, to: week.end })}
-          >
-            This week
-          </Button>
-        )}
+        {/* Always there (design 3.5, review P7): it resets the range to this week. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="touch"
+          aria-current={isThisWeek ? 'true' : undefined}
+          className="text-neutral-1 underline underline-offset-4"
+          onClick={() => onShow({ from: week.start, to: week.end })}
+        >
+          This week
+        </Button>
       </div>
     </form>
   );

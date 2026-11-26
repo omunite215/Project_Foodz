@@ -6,6 +6,7 @@ import {
   adjustOutcome,
   amountAfterChange,
   amountText,
+  previewAmount,
   balanceHeading,
   balanceText,
   cashActionLabel,
@@ -409,5 +410,22 @@ describe('the amount after the figures changed (review S3)', () => {
       amountAfterChange('cash', '20', '142.70', { balanceCents: -9_270, holdingCents: 11_480 }),
     ).toBe('20');
     expect(amountAfterChange('adjust', '', '', { balanceCents: 100, holdingCents: 0 })).toBe('');
+  });
+});
+
+describe('the dialog preview follows a valid amount only (review P2)', () => {
+  const diego = { balanceCents: -14_270, holdingCents: 16_480 };
+  it('previews an amount the action would take', () => {
+    expect(previewAmount('cash', '142.70', diego)).toBe(14_270);
+    expect(previewAmount('adjust', '3', diego)).toBe(300);
+    expect(previewAmount('payout', '67.05', { balanceCents: 6_705, holdingCents: 0 })).toBe(6_705);
+  });
+
+  it('previews nothing over the limits or for anything else', () => {
+    expect(previewAmount('cash', '200', diego)).toBeNull();
+    expect(previewAmount('adjust', '500.01', diego)).toBeNull();
+    expect(previewAmount('payout', '67.06', { balanceCents: 6_705, holdingCents: 0 })).toBeNull();
+    expect(previewAmount('cash', '0', diego)).toBeNull();
+    expect(previewAmount('cash', '12.505', diego)).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import type {
   PartnerListMoney,
   PayoutMethod,
 } from '@/server/modules/earnings/schema';
-import { EARNINGS_LIMITS } from '@/server/modules/earnings/schema';
+import { EARNINGS_LIMITS, parseAmountText } from '@/server/modules/earnings/schema';
 import {
   entryWords,
   METHOD_WORDS,
@@ -381,6 +381,23 @@ export const payoutActionLabel = (amountCents: number | null) =>
 /** Cents to the amount field's starting text: 14270 → "142.70". */
 export const amountText = (cents: number | null) =>
   cents === null || cents <= 0 ? '' : (cents / 100).toFixed(2);
+
+/**
+ * The amount a dialog previews, or null while it isn't one the action would take (review P2):
+ * the outcome line and the button's amount follow a valid amount only (design 3.6 to 3.8).
+ */
+export function previewAmount(
+  kind: 'cash' | 'adjust' | 'payout',
+  text: string,
+  figures: { balanceCents: number; holdingCents: number },
+): number | null {
+  const cents = parseAmountText(text);
+  if (cents === null || cents < 1) return null;
+  if (kind === 'cash' && cents > figures.holdingCents) return null;
+  if (kind === 'adjust' && cents > EARNINGS_LIMITS.adjustMaxCents) return null;
+  if (kind === 'payout' && cents > Math.max(0, figures.balanceCents)) return null;
+  return cents;
+}
 
 /**
  * The amount after the figures changed under an open dialog (review S3): an amount he typed

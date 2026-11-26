@@ -46,6 +46,7 @@ import { type ActionFailure, callAction } from '@/lib/action-result';
 import {
   adjustActionLabel,
   amountAfterChange,
+  previewAmount,
   type AdjustDirection,
   adjustOutcome,
   adjustTitle,
@@ -751,8 +752,7 @@ function MoneyForm({
     setServerErrors((current) => (current[field] ? { ...current, [field]: '' } : current));
 
   // The outcome previews only a well-formed amount, in integer cents.
-  const typed = parseAmountText(values.amount);
-  const previewCents = typed !== null && typed > 0 ? typed : null;
+  const previewCents = previewAmount(kind, values.amount, figures);
   let outcome: string[];
   let actionLabel: string;
   if (kind === 'cash') {
