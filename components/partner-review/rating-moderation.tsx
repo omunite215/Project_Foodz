@@ -3,7 +3,7 @@
 import { revalidateLogic, useForm, useStore } from '@tanstack/react-form';
 import { EyeOff, PencilLine } from 'lucide-react';
 import Link from 'next/link';
-import { type ReactNode, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { excludeRatingAction, includeRatingAction } from '@/server/modules/ratings/actions';
 import {
   EXCLUDE_REASONS,
@@ -317,6 +317,7 @@ export function ExcludeRatingDialog({
   onDone,
   onRace,
   onSignedOut,
+  start,
 }: {
   row: StaffRatingRow;
   timeZone: string;
@@ -327,13 +328,15 @@ export function ExcludeRatingDialog({
   /** Someone else moved it first: the list refreshes behind the dialog. */
   onRace: () => void;
   onSignedOut: () => void;
+  /** Opens in a known state: the race already answered, or the form already sent (stories). */
+  start?: { race?: string; submit?: boolean };
 }) {
   const id = useId();
   const shell = useStaffShell();
   const formRef = useRef<HTMLFormElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState(false);
-  const [race, setRace] = useState<string | null>(null);
+  const [race, setRace] = useState<string | null>(start?.race ?? null);
   const [alert, setAlert] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const labels = excludeReasonLabels(row.kind);
@@ -417,6 +420,13 @@ export function ExcludeRatingDialog({
     announce(failure.message, { assertive: true });
     requestAnimationFrame(() => alertRef.current?.focus());
   }
+
+  const sendOnOpen = start?.submit ?? false;
+  useEffect(() => {
+    if (sendOnOpen) void form.handleSubmit();
+    // Once, as it opens.
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, []);
 
   const values = useStore(form.store, (state) => state.values);
   const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);

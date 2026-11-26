@@ -134,6 +134,15 @@ export interface MoneyDialogProps {
   onCloseFocus: () => boolean;
   onDone: (result: MoneyActionResult) => void;
   onSignedOut: () => void;
+  /** Opens in a known state: an answer already shown, or the form already sent (stories). */
+  start?: MoneyDialogStart;
+}
+
+export interface MoneyDialogStart {
+  alert?: { tone: 'error' | 'warning' | 'info'; text: string };
+  closeOnly?: string;
+  /** Sends the form once on open, so its field errors show. */
+  submit?: boolean;
 }
 
 async function readOpening(partnerId: string, kind: MoneyDialogKind): Promise<MoneyDialogOpening> {
@@ -536,6 +545,7 @@ function MoneyForm({
   onCloseFocus,
   onDone,
   onSignedOut,
+  start,
 }: MoneyDialogProps & { opening: MoneyDialogOpening; title: string }) {
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -550,9 +560,9 @@ function MoneyForm({
   });
   const [pending, setPending] = useState(false);
   const [alert, setAlert] = useState<{ tone: 'error' | 'warning' | 'info'; text: string } | null>(
-    null,
+    start?.alert ?? null,
   );
-  const [closeOnlyText, setCloseOnlyText] = useState<string | null>(null);
+  const [closeOnlyText, setCloseOnlyText] = useState<string | null>(start?.closeOnly ?? null);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [stepUp, setStepUp] = useState<{ shown: boolean; method: StepUpMethod; code: string }>({
     shown: kind !== 'cash' && opening.stepUpRequired,
@@ -705,6 +715,13 @@ function MoneyForm({
     }
     showAlert({ tone: 'error', text: failure.message });
   }
+
+  const sendOnOpen = start?.submit ?? false;
+  useEffect(() => {
+    if (sendOnOpen) void form.handleSubmit();
+    // Once, as it opens.
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, []);
 
   const values = useStore(form.store, (state) => state.values);
   const submitted = useStore(form.store, (state) => state.submissionAttempts > 0);
