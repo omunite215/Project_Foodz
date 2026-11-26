@@ -104,3 +104,14 @@ describe('partner delivery words (F8 design 2)', () => {
     expect(codeRetry('delivered', 0)).toBe('stop');
   });
 });
+
+describe('the waiting clock (P43.2)', () => {
+  const since = '2026-11-26T04:00:00.000Z';
+  it('never opens above the wait, whatever the clock offset', () => {
+    const behind = Date.parse(since) - 3_000;
+    expect(secondsLeft(since, 300, behind)).toBe(300);
+    expect(clockLeft(since, 300, behind)).toBe('5:00 left');
+    expect(clockLeft(since, 300, Date.parse(since) + 61_000)).toBe('3:59 left');
+    expect(clockLeft(since, 300, Date.parse(since) + 400_000)).toBe('0:00');
+  });
+});

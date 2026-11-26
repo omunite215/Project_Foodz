@@ -203,17 +203,20 @@ export function problemNotice(
 
 /** "4:12 left" on the server's clock; "0:00" once it's up. */
 export function clockLeft(since: string, waitSeconds: number, serverNowMs: number): string {
-  const left = Math.max(
-    0,
-    Math.ceil((Date.parse(since) + waitSeconds * 1000 - serverNowMs) / 1000),
-  );
+  const left = secondsLeft(since, waitSeconds, serverNowMs);
   const minutes = Math.floor(left / 60);
   const seconds = left % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}${left > 0 ? ' left' : ''}`;
 }
 
-export const secondsLeft = (since: string, waitSeconds: number, serverNowMs: number) =>
-  Math.max(0, Math.ceil((Date.parse(since) + waitSeconds * 1000 - serverNowMs) / 1000));
+/**
+ * Seconds left of the wait, never more than the wait itself: a phone whose clock offset runs a
+ * few seconds behind the server's would otherwise open at "5:03 left" (QA P43.2).
+ */
+export function secondsLeft(since: string, waitSeconds: number, serverNowMs: number): number {
+  const left = Math.ceil((Date.parse(since) + waitSeconds * 1000 - serverNowMs) / 1000);
+  return Math.min(waitSeconds, Math.max(0, left));
+}
 
 export const waitingTitle = (customerFirst: string) => `Waiting for ${customerFirst}`;
 export const waitingTold = (customerFirst: string) =>
