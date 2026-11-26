@@ -300,6 +300,25 @@ describe('rating an order (S1–S5, S8, V2, V3)', () => {
     ).toBeNull();
   });
 
+  it('refuses an account whose email is no longer confirmed (gate S6)', async () => {
+    const order = await deliveredOrder(maya.userId);
+    await migrator.user.update({ where: { id: maya.userId }, data: { emailVerified: false } });
+    try {
+      expect(
+        (await rate(maya, { orderId: order.id, courier: { stars: 4, tags: [] } }))?.serverError,
+      ).toMatchObject({
+        code: 'EMAIL_NOT_CONFIRMED',
+      });
+      expect(
+        (await asBrowser(maya.browser, () => actions.skipRatingAction({ orderId: order.id })))
+          ?.serverError?.code,
+      ).toBe('EMAIL_NOT_CONFIRMED');
+      expect(await migrator.partnerRating.count({ where: { orderId: order.id } })).toBe(0);
+    } finally {
+      await migrator.user.update({ where: { id: maya.userId }, data: { emailVerified: true } });
+    }
+  });
+
   it('keeps the demo pool apart: no comments, no real average moves, Jamie counts', async () => {
     const before = await menuFigures(dishes[0]!.id);
     const order = await deliveredOrder(dana.userId, { courier: jamie, demo: true });
@@ -452,43 +471,66 @@ describe('moderation (A58)', () => {
   });
 });
 
-describe("the partner's own summary (P58, V8, U14)", () => {
-  it('counts up to the end of yesterday and shows tags only from 5 ratings in 30 days', async () => {
+/** A counted rating of Luis by a new customer, created `daysAgo` (before the day-behind cut). */
+async function ratingOfLuis(stars: number, tags: string[], daysAgo = 2) {
+  const fan = await customerAccount(migrator, `Fan ${stars}-${Math.random()}`);
+  const order = await deliveredOrder(fan.userId, { dishIds: [dishes[0]!.id] });
+  await migrator.partnerRating.create({
+    data: {
+      userId: fan.userId,
+      partnerId: luis.partnerId,
+      orderId: order.id,
+      rating: stars,
+      tags,
+      createdAt: new Date(Date.now() - daysAgo * 86_400_000),
+    },
+  });
+}
+
+describe("the partner's own summary (P58, V8, U14, gate S1)", () => {
+  it('publishes a new figure only after 5 new counted ratings, tags included, and shows nothing before', async () => {
     expect(await ratings.getMyRatingsSummary(luis.actor)).toMatchObject({
       count: 0,
       average: null,
       tagsShown: false,
     });
-    await migrator.$executeRaw`UPDATE partner_ratings SET created_at = created_at - interval '2 days' WHERE partner_id = ${luis.partnerId}::uuid`;
+    // One rating before the cut is still not published: it would be one customer's stars.
+    await migrator.$executeRaw`UPDATE partner_ratings SET created_at = created_at - interval '5 days' WHERE partner_id = ${luis.partnerId}::uuid`;
     const one = await ratings.getMyRatingsSummary(luis.actor);
-    expect(one).toMatchObject({
-      count: 1,
-      average: 5,
-      shownToCustomers: false,
-      tagsShown: false,
-      liked: [],
-    });
+    expect(one).toMatchObject({ count: 0, average: null, tagsShown: false, liked: [] });
     expect(JSON.stringify(one)).not.toMatch(/Priya|order|comment/i);
-    const more = await Promise.all(
-      Array.from({ length: 5 }, (_, index) => customerAccount(migrator, `Fan ${index}`)),
-    );
-    for (const [index, fan] of more.entries()) {
-      const order = await deliveredOrder(fan.userId, { dishIds: [dishes[0]!.id] });
-      await migrator.partnerRating.create({
-        data: {
-          userId: fan.userId,
-          partnerId: luis.partnerId,
-          orderId: order.id,
-          rating: index === 0 ? 3 : 5,
-          tags: index === 0 ? ['late'] : ['friendly'],
-          createdAt: new Date(Date.now() - 2 * 86_400_000),
-        },
-      });
-    }
+
+    // Four more make five new counted ratings: the first publish, with tags.
+    await ratingOfLuis(3, ['late'], 5);
+    for (let index = 0; index < 3; index += 1) await ratingOfLuis(5, ['friendly'], 5);
     const five = await ratings.getMyRatingsSummary(luis.actor);
-    expect(five).toMatchObject({ count: 6, shownToCustomers: true, tagsShown: true });
-    expect(five.liked).toEqual(expect.arrayContaining([{ tag: 'friendly', count: 5 }]));
+    expect(five).toMatchObject({ count: 5, shownToCustomers: true, tagsShown: true });
+    expect(five.average).toBeCloseTo((5 + 3 + 15) / 5, 9);
+    expect(five.liked).toEqual(expect.arrayContaining([{ tag: 'friendly', count: 4 }]));
     expect(five.mentioned).toEqual([{ tag: 'late', count: 1 }]);
+
+    // As if that publish was four days ago: later ratings are new ones.
+    await migrator.$executeRaw`UPDATE partner_rating_snapshots SET published_through = app_now() - interval '4 days' WHERE partner_id = ${luis.partnerId}::uuid`;
+    const visible = (summary: Awaited<ReturnType<typeof ratings.getMyRatingsSummary>>) => ({
+      count: summary.count,
+      average: summary.average,
+      tagsShown: summary.tagsShown,
+      liked: summary.liked,
+      mentioned: summary.mentioned,
+    });
+    // One more changes nothing he can see until five new ones have arrived.
+    await ratingOfLuis(1, ['unfriendly']);
+    const held = await ratings.getMyRatingsSummary(luis.actor);
+    expect(visible(held)).toEqual(visible(five));
+    const home = await runAs(luis.actor, (ctx) => ratings.partnerRatingLineIn(ctx, new Date()));
+    expect(home).toEqual({ average: five.average, count: 5 });
+    for (let index = 0; index < 3; index += 1) await ratingOfLuis(4, ['on-time']);
+    expect((await ratings.getMyRatingsSummary(luis.actor)).count).toBe(5);
+    await ratingOfLuis(4, ['on-time']);
+    const ten = await ratings.getMyRatingsSummary(luis.actor);
+    expect(ten.count).toBe(10);
+    expect(ten.average).toBeCloseTo((23 + 1 + 16) / 10, 9);
+    expect(ten.mentioned).toEqual(expect.arrayContaining([{ tag: 'unfriendly', count: 1 }]));
   });
 });
 

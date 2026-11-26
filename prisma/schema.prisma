@@ -495,6 +495,7 @@ model DeliveryPartner {
   ledger                 PartnerLedger?
   ledgerDays             PartnerLedgerDay[]
   onlineSessions         PartnerOnlineSession[]
+  ratingSnapshot         PartnerRatingSnapshot?
   endedDeliveries        Delivery[]                             @relation("DeliveryEndedPartner")
   ratings                PartnerRating[]
   reports                PartnerReport[]
@@ -736,6 +737,21 @@ model PartnerLedgerDay {
   @@id([partnerId, day])
   @@index([pool, day])
   @@map("partner_ledger_days")
+}
+
+/// F9 (security gate S1): the rating figures a partner sees, published only after 5 new counted
+/// ratings. Read and written only by app_my_rating_summary.
+model PartnerRatingSnapshot {
+  partnerId        String          @id @map("partner_id") @db.Uuid
+  publishedThrough DateTime?       @map("published_through")
+  publishedAt      DateTime        @default(dbgenerated("app_now()")) @map("published_at")
+  ratingCount      Int             @default(0) @map("rating_count")
+  ratingAvg        Float?          @map("rating_avg")
+  tagsShown        Boolean         @default(false) @map("tags_shown")
+  tags             Json            @default("[]")
+  partner          DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@map("partner_rating_snapshots")
 }
 
 /// F9 (E6): one row per stretch online, opened and closed by a trigger on `is_online`.

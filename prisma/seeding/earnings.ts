@@ -219,6 +219,7 @@ export async function resetEarningsFixtures(
     select: { id: true },
   });
   await clearEarningsForPartners(tx, ids);
+  await tx.$executeRaw`DELETE FROM partner_rating_snapshots WHERE partner_id = ANY (${ids}::uuid[])`;
   await tx.order.deleteMany({ where: { id: { in: oldOrders.map((order) => order.id) } } });
   await tx.partnerOnlineSession.deleteMany({
     where: { partnerId: { in: ids }, endedAt: { not: null } },

@@ -62,6 +62,13 @@ const asStars = (value: number | null | undefined): Stars | null => (isStars(val
 const orderNotFound = () => new AppError('NOT_FOUND', 'Order not found.', 404);
 const notACustomer = () => new AppError('NOT_A_CUSTOMER', "Staff accounts can't rate orders.", 403);
 const ratingNotFound = () => new AppError('NOT_FOUND', 'Rating not found.', 404);
+const emailNotConfirmed = () =>
+  new AppError('EMAIL_NOT_CONFIRMED', 'Confirm your email first.', 403);
+
+/** V1.1, security gate S6: a rating needs a confirmed email, checked again on every send. */
+async function requireConfirmedEmail(ctx: DbContext, userId: string) {
+  if (!(await repo.emailConfirmed(ctx, userId))) throw emailNotConfirmed();
+}
 
 const shortDay = (date: Date, timeZone: string) =>
   new Intl.DateTimeFormat('en-US', {
@@ -264,6 +271,7 @@ export async function rateOrder(
   let draft: ViewDraft;
   try {
     draft = await runAs(actor, async (ctx) => {
+      await requireConfirmedEmail(ctx, actor.userId);
       const order = await repo.findOwnOrder(ctx, values.orderId, actor.userId);
       if (!order) throw orderNotFound();
       openOrThrow(order, now, timeZone);
@@ -330,6 +338,7 @@ export async function skipRating(
   await requireCustomer(actor);
   const timeZone = await storeZone(now);
   const draft = await runAs(actor, async (ctx) => {
+    await requireConfirmedEmail(ctx, actor.userId);
     const result = await repo.skipRating(ctx, orderId);
     if (result.outcome === 'not-found') throw orderNotFound();
     if (result.outcome === 'cancelled') throw notOpen('cancelled', null);
@@ -647,7 +656,12 @@ export async function partnerRatingLineIn(
   const lagDays = timings().partnerLagDays;
   const before =
     lagDays === 0 ? now : new Date(startOfToday.getTime() - (lagDays - 1) * 86_400_000);
-  const summary = await repo.mySummary(ctx, before, before);
+  // The same window as the ratings route, so a publish from either reads the same tags.
+  const summary = await repo.mySummary(
+    ctx,
+    before,
+    new Date(before.getTime() - RATING_RULES.partnerTagDays * 86_400_000),
+  );
   if (!summary || summary.count === 0 || summary.average === null) return null;
   return { average: summary.average, count: summary.count };
 }

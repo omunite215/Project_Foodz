@@ -95,8 +95,6 @@ const notApproved = () =>
 const partnerNotFound = () => new AppError('NOT_FOUND', 'Partner not found.', 404);
 const deliveryNotFound = () => new AppError('NOT_FOUND', "This delivery isn't available.", 404);
 
-const maskName = (name: string) => `${name.trim().charAt(0)}•••`;
-
 // ------------------------------------------------------------------ the partner (P51–P62)
 
 interface PartnerSelf {
@@ -561,11 +559,13 @@ async function staffViewer(
   return { userId: checked.userId, role: checked.role, isDemo: checked.isDemo };
 }
 
-/** What a viewer may see of one partner: demo staff see demo partners only (A66). */
-function visibleName(partner: repo.StaffPartnerRow, viewer: StaffViewer) {
-  if (partner.deleted) return deletedPartnerName(partner.id);
-  if (viewer.isDemo && !partner.isDemo) return maskName(partner.name);
-  return partner.name;
+/**
+ * A partner's name for staff: `partner_directory` already applies F6's rule for the demo admin
+ * (demo and sample partners shown, every other real partner masked). Figures stay hidden for
+ * every non-demo partner (`hiddenForDemo`), whatever the name shows (A66, gate S3).
+ */
+function visibleName(partner: repo.StaffPartnerRow) {
+  return partner.deleted ? deletedPartnerName(partner.id) : partner.name;
 }
 
 const hiddenForDemo = (partner: repo.StaffPartnerRow, viewer: StaffViewer) =>
@@ -623,8 +623,8 @@ export async function getPartnerEarnings(
     const to = query.to && query.to >= from ? query.to : query.from ? from : addDays(monday, 6);
     const base = {
       partnerId: partner.id,
-      name: visibleName(partner, viewer),
-      masked: viewer.isDemo && !partner.isDemo,
+      name: visibleName(partner),
+      masked: partner.masked,
       deleted: partner.deleted,
       asOf: clock.now.toISOString(),
       range: { from, to },
@@ -722,7 +722,7 @@ export async function openMoneyDialog(
     const ledger = await repo.findLedger(ctx, partnerId);
     const balanceCents = Number(ledger?.balanceCents ?? 0);
     const holdingCents = Number(ledger?.holdingCents ?? 0);
-    const name = visibleName(partner, viewer);
+    const name = visibleName(partner);
     const first = firstNameOf(name);
     let applies = !viewer.isDemo && !partner.isDemo;
     let whyNot: string | null = viewer.isDemo ? DEMO_READ_ONLY : null;
@@ -1045,7 +1045,7 @@ async function reportData(
       partnerId: sum.partnerId,
       name: sum.deleted ? deletedPartnerName(sum.partnerId) : sum.name,
       deleted: sum.deleted,
-      masked: false,
+      masked: sum.masked,
       hidden: false,
       vehicle: sum.vehicle,
       figures,
@@ -1055,9 +1055,9 @@ async function reportData(
     for (const real of await repo.realPartnersForDemo(ctx)) {
       rows.push({
         partnerId: real.partnerId,
-        name: maskName(real.name),
+        name: real.name,
         deleted: false,
-        masked: true,
+        masked: real.masked,
         hidden: true,
         vehicle: real.vehicle,
         figures: null,

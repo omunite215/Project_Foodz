@@ -56,6 +56,15 @@ export function orderDishes(ctx: DbContext, orderId: string): Promise<OrderDish[
     ORDER BY min(i.id::text)`;
 }
 
+/** Her own account's confirmed email; the shared demo logins count as confirmed (F2). */
+export async function emailConfirmed(ctx: DbContext, userId: string): Promise<boolean> {
+  const user = await db(ctx).user.findUnique({
+    where: { id: userId },
+    select: { emailVerified: true, isDemo: true, deletedAt: true },
+  });
+  return Boolean(user && !user.deletedAt && (user.emailVerified || user.isDemo));
+}
+
 export async function rateableCourier(ctx: DbContext, orderId: string): Promise<string | null> {
   const rows = await db(ctx).$queryRaw<{ id: string | null }[]>`
     SELECT app_rateable_courier(${orderId}::uuid)::text AS id`;

@@ -473,6 +473,21 @@ describe('the partner page and the report (A59, A63, A66)', () => {
     const demo = await asBrowser(demoAdmin.browser, () =>
       earnings.getPartnerEarnings(demoAdmin.actor, { partnerId: jamie.partnerId }),
     );
+    // Gate S3: names follow partner_directory (a sample partner is shown), money stays hidden.
+    const sample = await approvedPartner(migrator, 'Sam Sample');
+    await migrator.user.update({ where: { id: sample.userId }, data: { isSample: true } });
+    await delivered(sample);
+    const shown = await asBrowser(demoAdmin.browser, () =>
+      earnings.getPartnerEarnings(demoAdmin.actor, { partnerId: sample.partnerId }),
+    );
+    expect(shown).toMatchObject({
+      name: 'Sam Sample',
+      masked: false,
+      hiddenForDemo: true,
+      version: 0,
+      balance: { balanceCents: 0 },
+      entries: { rows: [], total: 0 },
+    });
     expect(demo).toMatchObject({ hiddenForDemo: false, balance: { balanceCents: 764 } });
   });
 

@@ -666,3 +666,157 @@ describe('the nightly reconcile (E7)', () => {
     });
   });
 });
+
+describe('security gate fixes (S2, S4, S5)', () => {
+  it("refuses a staff key that is not a UUID, so it can never take an automatic entry's key (S4)", async () => {
+    const partner = await approvedPartner(migrator, 'Key Partner');
+    await expect(
+      record(admin(), partner.partnerId, {
+        kind: 'BONUS',
+        amount: 100,
+        version: 0,
+        message: 'Thanks',
+        key: `delivery:${uuid()}:TIP`,
+      }),
+    ).rejects.toThrow(/invalid entry/);
+    expect(
+      await record(admin(), partner.partnerId, {
+        kind: 'BONUS',
+        amount: 100,
+        version: 0,
+        message: 'Thanks',
+      }),
+    ).toMatchObject({ outcome: 'recorded' });
+  });
+
+  it("locks an adjustment's delivery before the ledger, the order a delivery's ending takes (S5)", async () => {
+    const partner = await approvedPartner(migrator, 'Lock Partner');
+    const { order, deliveryId } = await delivery(partner, { status: 'PICKED_UP', cash: false });
+    await migrator.$executeRaw`UPDATE deliveries SET status = 'DELIVERED', delivered_at = app_now() WHERE id = ${deliveryId}::uuid`;
+    const { version } = (await ledgerOf(partner.partnerId))!;
+    let release!: () => void;
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const isLocked = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    // Another transaction holds the delivery row, as an ending in progress would.
+    const holder = migrator.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT 1 FROM deliveries WHERE id = ${deliveryId}::uuid FOR UPDATE`;
+        locked();
+        await held;
+      },
+      { timeout: 20_000 },
+    );
+    await isLocked;
+    const adjusting = record(admin(), partner.partnerId, {
+      kind: 'ADJUSTMENT',
+      amount: 200,
+      version,
+      direction: 'add',
+      reason: 'correction',
+      message: 'Waited at the kitchen.',
+      orderNumber: order.number,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    // While the adjustment waits for the delivery, the ledger row is free.
+    await expect(
+      migrator.$transaction(
+        (tx) =>
+          tx.$executeRaw`SELECT 1 FROM partner_ledgers WHERE partner_id = ${partner.partnerId}::uuid FOR UPDATE NOWAIT`,
+      ),
+    ).resolves.toBe(1);
+    release();
+    await holder;
+    expect(await adjusting).toMatchObject({ outcome: 'recorded' });
+  });
+
+  it("refuses to settle a partner's deletion while his balance isn't zero, with a row to lock even before any entry (S2, T20)", async () => {
+    const partner = await approvedPartner(migrator, 'Settle Partner');
+    const settle = () =>
+      runAs(
+        partner.actor,
+        (ctx) =>
+          db(ctx).$queryRaw<{ ok: boolean }[]>`SELECT app_settle_own_partner_for_deletion() AS ok`,
+      ).then((rows) => rows[0]!.ok);
+    expect(await settle()).toBe(true);
+    expect(await ledgerOf(partner.partnerId)).toMatchObject({ balanceCents: 0n, version: 0 });
+    expect(
+      await record(admin(), partner.partnerId, {
+        kind: 'BONUS',
+        amount: 300,
+        version: 0,
+        message: 'Thanks',
+      }),
+    ).toMatchObject({ outcome: 'recorded' });
+    expect(await settle()).toBe(false);
+    await goOnlineAt(migrator, partner, { km: 0.3 });
+    await migrator.$executeRaw`
+      UPDATE delivery_partners SET is_online = false, online_session_id = NULL, last_location = NULL, offline_reason = 'self'
+      WHERE id = ${partner.partnerId}::uuid`;
+    const today = (
+      await migrator.$queryRaw<{ d: string }[]>`SELECT app_store_date(app_now())::text AS d`
+    )[0]!.d;
+    expect(
+      await record(admin(), partner.partnerId, {
+        kind: 'PAYOUT',
+        amount: 300,
+        version: 1,
+        method: 'bank-transfer',
+        paidOn: today,
+      }),
+    ).toMatchObject({ outcome: 'recorded', balanceCents: 0 });
+    expect(await settle()).toBe(true);
+    expect(
+      await migrator.partnerOnlineSession.count({ where: { partnerId: partner.partnerId } }),
+    ).toBe(0);
+  });
+
+  it("lets only the recalculation and the platform set a dish's rating (S2)", async () => {
+    const dish = await migrator.menuItem.findFirstOrThrow({
+      select: { id: true, ratingAvg: true },
+    });
+    for (const who of [admin(), as(staff.editor, 'content_editor'), kitchen()]) {
+      await expect(
+        runAs(
+          who,
+          (ctx) =>
+            db(ctx)
+              .$executeRaw`UPDATE menu_items SET rating_avg = 5, rating_count = 9999 WHERE id = ${dish.id}::uuid`,
+        ),
+      ).rejects.toThrow(DENIED);
+      await expect(
+        runAs(
+          who,
+          (ctx) =>
+            db(ctx)
+              .$executeRaw`UPDATE menu_items SET rating_base_avg = 5 WHERE id = ${dish.id}::uuid`,
+        ),
+      ).rejects.toThrow(DENIED);
+    }
+    // Other columns stay ADMIN's to change; the recalculation runs for anyone.
+    await expect(
+      runAs(
+        admin(),
+        (ctx) =>
+          db(ctx)
+            .$executeRaw`UPDATE menu_items SET prep_minutes = prep_minutes WHERE id = ${dish.id}::uuid`,
+      ),
+    ).resolves.toBe(1);
+    await runAs(
+      priya.actor,
+      (ctx) => db(ctx).$executeRaw`SELECT app_recalc_dish_rating(${dish.id}::uuid)`,
+    );
+    await expect(
+      runAs(
+        system,
+        (ctx) =>
+          db(ctx)
+            .$executeRaw`UPDATE menu_items SET rating_count = rating_count WHERE id = ${dish.id}::uuid`,
+      ),
+    ).resolves.toBe(1);
+  });
+});

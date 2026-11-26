@@ -389,10 +389,15 @@ export function reportSums(
     JOIN partner_directory pd ON pd.id = s.partner_id`;
 }
 
-/** The demo admin's masked rows: real approved and suspended partners, no figures (A66). */
+/**
+ * The demo admin's rows for real partners (approved and suspended), no figures (A66): the name
+ * as `partner_directory` shows it to demo staff (sample partners shown, others masked).
+ */
 export function realPartnersForDemo(ctx: DbContext) {
-  return db(ctx).$queryRaw<{ partnerId: string; name: string; vehicle: VehicleType }[]>`
-    SELECT pd.id::text AS "partnerId", pd.name, pd.vehicle_type::text AS vehicle
+  return db(ctx).$queryRaw<
+    { partnerId: string; name: string; masked: boolean; vehicle: VehicleType }[]
+  >`
+    SELECT pd.id::text AS "partnerId", pd.name, pd.masked, pd.vehicle_type::text AS vehicle
     FROM partner_directory pd
     WHERE NOT pd.is_demo AND pd.status IN ('APPROVED', 'SUSPENDED')`;
 }

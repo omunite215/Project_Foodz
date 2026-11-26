@@ -541,12 +541,29 @@ BEGIN
     OR (kind IN ('BONUS', 'ADJUSTMENT', 'PAYOUT') AND who = 'admin')) THEN
     RAISE EXCEPTION 'permission denied: % may not record %', who, kind USING ERRCODE = 'insufficient_privilege';
   END IF;
-  IF amount IS NULL OR amount <= 0 OR coalesce(length(idem_key), 0) NOT BETWEEN 8 AND 100 THEN
+  -- Staff keys are the dialog's UUID, so they can never take an automatic entry's key
+  -- (`delivery:<id>:<kind>`) and make it be skipped.
+  IF amount IS NULL OR amount <= 0
+    OR coalesce(idem_key, '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     RAISE EXCEPTION 'invalid entry' USING ERRCODE = 'check_violation';
   END IF;
   SELECT u.is_demo INTO partner_demo FROM delivery_partners p JOIN users u ON u.id = p.user_id WHERE p.id = target;
   IF NOT FOUND OR partner_demo THEN
     RETURN jsonb_build_object('outcome', 'not-found');
+  END IF;
+
+  -- An adjustment's delivery is locked before the ledger, in the order a delivery's ending takes
+  -- them (delivery, then ledger), so the two can't deadlock.
+  IF kind IN ('BONUS', 'ADJUSTMENT') AND order_number IS NOT NULL THEN
+    SELECT d.id INTO delivery
+    FROM orders o JOIN deliveries d ON d.order_id = o.id
+    WHERE o.number = order_number
+      AND (d.partner_id = target OR d.ended_partner_id = target
+           OR EXISTS (SELECT 1 FROM delivery_offers f WHERE f.delivery_id = d.id
+                      AND f.partner_id = target AND f.status = 'ACCEPTED'));
+    IF delivery IS NOT NULL THEN
+      PERFORM 1 FROM deliveries WHERE id = delivery FOR KEY SHARE;
+    END IF;
   END IF;
 
   INSERT INTO partner_ledgers (partner_id, pool) VALUES (target, 'REAL') ON CONFLICT (partner_id) DO NOTHING;
@@ -620,16 +637,8 @@ BEGIN
       signed := CASE WHEN direction = 'take-off' THEN -amount ELSE amount END;
       entry_reason := reason;
     END IF;
-    IF order_number IS NOT NULL THEN
-      SELECT d.id INTO delivery
-      FROM orders o JOIN deliveries d ON d.order_id = o.id
-      WHERE o.number = order_number
-        AND (d.partner_id = target OR d.ended_partner_id = target
-             OR EXISTS (SELECT 1 FROM delivery_offers f WHERE f.delivery_id = d.id
-                        AND f.partner_id = target AND f.status = 'ACCEPTED'));
-      IF delivery IS NULL THEN
-        RETURN jsonb_build_object('outcome', 'not-his-order', 'version', l.version);
-      END IF;
+    IF order_number IS NOT NULL AND delivery IS NULL THEN
+      RETURN jsonb_build_object('outcome', 'not-his-order', 'version', l.version);
     END IF;
   END IF;
 
@@ -816,19 +825,41 @@ BEGIN
 END
 $$;
 
--- What a partner may know about his ratings: the average and count before `before`, and tag
--- counts only when at least 5 counted ratings fall in [tags_since, before) (U14, lead Q5).
+-- What a partner may know about his ratings (U14, P58.3, security gate S1). He sees a published
+-- snapshot, never the live figures: a new snapshot is published only once at least 5 counted
+-- ratings have arrived since the last one (created before `before`, the day-behind cut), so the
+-- change between two snapshots never isolates one customer's stars or tags. Exclusions and edits
+-- move the figure only at the next publish. Until the first publish he sees his baseline alone
+-- (0 for a new partner: nothing). Tag counts come from [tags_since, before) and only when at
+-- least 5 counted ratings fall in that window. Only this function reads or writes the snapshots.
+CREATE TABLE "partner_rating_snapshots" (
+  "partner_id" UUID NOT NULL,
+  "published_through" TIMESTAMP(3),
+  "published_at" TIMESTAMP(3) NOT NULL DEFAULT app_now(),
+  "rating_count" INTEGER NOT NULL DEFAULT 0,
+  "rating_avg" DOUBLE PRECISION,
+  "tags_shown" BOOLEAN NOT NULL DEFAULT false,
+  "tags" JSONB NOT NULL DEFAULT '[]',
+  CONSTRAINT "partner_rating_snapshots_pkey" PRIMARY KEY ("partner_id"),
+  CONSTRAINT "partner_rating_snapshots_partner_id_fkey" FOREIGN KEY ("partner_id")
+    REFERENCES "delivery_partners"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "partner_rating_snapshots_count" CHECK ("rating_count" >= 0)
+);
+ALTER TABLE "partner_rating_snapshots" ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION app_my_rating_summary(before timestamp(3), tags_since timestamp(3)) RETURNS jsonb
-  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
   AS $$
 DECLARE
   me uuid := app_partner_id();
   p record;
+  snap partner_rating_snapshots%ROWTYPE;
+  cut timestamp(3) := least(before, app_now());
+  fresh integer;
   n integer;
   s bigint;
   in_window integer;
   tag_counts jsonb := '[]'::jsonb;
-  cut timestamp(3) := least(before, app_now());
 BEGIN
   IF me IS NULL THEN
     RETURN NULL;
@@ -836,31 +867,51 @@ BEGIN
   SELECT dp.rating_base_avg, dp.rating_base_count, CASE WHEN u.is_demo THEN 'DEMO' ELSE 'REAL' END AS pool
     INTO p
   FROM delivery_partners dp JOIN users u ON u.id = dp.user_id WHERE dp.id = me;
-  SELECT count(*), coalesce(sum(rating), 0) INTO n, s
+  INSERT INTO partner_rating_snapshots (partner_id, rating_count, rating_avg)
+  VALUES (me, p.rating_base_count,
+    CASE WHEN p.rating_base_count > 0 THEN p.rating_base_avg::double precision END)
+  ON CONFLICT (partner_id) DO NOTHING;
+  SELECT * INTO snap FROM partner_rating_snapshots WHERE partner_id = me FOR UPDATE;
+
+  SELECT count(*) INTO fresh
   FROM partner_ratings
-  WHERE partner_id = me AND status = 'PUBLISHED' AND pool = p.pool AND created_at < cut;
-  SELECT count(*) INTO in_window
-  FROM partner_ratings
-  WHERE partner_id = me AND status = 'PUBLISHED' AND pool = p.pool
-    AND created_at >= tags_since AND created_at < cut;
-  IF in_window >= 5 THEN
-    SELECT coalesce(jsonb_agg(jsonb_build_object('tag', t.tag, 'count', t.c) ORDER BY t.c DESC, t.tag), '[]'::jsonb)
-      INTO tag_counts
-    FROM (
-      SELECT x.tag, count(*)::int AS c
-      FROM partner_ratings r CROSS JOIN LATERAL unnest(r.tags) AS x(tag)
-      WHERE r.partner_id = me AND r.status = 'PUBLISHED' AND r.pool = p.pool
-        AND r.created_at >= tags_since AND r.created_at < cut
-      GROUP BY x.tag
-    ) t;
+  WHERE partner_id = me AND status = 'PUBLISHED' AND pool = p.pool AND created_at < cut
+    AND (snap.published_through IS NULL OR created_at >= snap.published_through);
+  IF fresh >= 5 THEN
+    SELECT count(*), coalesce(sum(rating), 0) INTO n, s
+    FROM partner_ratings
+    WHERE partner_id = me AND status = 'PUBLISHED' AND pool = p.pool AND created_at < cut;
+    SELECT count(*) INTO in_window
+    FROM partner_ratings
+    WHERE partner_id = me AND status = 'PUBLISHED' AND pool = p.pool
+      AND created_at >= tags_since AND created_at < cut;
+    IF in_window >= 5 THEN
+      SELECT coalesce(jsonb_agg(jsonb_build_object('tag', t.tag, 'count', t.c) ORDER BY t.c DESC, t.tag), '[]'::jsonb)
+        INTO tag_counts
+      FROM (
+        SELECT x.tag, count(*)::int AS c
+        FROM partner_ratings r CROSS JOIN LATERAL unnest(r.tags) AS x(tag)
+        WHERE r.partner_id = me AND r.status = 'PUBLISHED' AND r.pool = p.pool
+          AND r.created_at >= tags_since AND r.created_at < cut
+        GROUP BY x.tag
+      ) t;
+    END IF;
+    UPDATE partner_rating_snapshots
+    SET published_through = cut, published_at = app_now(),
+        rating_count = p.rating_base_count + n,
+        rating_avg = CASE WHEN p.rating_base_count + n = 0 THEN NULL
+          ELSE ((p.rating_base_avg * p.rating_base_count + s) / (p.rating_base_count + n))::double precision END,
+        tags_shown = in_window >= 5,
+        tags = tag_counts
+    WHERE partner_id = me
+    RETURNING * INTO snap;
   END IF;
   RETURN jsonb_build_object(
-    'count', p.rating_base_count + n,
-    'average', CASE WHEN p.rating_base_count + n = 0 THEN NULL
-      ELSE ((p.rating_base_avg * p.rating_base_count + s) / (p.rating_base_count + n))::double precision END,
-    'tagsShown', in_window >= 5,
-    'tags', tag_counts,
-    'through', cut);
+    'count', snap.rating_count,
+    'average', snap.rating_avg,
+    'tagsShown', snap.tags_shown,
+    'tags', snap.tags,
+    'through', coalesce(snap.published_through, cut));
 END
 $$;
 
@@ -896,6 +947,11 @@ BEGIN
   IF me IS NULL THEN
     RETURN true;
   END IF;
+  -- The row is made first, so a first staff entry committed at the same moment waits on it.
+  INSERT INTO partner_ledgers (partner_id, pool)
+  SELECT me, CASE WHEN u.is_demo THEN 'DEMO' ELSE 'REAL' END
+  FROM delivery_partners p JOIN users u ON u.id = p.user_id WHERE p.id = me
+  ON CONFLICT (partner_id) DO NOTHING;
   SELECT balance_cents INTO bal FROM partner_ledgers WHERE partner_id = me FOR UPDATE;
   IF coalesce(bal, 0) <> 0 THEN
     RETURN false;
@@ -1102,6 +1158,8 @@ BEGIN
   WHERE pool = 'DEMO' AND ended_at IS NOT NULL AND ended_at < app_store_day_start(app_store_date(app_now()));
   PERFORM app_recalc_partner_rating(p.id)
   FROM delivery_partners p JOIN users u ON u.id = p.user_id WHERE u.is_demo;
+  DELETE FROM partner_rating_snapshots s USING delivery_partners p, users u
+  WHERE s.partner_id = p.id AND u.id = p.user_id AND u.is_demo;
   PERFORM app_recalc_dish_rating(x) FROM unnest(dishes) AS x;
   BEGIN
     DELETE FROM demo_runs WHERE status <> 'running' OR ends_at < app_now() - interval '1 hour';
@@ -1242,12 +1300,14 @@ BEGIN
       "partner_online_sessions" TO foodz_app;
     -- Ratings are changed, never deleted (S5.3).
     REVOKE DELETE, TRUNCATE ON "reviews", "partner_ratings" FROM foodz_app;
+    REVOKE ALL ON "partner_rating_snapshots" FROM foodz_app;
     GRANT SELECT, INSERT, UPDATE ON "reviews", "partner_ratings" TO foodz_app;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'foodz_readonly') THEN
     -- Money, comments and working hours stay out of the analytics role until F16 curates views.
     REVOKE ALL ON "partner_earnings", "partner_earning_staff", "partner_ledgers", "partner_ledger_days",
-      "partner_online_sessions", "reviews", "partner_ratings", ledger_expected_entries FROM foodz_readonly;
+      "partner_online_sessions", "reviews", "partner_ratings", ledger_expected_entries,
+      "partner_rating_snapshots" FROM foodz_readonly;
   END IF;
 END
 $$;
