@@ -42,6 +42,7 @@ import {
   recordedByRole,
   recordedByWords,
   signedPrice,
+  utcInstant,
 } from './text';
 
 const TZ = 'America/New_York';
@@ -494,6 +495,41 @@ describe('words (design 3.5, 3.9, 1.10)', () => {
         timeZone: TZ,
       }),
     ).toContain('Luis delivered order 1046 at 10:02 am.');
+  });
+
+  it("reads a jsonb time without an offset as UTC, whatever the server's zone (review S2)", () => {
+    const zone = process.env.TZ;
+    // The conflict answer's `at` comes from jsonb without an offset; a server in Boston read it
+    // as local time and said 7:08 pm for 2:08 pm.
+    process.env.TZ = 'America/New_York';
+    try {
+      expect(utcInstant('2026-11-26T19:08:00').toISOString()).toBe('2026-11-26T19:08:00.000Z');
+      expect(utcInstant('2026-11-26T19:08:00.123').toISOString()).toBe('2026-11-26T19:08:00.123Z');
+      expect(utcInstant('2026-11-26T19:08:00Z').toISOString()).toBe('2026-11-26T19:08:00.000Z');
+      expect(utcInstant('2026-11-26T14:08:00-05:00').toISOString()).toBe(
+        '2026-11-26T19:08:00.000Z',
+      );
+      expect(
+        ledgerChangedWords({
+          latest: {
+            kind: 'CASH_HANDED_IN',
+            amountCents: 5_000,
+            reason: null,
+            at: '2026-11-26T19:08:00',
+            orderNumber: null,
+            byName: 'Morgan Diaz',
+          },
+          partnerName: 'Diego Alvarez',
+          balanceCents: -9_270,
+          holdingCents: 11_480,
+          closeOnly: false,
+          timeZone: TZ,
+        }),
+      ).toContain('Morgan Diaz recorded $50.00 in cash from Diego at 2:08 pm.');
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
   });
 
   it('words board notices and partner notices, never naming staff', () => {

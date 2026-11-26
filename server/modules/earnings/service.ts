@@ -72,6 +72,7 @@ import {
   entryWords,
   ledgerChangedWords,
   recordedByRole,
+  utcInstant,
 } from './text';
 
 /*
@@ -926,7 +927,7 @@ async function moneyAction(
         ? {
             kind: latest.kind,
             amountCents: latest.amountCents,
-            at: new Date(latest.at).toISOString(),
+            at: utcInstant(latest.at).toISOString(),
             byWords: latest.byName ?? 'Foodz',
             orderNumber: latest.orderNumber,
           }

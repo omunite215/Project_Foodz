@@ -73,6 +73,15 @@ export function recordedByRole(recordedBy: LedgerRow['recordedBy']): string {
 
 // ------------------------------------------------------------------ conflicts (A62.3, A67.2)
 
+/**
+ * A time from a database function's jsonb answer. `occurred_at` is a timestamp without time
+ * zone holding UTC, and jsonb writes it without an offset ("2026-11-26T19:08:00"), which
+ * `new Date` would read as the server's local time: read it as UTC.
+ */
+export function utcInstant(value: string): Date {
+  return new Date(/(?:z|[+-]\d{2}(?::?\d{2})?)$/i.test(value) ? value : `${value}Z`);
+}
+
 export interface LatestEntry {
   kind: EarningKind;
   amountCents: number;
@@ -89,7 +98,7 @@ export function latestEntryWords(
   timeZone: string,
 ): string {
   const first = firstNameOf(partnerName);
-  const at = clockTime(new Date(latest.at), timeZone);
+  const at = clockTime(utcInstant(latest.at), timeZone);
   const by = latest.byName ?? 'Foodz';
   const amount = formatPrice(Math.abs(latest.amountCents));
   switch (latest.kind) {
