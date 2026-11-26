@@ -616,7 +616,12 @@ export async function resetPartnerFixtures(
           decidedAt: new Date(approved),
           decidedBy: morgan.id,
           welcomedAt: new Date(approved),
-          ...(fixture.key === 'omar' && { ratingAvg: 4.6, ratingCount: 31 }),
+          ...(fixture.key === 'omar' && {
+            ratingAvg: 4.6,
+            ratingCount: 31,
+            ratingBaseAvg: 4.6,
+            ratingBaseCount: 31,
+          }),
         });
         history.push({ type: 'approved', at: approved, actor: morgan });
         break;
