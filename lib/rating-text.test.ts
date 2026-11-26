@@ -110,7 +110,7 @@ describe('row words', () => {
     expect(commentLabel(dish)).toBe('Comment about Pad Thai (optional)');
     expect(commentLabel(courier)).toBe("Comment about Luis's delivery (optional)");
     expect(courierPrivacy('Luis')).toBe(
-      'Luis sees only their average and the tags customers pick, never your name or your comment.',
+      'Luis sees only an overall average and the tags customers pick, never your name or your comment.',
     );
   });
 

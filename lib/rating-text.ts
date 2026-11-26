@@ -123,9 +123,9 @@ export const RATING_COPY = {
   rated: 'Rated',
 } as const;
 
-/** "Luis sees only their average…": what the courier can and can't see (S2.3). */
+/** "Luis sees only an overall average…": what the courier can and can't see (S2.3). */
 export const courierPrivacy = (firstName: string) =>
-  `${firstName} sees only their average and the tags customers pick, never your name or your comment.`;
+  `${firstName} sees only an overall average and the tags customers pick, never your name or your comment.`;
 
 /** "Thanks, Priya. Every rating helps the kitchen and Luis." (S1.4) */
 export function thanksLine(customerFirst: string | null, courierFirst: string | null): string {
