@@ -1195,7 +1195,7 @@ export function ReportView({
 }: ReportViewProps) {
   const csvReasonId = useId();
   let results: ReactNode;
-  if (failed || (!result && !skeleton)) {
+  if (failed) {
     results = (
       <FormAlert
         variant="error"
@@ -1264,10 +1264,11 @@ export function ReportView({
       </>
     );
   } else {
-    // The first read for an address the server couldn't answer: skeleton rows until it lands.
+    // The first read for an address the server couldn't answer: skeleton rows (after 150 ms)
+    // until it lands.
     results = (
       <ul aria-busy className="space-y-3">
-        {Array.from({ length: 6 }, (_, index) => (
+        {Array.from({ length: skeleton ? 6 : 0 }, (_, index) => (
           <li key={index} className="h-16 rounded-2xl bg-neutral-7 motion-safe:animate-skeleton" />
         ))}
       </ul>
