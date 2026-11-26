@@ -1021,7 +1021,7 @@ const maskName = (name: string) => `${name.trim().charAt(0)}•••`;
 /**
  * Review S7 (L5): one clock for every screen. The stored point's `acceptedAt` (capped for a
  * repeated fix, S7 of the backend gate) is what the customer reads, so staff read it too; the
- * database's `last_point_at` (written every 15 s, uncapped) is the fallback.
+ * database's `last_point_at` (written every 15 s, capped the same way) is the fallback.
  */
 function pointOf(
   row: Pick<TrackedDelivery, 'lastLat' | 'lastLng' | 'lastPointAt'>,
