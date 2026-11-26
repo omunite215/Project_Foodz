@@ -87,6 +87,7 @@ export interface TrackedDelivery {
   vehicle: VehicleType | null;
   partnerName: string | null;
   partnerFeeCents: number;
+  tipCents: number;
   paymentMethod: string;
   paymentStatus: string;
   totalCents: number;
@@ -130,7 +131,7 @@ async function tracked(ctx: DbContext, column: 'id' | 'partner' | 'order', value
     SELECT d.id::text AS "deliveryId", d.order_id::text AS "orderId", o.number AS "orderNumber",
            o.status::text AS "orderStatus", o.user_id::text AS "customerId", cu.is_demo AS "customerIsDemo",
            d.status, d.version, d.partner_id::text AS "partnerId", p.user_id::text AS "partnerUserId",
-           p.vehicle_type AS "vehicle", pu.name AS "partnerName", d.partner_fee_cents AS "partnerFeeCents",
+           p.vehicle_type AS "vehicle", pu.name AS "partnerName", d.partner_fee_cents AS "partnerFeeCents", d.tip_cents AS "tipCents",
            o.payment_method::text AS "paymentMethod", o.payment_status::text AS "paymentStatus",
            o.total_cents AS "totalCents", o.contact_name AS "contactName", o.contact_phone AS "contactPhone",
            o.address_text AS "addressText", o.address_line2 AS "addressLine2", o.address_city AS "addressCity",

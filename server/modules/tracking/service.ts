@@ -498,7 +498,8 @@ export async function notifyMarkedDelivered(orderId: string): Promise<void> {
           orderId,
           partnerId,
           payCents: row.partnerFeeCents,
-          tipCents: 0,
+          // The offer pay (fee and tip) is frozen on the delivery row (F7 U12), like every other ending.
+          tipCents: row.tipCents,
           cashCents: row.paymentMethod === 'CASH' ? row.totalCents : 0,
           how: 'admin-override',
           at: new Date().toISOString(),

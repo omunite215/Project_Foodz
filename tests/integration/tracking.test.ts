@@ -370,6 +370,12 @@ describe('door problems and staff (P43, A50)', () => {
     expect(
       (await migrator.delivery.findUniqueOrThrow({ where: { id: deliveryId } })).handoverHow,
     ).toBe('admin-override');
+    // F9 reads the courier's pay from this event: the tip is part of it, never left out.
+    expect(sent('delivery.delivered').at(-1)?.data).toMatchObject({
+      how: 'admin-override',
+      payCents: 764,
+      tipCents: 500,
+    });
     const { partnerDispatchState } = await import('@/server/modules/delivery/service');
     expect((await partnerDispatchState(luis.partnerId)).notice).toMatchObject({
       kind: 'markedDelivered',
