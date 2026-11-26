@@ -10,6 +10,7 @@ import {
 import { inngest } from '@/server/jobs/client';
 import type { OrderStatus } from '@/server/db/enums';
 import { logger } from '@/server/logger';
+import { type OrderChange, orderChanged } from '@/server/modules/delivery/service';
 import { expireMenuCache } from '@/server/modules/menu/cache';
 import { type OrderEffect, runEffects } from '@/server/modules/orders/effects';
 import { STEP_NOTICE_DELAY_MS } from '@/server/modules/orders/progress-schema';
@@ -36,6 +37,8 @@ export type BoardEffect =
       at: Date;
     }
   | { kind: 'cancelled'; orderId: string; at: Date }
+  /** F7 (contract §14): what the order's change does to its delivery. */
+  | { kind: 'dispatch'; orderId: string; change: OrderChange }
   | { kind: 'dish'; dishId: string; available: boolean; at: Date };
 
 async function runOne(effect: BoardEffect) {
@@ -69,6 +72,10 @@ async function runOne(effect: BoardEffect) {
       return;
     }
     case 'reverted':
+      if (effect.from === 'READY') await orderChanged(effect.orderId, 'moved-back');
+      if (effect.from === 'PICKED_UP' && effect.to === 'READY') {
+        await orderChanged(effect.orderId, 'moved-back-from-out');
+      }
       await inngest.send(
         orderStatusReverted.create(
           {
@@ -83,12 +90,16 @@ async function runOne(effect: BoardEffect) {
       );
       return;
     case 'cancelled':
+      await orderChanged(effect.orderId, 'cancelled');
       await inngest.send(
         orderCancelled.create(
           { orderId: effect.orderId, by: 'staff', at: effect.at.toISOString() },
           { id: `order-cancelled-${effect.orderId}` },
         ),
       );
+      return;
+    case 'dispatch':
+      await orderChanged(effect.orderId, effect.change);
       return;
     case 'dish':
       expireMenuCache();

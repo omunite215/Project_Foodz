@@ -55,7 +55,8 @@ export const statements = {
   settings: ['update'],
   // F6: `reinstate` gives a suspended partner access back and reopens a rejection (U27, B24).
   partner: ['apply', 'deliver', 'review-application', 'suspend', 'reinstate'],
-  delivery: ['dispatch', 'track-any'],
+  // F7: `assign` sends a staff offer, takes an order off a courier and restarts a search.
+  delivery: ['dispatch', 'track-any', 'assign'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
   review: ['create', 'moderate'],
@@ -110,7 +111,7 @@ const support = ac.newRole({
   ...selfService,
   order: ['read-any', 'cancel', 'refund'],
   partner: ['review-application', 'suspend'],
-  delivery: ['track-any'],
+  delivery: ['track-any', 'assign'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
   review: ['moderate'],
@@ -138,7 +139,7 @@ const admin = ac.newRole({
   content: ['update', 'publish'],
   settings: ['update'],
   partner: ['review-application', 'suspend', 'reinstate'],
-  delivery: ['dispatch', 'track-any'],
+  delivery: ['dispatch', 'track-any', 'assign'],
   support: ['decide-refund', 'resolve-report', 'ban-member'],
   contact: ['read', 'update'],
   review: ['moderate'],

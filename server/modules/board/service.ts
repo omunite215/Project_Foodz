@@ -7,6 +7,13 @@ import type { OrderStatus } from '@/server/db/enums';
 import { AppError, forbidden, invalidInput, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { audit } from '@/server/modules/audit/service';
+import {
+  courierHolding,
+  courierLines,
+  courierNames,
+  courierSection,
+  couriersCount,
+} from '@/server/modules/delivery/service';
 import { getStoreStatus } from '@/server/modules/menu/service';
 import type { OrderEffect } from '@/server/modules/orders/effects';
 import { readyLateMinutes } from '@/server/modules/orders/progress';
@@ -261,7 +268,7 @@ export async function getBoard(actor: UserActor, now = new Date()): Promise<Boar
   const viewer = await requireBoard(actor, READ, false);
   const store = await getStoreStatus(now);
   const statuses = boardStatusesFor(viewer.role);
-  return runAs(actor, async (ctx) => {
+  const snapshot = await runAs(actor, async (ctx): Promise<BoardSnapshot> => {
     const orders = await listOrdersInStatuses(ctx, statuses);
     const { lines, events, soldOut } = await readCards(ctx, viewer, orders, now);
     const cards = orders.map((order) =>
@@ -291,6 +298,23 @@ export async function getBoard(actor: UserActor, now = new Date()): Promise<Boar
       realtime: { configured: isRealtimeConfigured() },
     };
   });
+  // F7: courier lines and the couriers count, read after the board's own transaction.
+  const cards = await withCouriers(viewer, snapshot.cards, now);
+  return { ...snapshot, cards, couriers: await couriersCount() };
+}
+
+/** A34.1: each Ready and Out-for-delivery card's courier line, in one read for the page. */
+async function withCouriers(viewer: Viewer, cards: BoardCard[], now: Date): Promise<BoardCard[]> {
+  const lines = await courierLines(
+    viewer,
+    cards.map((card) => ({
+      id: card.id,
+      status: card.status,
+      readyAt: card.readyAt ? new Date(card.readyAt) : null,
+    })),
+    now,
+  );
+  return cards.map((card) => Object.assign(card, { courier: lines.get(card.id) ?? null }));
 }
 
 /** Cards for orders named by realtime events; orders that left come back in `gone`. */
@@ -316,7 +340,7 @@ export async function getBoardCards(
       }
     }
     return { asOf: now.toISOString(), cards: sortCards(cards), gone };
-  });
+  }).then(async (result) => ({ ...result, cards: await withCouriers(viewer, result.cards, now) }));
 }
 
 async function readOrder(actor: UserActor, orderId: string) {
@@ -344,7 +368,30 @@ export async function getStaffOrderDetail(
   const found = await readOrder(actor, parsed.data.orderId);
   if (!found) return null;
   const fresh = viewer.isDemo ? null : await stepUpFreshUntilFor(actor, now);
-  return toDetail(viewer, found.order, found.lines, found.events, found.soldOut, fresh, now);
+  // F7: the couriers the timeline names, masked for the demo admin.
+  const names = await courierNames(
+    viewer,
+    found.events.flatMap((event) => {
+      const data = event.data;
+      return data &&
+        typeof data === 'object' &&
+        'partnerId' in data &&
+        typeof data.partnerId === 'string'
+        ? [data.partnerId]
+        : [];
+    }),
+  );
+  const detail = toDetail(
+    viewer,
+    found.order,
+    found.lines,
+    found.events,
+    found.soldOut,
+    fresh,
+    now,
+    names,
+  );
+  return { ...detail, courierSection: await courierSection(viewer, found.order, now) };
 }
 
 /** The refuse and cancel dialogs' opening data, shaped by role (design 3.2, 3.3). */
@@ -385,6 +432,14 @@ export async function findOrder(actor: UserActor, input: unknown): Promise<FindO
     return { kind: 'onBoard', orderId: found.id, number: found.number, status: found.status };
   }
   return { kind: 'offBoard', orderId: found.id, number: found.number, status: found.status };
+}
+
+/** F7 (A35.1): the couriers chip's count, read again when a partner goes online or offline. */
+export async function getCouriersCount(
+  actor: UserActor,
+): Promise<{ online: number; free: number }> {
+  await requireBoard(actor, READ, false);
+  return couriersCount();
 }
 
 /** Every dish with its availability, for the "Dish availability" sheet (design 4.2). */
@@ -976,6 +1031,10 @@ async function handOver(
   const { orderId, expectedVersion, reason, note } = input;
   const from: OrderStatus = mode === 'pickUp' ? 'READY' : 'PICKED_UP';
   const to: OrderStatus = mode === 'pickUp' ? 'PICKED_UP' : 'DELIVERED';
+  // F7: "Picked up by the assigned courier" only when a courier holds the order.
+  if (mode === 'pickUp' && reason === 'assigned-courier' && !(await courierHolding(orderId))) {
+    throw invalidInput(BOARD_FIELD_ERRORS.noCourier, { reason: [BOARD_FIELD_ERRORS.noCourier] });
+  }
 
   const outcome = await runAs(actor, async (ctx) => {
     const { order, events } = await loadLocked(ctx, orderId);
@@ -1017,7 +1076,19 @@ async function handOver(
           ? { number: order.number, reason }
           : { number: order.number, reason, cashCollectedCents },
     });
-    const effects: BoardEffect[] = [{ kind: 'order', effect: published(orderId, now, from) }];
+    const effects: BoardEffect[] = [
+      { kind: 'order', effect: published(orderId, now, from) },
+      {
+        kind: 'dispatch',
+        orderId,
+        change:
+          mode === 'deliver'
+            ? 'delivered'
+            : reason === 'assigned-courier'
+              ? 'picked-up-by-courier'
+              : 'handed-over',
+      },
+    ];
     // U23: no "On its way" notice when the customer collected it herself.
     if (mode === 'deliver' || reason !== 'customer-collected') {
       effects.push({

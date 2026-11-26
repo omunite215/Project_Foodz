@@ -1,3 +1,9 @@
+import type {
+  BoardCourier,
+  CouriersCount,
+  StaffCourierSection,
+} from '@/server/modules/delivery/schema';
+import type { CourierMilestone } from '@/server/modules/delivery/text';
 import { z } from 'zod';
 import type { Cuisine, DisputeStatus, OrderStatus, PaymentStatus } from '@/server/db/enums';
 import { cleanNote } from '@/server/modules/cart/schema';
@@ -124,6 +130,8 @@ export const MOVE_BACK_REASONS = [
 export type MoveBackReason = (typeof MOVE_BACK_REASONS)[number];
 
 export const HANDOVER_REASONS = [
+  /** F7: the courier who accepted the order (until F8 the courier's own step). */
+  'assigned-courier',
   'own-driver',
   'customer-collected',
   'courier-app-down',
@@ -138,6 +146,7 @@ export const BOARD_FIELD_ERRORS = {
   dishes: "Check the dishes you can't make.",
   refusalNote: 'Tell us what happened, so support can answer the customer.',
   otherNote: 'Add a note about what happened.',
+  noCourier: 'No courier has this order. Choose another reason.',
   noteLength: 'Keep the note under 500 characters.',
   orderNumber: 'Enter an order number, like 1042.',
   /** Mark delivered on a cash order without the tick (A9.2, design 3.6). */
@@ -366,6 +375,11 @@ export interface BoardCardLine {
 }
 
 interface BoardCardBase {
+  /**
+   * F7 (A34.1): the courier line on Ready and Out-for-delivery cards, resolved on the server;
+   * null elsewhere. Always sent by the server; optional so older fixtures still type-check.
+   */
+  courier?: BoardCourier | null;
   id: string;
   number: string;
   status: BoardStatus;
@@ -431,6 +445,8 @@ export interface BoardAbilities {
 }
 
 export interface BoardSnapshot {
+  /** F7 (A35.1): real couriers online and free, no names. */
+  couriers?: CouriersCount;
   /** The server's clock; timers count from it, never from the device's (B14). */
   asOf: string;
   view: 'kitchen' | 'full';
@@ -529,7 +545,8 @@ export type StaffTimelineType =
   | 'mismatch'
   | 'dispute-opened'
   | 'dispute-closed'
-  | 'sold-out';
+  | 'sold-out'
+  | 'courier';
 
 interface TimelineBase {
   id: string;
@@ -571,6 +588,18 @@ export type StaffTimelineEntry = TimelineBase &
     | { type: 'dispute-closed'; outcome: string | null }
     /** "Pad Thai marked sold out by Alex Kim (Kitchen)": only when a refusal ticked it. */
     | { type: 'sold-out'; dishes: string[] }
+    /**
+     * F7 (design 2.5): a courier milestone. `words` is the sentence to show; the courier's full
+     * name is masked for the demo admin when a real person; `note` is staff-only.
+     */
+    | {
+        type: 'courier';
+        event: CourierMilestone;
+        courierName: string | null;
+        reason: string | null;
+        note: string | null;
+        words: string;
+      }
   );
 
 /** A7.6: where a refund Foodz started stands. */
@@ -591,6 +620,8 @@ export interface DetailActions {
 }
 
 interface DetailBase {
+  /** F7 (A36): the courier section, shaped by role; null with no courier story to tell. */
+  courierSection?: StaffCourierSection | null;
   asOf: string;
   id: string;
   number: string;

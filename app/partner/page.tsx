@@ -8,6 +8,9 @@ import {
 } from '@/components/partner/application-screens';
 import { ApplyGate } from '@/components/partner/apply-gate';
 import { PartnerHome } from '@/components/partner/home/partner-home';
+import { getActor } from '@/server/auth/session';
+import { getCurrentDelivery } from '@/server/modules/delivery/service';
+import { deliverTitle, pickUpTitle } from '@/lib/partner/offer-text';
 import { STORE_TIME_ZONE } from '@/lib/order-text';
 import { firstParam } from '@/lib/search-params';
 import { loadPartnerState, partnerTitle, requirePartnerState } from './state';
@@ -15,7 +18,18 @@ import { loadPartnerState, partnerTitle, requirePartnerState } from './state';
 export async function generateMetadata(): Promise<Metadata> {
   const loaded = await loadPartnerState();
   const screen = loaded?.state.screen;
-  if (screen === 'home') return { title: partnerTitle('Home') };
+  if (loaded?.state.screen === 'home') {
+    // F7: "Pick up order 1042 | Foodz Partner" while he holds an order.
+    const held = loaded.state.dispatch.delivery;
+    if (!held) return { title: partnerTitle('Home') };
+    return {
+      title: partnerTitle(
+        held.status === 'PICKED_UP'
+          ? deliverTitle(held.orderNumber)
+          : pickUpTitle(held.orderNumber),
+      ),
+    };
+  }
   if (screen === 'pending' || screen === 'sentBack' || screen === 'rejected') {
     return { title: partnerTitle('Your application') };
   }
@@ -62,7 +76,12 @@ export default async function PartnerPage({ searchParams }: { searchParams: Sear
       return (
         <SuspendedScreen since={state.since} reason={state.reason} timeZone={STORE_TIME_ZONE} />
       );
-    default:
-      return <PartnerHome state={state} asOf={new Date().toISOString()} />;
+    default: {
+      // F7 P29.5, P17.6: the pick-up screen is in the first HTML when he holds an order.
+      const actor = state.dispatch.delivery ? await getActor() : null;
+      const delivery =
+        actor?.kind === 'user' ? await getCurrentDelivery(actor).catch(() => null) : null;
+      return <PartnerHome state={state} asOf={new Date().toISOString()} delivery={delivery} />;
+    }
   }
 }

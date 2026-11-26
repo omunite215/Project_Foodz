@@ -51,6 +51,10 @@ export function orderDateText(iso: string, now: Date, timeZone: string): string 
   return `${shortDate(at, now, timeZone)}, ${clock}`;
 }
 
+/** Whether an instant falls on the same day as `now` in the store's zone. */
+export const sameStoreDay = (iso: string, now: Date, timeZone: string) =>
+  dayKey(new Date(iso), timeZone) === dayKey(now, timeZone);
+
 /** "7:02 pm" today, else "Nov 20" (the timeline's time column). */
 export function eventTimeText(iso: string, now: Date, timeZone: string): string {
   const at = new Date(iso);

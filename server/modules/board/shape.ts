@@ -1,3 +1,4 @@
+import { COURIER_MILESTONES, courierTimelineWords } from '@/server/modules/delivery/text';
 import { displayPhone } from '@/lib/phone';
 import { can as roleCan, type Role } from '@/server/auth/roles';
 import type { OrderStatus } from '@/server/db/enums';
@@ -411,6 +412,7 @@ export function timelineOf(
   order: OrderFacts,
   lines: readonly LineFacts[],
   events: readonly EventFacts[],
+  courierNames: ReadonlyMap<string, string> = new Map(),
 ): StaffTimelineEntry[] {
   const kitchen = isKitchenView(viewer.role);
   const label = cardLabelOf(order);
@@ -514,8 +516,27 @@ export function timelineOf(
         return [{ ...base, type: 'dispute-closed', outcome: text(data.status) }];
       case 'sold-out':
         return [{ ...base, type: 'sold-out', dishes: stringList(data.dishes) }];
-      default:
-        return [];
+      default: {
+        // F7 (design 2.5): courier milestones, named from the caller's (masked) name map.
+        const milestone = COURIER_MILESTONES.find((name) => `courier-${name}` === event.type);
+        if (!milestone) return [];
+        const partnerId = text(data.partnerId);
+        const courierName = partnerId ? (courierNames.get(partnerId) ?? null) : null;
+        const reason = text(data.reason);
+        const staff = base.by.kind === 'staff' ? { name: base.by.name, role: base.by.role } : null;
+        const pickupM = typeof data.pickupM === 'number' ? data.pickupM : null;
+        return [
+          {
+            ...base,
+            type: 'courier',
+            event: milestone,
+            courierName,
+            reason,
+            note: kitchen ? null : note,
+            words: courierTimelineWords({ event: milestone, courierName, staff, reason, pickupM }),
+          },
+        ];
+      }
     }
   });
 }
@@ -622,6 +643,7 @@ export function toDetail(
   soldOut: ReadonlySet<string>,
   stepUpFreshUntil: Date | null,
   now: Date,
+  courierNames: ReadonlyMap<string, string> = new Map(),
 ): StaffOrderDetail {
   const readyBy = readyByOf(order);
   const promised =
@@ -657,7 +679,7 @@ export function toDetail(
     },
     kitchenNote: order.note,
     cancellation: cancellationOf(order, lines, events),
-    timeline: timelineOf(viewer, order, lines, events),
+    timeline: timelineOf(viewer, order, lines, events, courierNames),
     actions: detailActionsOf(viewer, order, events, stepUpFreshUntil, now),
     masked: { customer: order.masked, kitchenNote: order.masked && order.note !== null },
   };

@@ -1,3 +1,4 @@
+import type { PartnerDispatchState } from '@/server/modules/delivery/schema';
 import { z } from 'zod';
 import { DEFAULT_PHONE_COUNTRY, parsePhone } from '@/lib/phone';
 import type { VehicleType } from '@/server/db/enums';
@@ -202,7 +203,10 @@ export const locationPointSchema = z
  */
 export const availabilityInput = z.discriminatedUnion('online', [
   z.object({ online: z.literal(true), point: locationPointSchema.optional() }).strict(),
-  z.object({ online: z.literal(false) }).strict(),
+  // F7 P30.4, U15: a partner holding an order goes offline only with `giveBack: true` (the
+  // "Give back and go offline" dialog); without it, e.g. the page-close request, the server
+  // answers PARTNER_BUSY and the order stays his.
+  z.object({ online: z.literal(false), giveBack: z.boolean().optional() }).strict(),
 ]);
 export type AvailabilityInput = z.input<typeof availabilityInput>;
 
@@ -351,6 +355,8 @@ export type PartnerState =
       kitchen: PartnerKitchen;
       /** The demo partner's pretend position (B12); null for everyone else. */
       demoPoint: { lat: number; lng: number } | null;
+      /** F7: offers, the order held and a missed release notice (design "[BE] needs"). */
+      dispatch: PartnerDispatchState;
     }
   /** P14.3: no data beyond the date and the reason. */
   | { screen: 'suspended'; since: string; reason: string | null };

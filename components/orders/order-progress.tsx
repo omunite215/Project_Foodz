@@ -2,6 +2,8 @@
 
 import {
   Banknote,
+  Bike,
+  Car,
   Check,
   CircleCheck,
   ClipboardCheck,
@@ -11,20 +13,23 @@ import {
   House,
   Info,
   type LucideIcon,
+  Motorbike,
   PackageCheck,
   Receipt,
   RefreshCw,
+  Scooter,
   ShoppingBag,
   TicketPercent,
   TimerOff,
   TriangleAlert,
   Truck,
   Undo2,
+  UserRoundCheck,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { gsap } from 'gsap';
-import { type ReactNode, type Ref, type RefObject, useRef } from 'react';
+import { type ReactNode, type Ref, type RefObject, useRef, useState } from 'react';
 import type { OrderView } from '@/server/modules/orders/schema';
 import type { OrderStep, StepKey } from '@/server/modules/orders/progress-schema';
 import { SignInAgain } from '@/components/forms/sign-in-again';
@@ -32,6 +37,10 @@ import { Button } from '@/components/ui/button';
 import { useMotion } from '@/lib/motion';
 import {
   arrivalText,
+  courierChangedShown,
+  courierShown,
+  courierTimelineEntry,
+  courierTimelineText,
   cancellationMoney,
   cancellationOpener,
   cancellationReason,
@@ -45,6 +54,7 @@ import {
 } from '@/lib/order-progress';
 import { telOf, timelineLabel } from '@/lib/order-text';
 import { cn } from '@/lib/utils';
+import { CourierBlock } from './courier-block';
 
 /*
  * The live parts of the customer's order page (F5 design 6.4 to 6.9): the stepper, the arrival
@@ -358,6 +368,9 @@ export function ProgressCard({
   live: { state: LiveLine; returnPath: string };
 }) {
   const steps = view.progress.steps;
+  const courier = courierShown(view);
+  // F7: in the server's HTML the courier block shows at once; one that arrives live rises in.
+  const [courierAtLoad] = useState(courier?.firstName ?? null);
   if (!steps) return null;
   return (
     <section
@@ -365,6 +378,14 @@ export function ProgressCard({
       className="mt-8 rounded-2xl border border-neutral-6 bg-white p-5 md:p-6"
     >
       <OrderStepper steps={steps} now={now} timeZone={view.store.timeZone} />
+      {courier ? (
+        <CourierBlock
+          key={courier.firstName}
+          courier={courier}
+          changed={courierChangedShown(view)}
+          animateIn={courierAtLoad !== courier.firstName}
+        />
+      ) : null}
       <ArrivalRow view={view} />
       <ConnectionLine state={live.state} returnPath={live.returnPath} />
     </section>
@@ -475,8 +496,51 @@ const DOTS: Record<string, { icon: LucideIcon; className: string }> = {
 };
 
 /** The timeline in its own card with an h2 (design 6.9). */
+/** The courier's vehicle on the timeline disc (F7 design 3.4); a plain mark after delivery. */
+function vehicleIcon(vehicleWords: string | null): LucideIcon {
+  if (!vehicleWords) return UserRoundCheck;
+  const kind = vehicleWords.split(' ')[0];
+  if (kind === 'Bicycle') return Bike;
+  if (kind === 'Motorbike') return Motorbike;
+  if (kind === 'Car') return Car;
+  return Scooter;
+}
+
+/** A timeline row as drawn: the server's entries plus the current courier's (F7 S2.3). */
+type TimelineRow =
+  | { key: string; kind: 'entry'; entry: OrderView['timeline'][number] }
+  | {
+      key: string;
+      kind: 'courier';
+      firstName: string;
+      vehicleWords: string | null;
+      at: string | null;
+    };
+
+function timelineRows(view: OrderView): TimelineRow[] {
+  const rows: TimelineRow[] = view.timeline.map((entry) => ({
+    key: `${entry.kind}-${entry.at}`,
+    kind: 'entry',
+    entry,
+  }));
+  const courier = courierTimelineEntry(view);
+  if (!courier) return rows;
+  // After "Ready" (the courier accepts a ready order), before "On its way".
+  const ready = rows.findIndex((row) => row.kind === 'entry' && row.entry.kind === 'ready');
+  const at = ready === -1 ? rows.length : ready + 1;
+  rows.splice(at, 0, {
+    key: `courier-${courier.firstName}`,
+    kind: 'courier',
+    firstName: courier.firstName,
+    vehicleWords: courier.vehicleWords,
+    at: courier.at,
+  });
+  return rows;
+}
+
 export function TimelineCard({ view, now }: { view: OrderView; now: Date }) {
-  if (view.timeline.length === 0) return null;
+  const rows = timelineRows(view);
+  if (rows.length === 0) return null;
   return (
     <section
       aria-labelledby="timeline-title"
@@ -486,14 +550,41 @@ export function TimelineCard({ view, now }: { view: OrderView; now: Date }) {
         Timeline
       </h2>
       <ol aria-labelledby="timeline-title" className="mt-4">
-        {view.timeline.map((entry, index) => {
+        {rows.map((row, index) => {
+          const last = index === rows.length - 1;
+          if (row.kind === 'courier') {
+            const Vehicle = vehicleIcon(row.vehicleWords);
+            return (
+              <li key={row.key} className="relative flex gap-3 pb-5 last:pb-0">
+                {last ? null : (
+                  <span aria-hidden className="absolute top-7 bottom-0 left-3 w-px bg-neutral-6" />
+                )}
+                <span
+                  aria-hidden
+                  className="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-strong"
+                >
+                  <Vehicle className="size-3.5 text-white" strokeWidth={2.5} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-body-4 font-medium text-neutral-1 [overflow-wrap:anywhere]">
+                    {courierTimelineText(row.firstName)}
+                  </span>
+                  {row.at ? (
+                    <span className="block text-body-5 text-neutral-3 tabular-nums">
+                      {timelineTime(row.at, now, view.store.timeZone)}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            );
+          }
+          const entry = row.entry;
           const dot = DOTS[entry.kind] ?? { icon: Check, className: 'bg-neutral-3' };
           const Icon = entry.kind === 'pickedUp' && entry.collected ? ShoppingBag : dot.icon;
-          const last = index === view.timeline.length - 1;
           const label =
             progressTimelineLabel(entry) ?? timelineLabel(entry.kind, entry.amountCents, view);
           return (
-            <li key={`${entry.kind}-${entry.at}`} className="relative flex gap-3 pb-5 last:pb-0">
+            <li key={row.key} className="relative flex gap-3 pb-5 last:pb-0">
               {last ? null : (
                 <span aria-hidden className="absolute top-7 bottom-0 left-3 w-px bg-neutral-6" />
               )}

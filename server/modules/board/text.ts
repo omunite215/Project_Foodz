@@ -60,6 +60,7 @@ export const MOVE_BACK_REASON_LABELS: Record<MoveBackReason, string> = {
 };
 
 export const HANDOVER_REASON_LABELS: Record<HandoverReason, string> = {
+  'assigned-courier': 'Picked up by the assigned courier',
   'own-driver': 'Picked up by our own driver',
   'customer-collected': 'Customer collected it',
   'courier-app-down': 'Courier app not available',

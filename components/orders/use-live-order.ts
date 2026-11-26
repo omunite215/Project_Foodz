@@ -6,6 +6,7 @@ import { announce } from '@/lib/announce';
 import { cancellationAnnouncement, statusAnnouncement } from '@/lib/order-progress';
 import { channels } from '@/lib/realtime/channels';
 import { useChannelEvent, useRealtimeStatus } from '@/lib/realtime/client';
+import { oneReadAtATime } from '@/lib/one-read-at-a-time';
 import { useHydrated } from '@/lib/use-hydrated';
 import { useOnline } from '@/lib/use-online';
 import type { LiveLine } from './order-progress';
@@ -45,12 +46,21 @@ export function useLiveOrder({
   const version = useRef(view.progress.version);
   const shown = useRef(view);
 
-  const refresh = useEffectEvent(() => void refetch());
+  // F7 S4.1: one read at a time. Messages during a read ask for one more after it, so a burst
+  // never queues reads in front of the one that matters.
+  const readLatest = useEffectEvent(() => refetch());
+  const reader = useRef<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    reader.current = oneReadAtATime(() => readLatest());
+  }, []);
+  const refresh = useEffectEvent(() => void reader.current?.());
 
   // Events older than what the page shows are ignored (S3.7).
   useChannelEvent(channel, 'order.status-changed', (event) => {
-    if (event.version > version.current) void refetch();
+    if (event.version > version.current) void reader.current?.();
   });
+  // F7 S5.1: a change of courier leaves the order's version alone; the view is read again.
+  useChannelEvent(channel, 'delivery.changed', () => void reader.current?.());
 
   // Announce what changed, once: the current status after a catch-up, never the old ones.
   useEffect(() => {

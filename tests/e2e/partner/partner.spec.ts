@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import {
   expect,
   expectNoAxeViolations,
+  expectNoAxeViolationsAtEnd,
   open,
   PARTNERS,
   projectOf,
@@ -243,7 +244,8 @@ test('Diego goes online with his location, sees the idle screen, and goes offlin
   await expect(page.getByRole('banner').getByText('Online', { exact: true })).toBeVisible();
   await page.getByText('Dark', { exact: true }).click();
   await expect(page.locator('.partner')).toHaveAttribute('data-theme', 'dark');
-  await expectNoAxeViolations(page);
+  // F7 made Profile taller ("Offer alerts"): checked from its end, clear of the tab bar.
+  await expectNoAxeViolationsAtEnd(page);
   await page.getByText('Light', { exact: true }).click();
 
   await page.getByRole('link', { name: 'Home' }).click();
@@ -290,7 +292,8 @@ test('the demo partner goes online with a pretend location', async ({ page }, te
   });
   await expect(page.getByText('Not your real location')).toBeVisible();
   await expectKitchenPinInMap(page);
-  await expectNoAxeViolations(page);
+  // F7 made the online home taller ("How offers work", the practice card): checked from its end.
+  await expectNoAxeViolationsAtEnd(page);
   await page.getByRole('button', { name: 'Go offline' }).click();
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible();
 });

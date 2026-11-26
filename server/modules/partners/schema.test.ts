@@ -142,5 +142,7 @@ describe('location bodies (P16.5)', () => {
     expect(availabilityInput.safeParse({ online: true }).success).toBe(true);
     expect(availabilityInput.safeParse({ online: false }).success).toBe(true);
     expect(availabilityInput.safeParse({ online: false, point }).success).toBe(false);
+    expect(availabilityInput.safeParse({ online: false, giveBack: true }).success).toBe(true);
+    expect(availabilityInput.safeParse({ online: true, giveBack: true }).success).toBe(false);
   });
 });

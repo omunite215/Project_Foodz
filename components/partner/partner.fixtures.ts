@@ -86,4 +86,11 @@ export const DIEGO_HOME: Extract<PartnerState, { screen: 'home' }> = {
     timeZone: TZ,
   },
   demoPoint: null,
+  dispatch: {
+    missedInRow: 0,
+    offersPausedSince: null,
+    howOffersWork: { reachesKm: [2, 4, 8], offerSeconds: 30, missLimit: 3 },
+    delivery: null,
+    notice: null,
+  },
 };

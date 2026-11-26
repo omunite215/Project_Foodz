@@ -166,6 +166,13 @@ export function offlineNotice(
         words: 'You went online on another device, so sharing stopped here.',
         ifDisconnected: null,
       };
+    // F7 P25.2.
+    case 'missed-offers':
+      return {
+        words:
+          "We took you offline because you missed 3 offers in a row. Go online when you're ready for orders.",
+        ifDisconnected: null,
+      };
     default:
       return { words: 'Another visitor took the demo partner offline.', ifDisconnected: null };
   }

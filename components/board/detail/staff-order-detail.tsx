@@ -1,7 +1,16 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CircleCheck, Clock, Phone, Undo2 } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  CircleCheck,
+  Clock,
+  Phone,
+  RotateCcw,
+  Undo2,
+  UserRoundPlus,
+  UserRoundX,
+} from 'lucide-react';
 import { type ReactNode, type Ref, useEffect, useId, useRef, useState } from 'react';
 import {
   moveOrderAction,
@@ -18,6 +27,8 @@ import {
 import { PREVIOUS_STEP } from '@/server/modules/board/state';
 import { cardTiming } from '@/server/modules/board/timing';
 import { STAFF_STATUS_WORDS } from '@/server/modules/board/text';
+import { restartSearchAction } from '@/server/modules/delivery/actions';
+import type { StaffCourierSection } from '@/server/modules/delivery/schema';
 import { showBoardNotice } from '@/components/admin/board-notices';
 import { FormAlert } from '@/components/forms/form-alert';
 import { BLOCKED_BUTTON_CLASS, useSlowPending } from '@/components/forms/submit-button';
@@ -27,6 +38,11 @@ import { Spinner } from '@/components/ui/spinner';
 import { type ActionFailure, callAction } from '@/lib/action-result';
 import { announce } from '@/lib/announce';
 import { isOrderChangedDetails, withStatus } from '@/lib/board/model';
+import {
+  deliveryChangedText,
+  isDeliveryChangedDetails,
+  LOOKING_AGAIN,
+} from '@/lib/board/courier-text';
 import {
   actorText,
   boardClock,
@@ -61,6 +77,7 @@ import {
   PaymentChip,
   TimeBlock,
 } from '../card-parts';
+import { CourierSection } from '../courier-parts';
 import { BoardDialogs, type DialogKind, type DialogState } from '../dialogs/board-dialogs';
 import { StaffTimeline } from './staff-timeline';
 
@@ -105,6 +122,10 @@ export function useStaffOrderDetail(
     if (event.orderId === orderId) refetch();
   });
   useChannelEvent(listen ? channels.order(orderId) : null, 'order.status-changed', () => refetch());
+  // F7 (A36): the courier section follows every change of the order's delivery.
+  useChannelEvent(listen ? channels.ops : null, 'delivery.changed', (event) => {
+    if (event.orderId === orderId) refetch();
+  });
   return query;
 }
 
@@ -134,6 +155,8 @@ export function detailAsCard(detail: StaffOrderDetail): BoardCard | null {
     kitchenNote: detail.kitchenNote,
     undo: detail.actions.undo,
     masked: { firstName: detail.masked.customer, kitchenNote: detail.masked.kitchenNote },
+    // F7: the courier line, so the dialogs know who holds the order (design 2.11).
+    courier: detail.courierSection?.courier ?? null,
   };
   if (detail.view === 'kitchen') {
     return { ...base, view: 'kitchen', lines: detail.lines, payment: detail.payment };
@@ -319,6 +342,7 @@ function CustomerSection({ detail, level }: { detail: FullOrderDetail; level: 'h
 function DetailButton({
   children,
   pending,
+  pendingLabel = 'Moving…',
   blocked,
   captionId,
   primary,
@@ -327,6 +351,7 @@ function DetailButton({
 }: {
   children: ReactNode;
   pending?: boolean;
+  pendingLabel?: string;
   blocked: boolean;
   captionId: string;
   primary?: boolean;
@@ -359,7 +384,7 @@ function DetailButton({
       {slow ? (
         <>
           <Spinner className="motion-reduce:animate-none" />
-          Moving…
+          {pendingLabel}
         </>
       ) : (
         children
@@ -531,6 +556,123 @@ function DetailActions({
   );
 }
 
+// ------------------------------------------------------------------ the courier's actions (2.6, 2.10)
+
+function CourierActions({
+  section,
+  detail,
+  offline,
+  onDialog,
+  onRefresh,
+  onSignedOut,
+  timeZone,
+}: {
+  section: Extract<StaffCourierSection, { view: 'full' }>;
+  detail: StaffOrderDetail;
+  offline: boolean;
+  onDialog: (kind: DialogKind) => void;
+  onRefresh: () => void;
+  onSignedOut: () => void;
+  timeZone: string;
+}) {
+  const captionId = useId();
+  const [starting, setStarting] = useState(false);
+  const [reason, setReason] = useState<string | null>(null);
+  const actions = section.actions;
+  const readOnly = actions.readOnly;
+  const blocked = readOnly || offline;
+  const caption = readOnly ? READ_ONLY_CAPTION : offline ? OFFLINE_CAPTION : null;
+  // The demo admin sees the actions the role would have, disabled (design 2.6).
+  const held = section.assigned !== null && !actions.afterPickup;
+  const ready = detail.status === 'READY';
+  const showAssign = actions.assign || (readOnly && ready && !held);
+  const showTakeOff = actions.takeOff || (readOnly && ready && held);
+  const showFind = actions.findCourier || (readOnly && section.courier.state === 'notLooking');
+  if (!showAssign && !showTakeOff && !showFind) return null;
+
+  const findCourier = async () => {
+    setStarting(true);
+    setReason(null);
+    const outcome = await callAction(() =>
+      restartSearchAction({ orderId: detail.id, expectedVersion: section.deliveryVersion ?? 0 }),
+    );
+    setStarting(false);
+    if (outcome.ok) {
+      showBoardNotice(LOOKING_AGAIN);
+      onRefresh();
+      return;
+    }
+    if (outcome.error.code === 'UNAUTHENTICATED') {
+      onSignedOut();
+      return;
+    }
+    const text =
+      outcome.error.code === 'DELIVERY_CHANGED' && isDeliveryChangedDetails(outcome.error.details)
+        ? deliveryChangedText(detail.number, outcome.error.details, timeZone, outcome.error.message)
+        : outcome.error.message;
+    setReason(text);
+    announce(text);
+    onRefresh();
+  };
+
+  return (
+    <div className="mt-4 space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {showAssign ? (
+          <DetailButton
+            blocked={blocked}
+            captionId={captionId}
+            onPress={() => onDialog('assignCourier')}
+          >
+            <UserRoundPlus className="size-5" aria-hidden />
+            Assign courier
+          </DetailButton>
+        ) : null}
+        {showTakeOff ? (
+          <>
+            <DetailButton
+              blocked={blocked}
+              captionId={captionId}
+              onPress={() => onDialog('takeOffCourier')}
+            >
+              <UserRoundX className="size-5" aria-hidden />
+              Take off courier
+            </DetailButton>
+            <DetailButton
+              blocked={blocked}
+              captionId={captionId}
+              onPress={() => onDialog('chooseAnother')}
+            >
+              <ArrowLeftRight className="size-5" aria-hidden />
+              Choose another courier
+            </DetailButton>
+          </>
+        ) : null}
+        {showFind ? (
+          <DetailButton
+            blocked={blocked}
+            pending={starting}
+            pendingLabel="Starting…"
+            captionId={captionId}
+            onPress={() => void findCourier()}
+          >
+            <RotateCcw className="size-5" aria-hidden />
+            Find a courier
+          </DetailButton>
+        ) : null}
+      </div>
+      {caption ? (
+        <p id={captionId} className="text-caption text-neutral-3">
+          {caption}
+        </p>
+      ) : null}
+      {reason ? (
+        <p className="rounded-lg bg-neutral-7 px-3 py-2 text-body-5 text-neutral-1">{reason}</p>
+      ) : null}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ the view
 
 export function StaffOrderDetailView({
@@ -555,6 +697,7 @@ export function StaffOrderDetailView({
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const level = variant === 'panel' ? 'h3' : 'h2';
   const now = useDetailClock(detail.asOf);
+  const courierNow = useDetailClock(detail.asOf, 5_000);
   const card = detailAsCard(detail);
   const time = card ? timeBlockText(cardTiming(card, now), card, timeZone) : null;
   const cancelledText = useCancelledNotice(detail);
@@ -613,6 +756,38 @@ export function StaffOrderDetailView({
         )}
       </header>
       <div className="space-y-6 px-6 py-5">
+        {detail.courierSection ? (
+          <CourierSection
+            section={detail.courierSection}
+            orderNumber={detail.number}
+            orderStatus={detail.status}
+            now={courierNow}
+            timeZone={timeZone}
+            level={level}
+            actions={
+              detail.courierSection.view === 'full' && !cancelledText ? (
+                <CourierActions
+                  section={detail.courierSection}
+                  detail={detail}
+                  offline={!online}
+                  timeZone={timeZone}
+                  onRefresh={refresh}
+                  onSignedOut={onSignedOut}
+                  onDialog={(kind) => {
+                    if (!card) return;
+                    const opener = document.activeElement;
+                    setDialog({
+                      kind,
+                      cardId: card.id,
+                      card,
+                      opener: opener instanceof HTMLElement ? opener : null,
+                    });
+                  }}
+                />
+              ) : null
+            }
+          />
+        ) : null}
         <Section title="Times" level={level}>
           <ul className="space-y-1 text-body-4 text-neutral-1 tabular-nums">
             {detail.placedAt ? <li>{placedLine(detail.placedAt, now, timeZone)}</li> : null}
@@ -672,6 +847,7 @@ export function StaffOrderDetailView({
             setDialog(null);
             refresh();
           }}
+          onChain={(kind) => setDialog((current) => (current ? { ...current, kind } : current))}
           focusAfter={() => {
             // From the detail: focus to its status line (design 3.3).
             requestAnimationFrame(() =>
@@ -685,19 +861,19 @@ export function StaffOrderDetailView({
 }
 
 /** The server's time for the detail's timers (B14): `asOf`, then ticking every 15 seconds. */
-function useDetailClock(asOf: string): Date {
+function useDetailClock(asOf: string, every = 15_000): Date {
   const [base] = useState(() => ({ asOf, receivedAt: Date.now() }));
   const [now, setNow] = useState(() => new Date(asOf));
   useEffect(() => {
     const offset = Date.parse(base.asOf) - base.receivedAt;
     const tick = () => setNow(new Date(Date.now() + offset));
     const first = setTimeout(tick, 0);
-    const timer = setInterval(tick, 15_000);
+    const timer = setInterval(tick, every);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [base]);
+  }, [base, every]);
   return now;
 }
 

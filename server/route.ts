@@ -21,6 +21,22 @@ export interface RouteContext {
   /** The caller's session: the one that goes online owns the location (B9). */
   sessionId: string | null;
   body: unknown;
+  /** The dynamic segments of the route (`[offerId]`), checked by the handler's own schema. */
+  params: Record<string, string>;
+}
+
+/** What Next passes a route handler as its second argument (params is a promise in Next 16). */
+interface HandlerContext {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+}
+
+async function readParams(context: HandlerContext | undefined): Promise<Record<string, string>> {
+  const raw = (await context?.params) ?? {};
+  return Object.fromEntries(
+    Object.entries(raw).flatMap(([key, value]) =>
+      typeof value === 'string' ? [[key, value]] : [],
+    ),
+  );
 }
 
 const NO_STORE = { 'cache-control': 'no-store' } as const;
@@ -76,22 +92,31 @@ async function readBody(request: Request): Promise<unknown> {
 export function partnerRoute<T>(options: {
   name: string;
   rateLimit: RateLimitPolicy;
+  /** Count the limit per session instead of per account (the shared demo partner's practice). */
+  rateLimitBy?: 'session';
   handler: (context: RouteContext) => Promise<T>;
 }) {
-  return async function handle(request: Request): Promise<Response> {
+  return async function handle(request: Request, context?: HandlerContext): Promise<Response> {
     const started = performance.now();
     try {
       if (request.method !== 'GET' && !isSameOrigin(request)) throw forbidden();
       const actor = await getActor();
       if (actor.kind !== 'user') throw unauthenticated();
       if (isStaff(actor.role)) throw STAFF_REFUSAL();
-      await enforceRateLimit(options.rateLimit, `user:${actor.userId}`);
-      const body = await readBody(request);
       const session = await getSession();
+      const sessionId = session && session.user.id === actor.userId ? session.session.id : null;
+      await enforceRateLimit(
+        options.rateLimit,
+        options.rateLimitBy === 'session' && sessionId
+          ? `session:${sessionId}`
+          : `user:${actor.userId}`,
+      );
+      const body = await readBody(request);
       const result = await options.handler({
         actor,
-        sessionId: session && session.user.id === actor.userId ? session.session.id : null,
+        sessionId,
         body,
+        params: await readParams(context),
       });
       return Response.json(result, { headers: NO_STORE });
     } catch (error) {

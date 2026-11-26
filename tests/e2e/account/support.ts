@@ -1,7 +1,14 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { AxeBuilder } from '@axe-core/playwright';
-import { type Browser, test as base, expect, type Page, type TestInfo } from '@playwright/test';
+import {
+  type Browser,
+  type BrowserContext,
+  test as base,
+  expect,
+  type Page,
+  type TestInfo,
+} from '@playwright/test';
 import { config } from 'dotenv';
 import { settleBeforeScan } from '../settle';
 
@@ -51,16 +58,21 @@ export const ACCOUNTS = {
  * per-network limits (sign-ups, failed sign-ins) of one test never spill into another. The test
  * server runs with CLIENT_IP_FROM_HEADER=1 (playwright.config.ts), so it takes the address from
  * x-forwarded-for (server/client-ip.ts).
- * Only requests to the app carry it; third parties (Turnstile, map tiles) see nothing extra.
+ * Only requests to the app carry it; third parties (Turnstile, map tiles) see nothing extra. A test
+ * that opens another browser context (a staff window) gives it its own network the same way.
  */
+export async function asOwnNetwork(context: BrowserContext, baseURL: string | undefined) {
+  const ip = `10.${(Math.random() * 250) | 0}.${(Math.random() * 250) | 0}.${(Math.random() * 250) | 0}`;
+  await context.route(`${baseURL}/**`, (route) =>
+    route.continue({ headers: { ...route.request().headers(), 'x-forwarded-for': ip } }),
+  );
+  return ip;
+}
+
 export const test = base.extend<{ clientIp: string }>({
   clientIp: [
     async ({ context, baseURL }, use) => {
-      const ip = `10.${(Math.random() * 250) | 0}.${(Math.random() * 250) | 0}.${(Math.random() * 250) | 0}`;
-      await context.route(`${baseURL}/**`, (route) =>
-        route.continue({ headers: { ...route.request().headers(), 'x-forwarded-for': ip } }),
-      );
-      await use(ip);
+      await use(await asOwnNetwork(context, baseURL));
     },
     { auto: true },
   ],

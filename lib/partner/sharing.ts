@@ -73,6 +73,11 @@ export interface SharingState {
   suspended: 'event' | 'signedOut' | null;
   /** The location sharing went to the background for a while (P10.7). */
   hiddenSince: number | null;
+  /**
+   * F7 P29.5: location was turned off while he holds an order. He stays online and assigned;
+   * the pick-up screen asks him to turn it back on.
+   */
+  locationOff: boolean;
 }
 
 const initial: SharingState = {
@@ -94,6 +99,7 @@ const initial: SharingState = {
   pinned: null,
   suspended: null,
   hiddenSince: null,
+  locationOff: false,
 };
 
 export const sharingStore = createStore<SharingState>(initial);
@@ -179,6 +185,16 @@ let wakeLock: WakeLockSentinel | null = null;
 let listening = false;
 let resolveFirstFix: ((fix: Fix | null) => void) | null = null;
 const ownChanges = new Set<string>();
+/**
+ * F7 U15: he holds an order. A reload or a closed tab never takes him offline then (the server
+ * would refuse anyway), and losing the location permission keeps him online and assigned.
+ */
+let holdingOrder = false;
+
+export function setHoldingOrder(holding: boolean) {
+  holdingOrder = holding;
+  if (!holding && get().locationOff) set({ locationOff: false });
+}
 /*
  * The realtime echo of this device's own change can arrive before the answer that names its
  * `changeId`. While an availability request is out, events wait, and are judged once it answers.
@@ -354,6 +370,10 @@ function onWatchError(error: GeolocationPositionError) {
   const state = get();
   if (state.phase === 'finding') {
     failFinding('blocked');
+  } else if (state.phase === 'online' && holdingOrder) {
+    // F7 P29.5: he keeps the order; the pick-up screen asks for the location back.
+    stopWatching();
+    set({ locationOff: true });
   } else if (state.phase === 'online') {
     // P12.3: location turned off while online.
     void goOffline({ help: 'turnedOff', announceText: null });
@@ -622,7 +642,10 @@ const NOTICED = new Set<string>([
   'kitchen-closed',
   'other-device',
   'demo-other-visitor',
+  // F7 P25.2.
+  'missed-offers',
 ]);
+const WARNING_REASONS = new Set<string>(['no-location', 'missed-offers']);
 const isNoticed = (reason: string): reason is NoticedOfflineReason => NOTICED.has(reason);
 
 /**
@@ -644,7 +667,9 @@ function takenOffline(reason: string | null, at: string | null) {
     phase: 'offline',
     onlineSince: null,
     pinned: null,
-    notice: text ? { text, tone: reason === 'no-location' ? 'warning' : 'muted' } : null,
+    notice: text
+      ? { text, tone: reason && WARNING_REASONS.has(reason) ? 'warning' : 'muted' }
+      : null,
     otherDevice: reason === 'other-device',
   });
   if (text) announce(text);
@@ -914,6 +939,44 @@ export async function goOffline({
   }
 }
 
+/**
+ * F7 P30.4: "Give back and go offline". The server gives the order back first, then takes him
+ * offline; only then does the phone stop sharing. A refusal (the order was picked up meanwhile)
+ * leaves him online with the order.
+ */
+export async function goOfflineGivingBack(): Promise<'done' | 'busy' | 'offline'> {
+  if (!navigator.onLine) return 'offline';
+  const answer = await availabilityRequest({ online: false, giveBack: true });
+  if (!answer || answer.status >= 500) return 'offline';
+  if (answer.status !== 200) {
+    if (codeOf(answer.body) === 'PARTNER_SUSPENDED') suspend('event');
+    return 'busy';
+  }
+  holdingOrder = false;
+  stopEverything();
+  set({
+    phase: 'offline',
+    onlineSince: null,
+    help: null,
+    notice: null,
+    pinned: null,
+    locationOff: false,
+  });
+  announce(PARTNER_COPY.offline);
+  return 'done';
+}
+
+/** F7 P29.5: the location card's "Try again" while he holds an order. */
+export async function retryLocationWhileHolding() {
+  const permission = await permissionState();
+  if (permission === 'denied') {
+    announce('Location is still blocked for Foodz.');
+    return;
+  }
+  set({ locationOff: false });
+  if (get().phase === 'online' && !get().isDemo) startWatching();
+}
+
 // ------------------------------------------------------------------ the page's life
 
 async function deliverPendingOffline() {
@@ -956,7 +1019,8 @@ function onVisibility() {
 function onPageHide() {
   const state = get();
   // P12.4: closing the app while online tells the server; the demo's state is everyone's.
-  if (state.phase === 'online' && !state.isDemo) {
+  // F7 U15: never while he holds an order, so a reload never gives one away.
+  if (state.phase === 'online' && !state.isDemo && !holdingOrder) {
     stopWatching();
     void deliverOffline(true);
   }
@@ -1012,6 +1076,16 @@ export async function adoptServerState(facts: HomeFacts) {
     return;
   }
   const permission = await permissionState();
+  if (permission !== 'granted' && holdingOrder) {
+    // F7 P29.5: still online and assigned; the pick-up screen asks for the location back.
+    set({
+      phase: 'online',
+      onlineSince: facts.onlineSince,
+      lastAcceptedAt: facts.lastPointAt,
+      locationOff: true,
+    });
+    return;
+  }
   if (permission !== 'granted') {
     // P12.3: the permission went while he was away.
     void goOffline({ help: 'turnedOff', announceText: null });

@@ -55,6 +55,8 @@ export const PARTNER_NOTICE_TYPES = [
   'partner.reinstated',
   'partner.offline-no-location',
   'partner.offline-kitchen-closed',
+  // F7 P25.2.
+  'partner.offline-missed-offers',
 ] as const;
 export type PartnerNoticeType = (typeof PARTNER_NOTICE_TYPES)[number];
 
@@ -66,7 +68,9 @@ export type PartnerAvailabilityReason =
   | 'other-device'
   | 'suspended'
   | 'signed-out'
-  | 'demo-other-visitor';
+  | 'demo-other-visitor'
+  // F7 P25.2: three automatic offers in a row shown on the phone and not answered.
+  | 'missed-offers';
 
 /**
  * On `private-partner-{id}`: the partner went online or offline. `changeId` matches the one in
@@ -90,6 +94,37 @@ export interface PartnerStatusChangedEvent {
   at: string;
 }
 
+/** F7: an offer was made to this partner. `expiresAt` is the database's clock. */
+export interface OfferCreatedEvent {
+  offerId: string;
+  expiresAt: string;
+}
+
+/** F7: why an offer ended, so the phone picks the right notice (design 1.7). */
+export interface OfferEndedEvent {
+  offerId: string;
+  why:
+    | 'expired'
+    | 'declined'
+    | 'withdrawn-order'
+    | 'withdrawn-staff'
+    | 'taken'
+    | 'withdrawn-offline';
+}
+
+/** F7: the delivery of an order changed. `version` orders events as F5's do. */
+export interface DeliveryChangedEvent {
+  orderId: string;
+  status: 'SEARCHING' | 'ASSIGNED' | 'AT_RESTAURANT' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED';
+  version: number;
+  at: string;
+}
+
+/** F7 (A35.1): a partner went online or offline; boards read the new count themselves. */
+export interface CouriersChangedEvent {
+  at: string;
+}
+
 export interface RealtimeEvents {
   'notification.created': NotificationCreatedEvent;
   /**
@@ -104,6 +139,18 @@ export interface RealtimeEvents {
   'order.board-changed': OrderChangedEvent;
   'partner.availability-changed': PartnerAvailabilityChangedEvent;
   'partner.status-changed': PartnerStatusChangedEvent;
+  /** F7, on `private-partner-{id}`: an offer for this partner; the card fetches the rest (P33.3). */
+  'offer.created': OfferCreatedEvent;
+  /** F7, on `private-partner-{id}`: the offer ended without this phone's answer (P24). */
+  'offer.ended': OfferEndedEvent;
+  /**
+   * F7, on `private-ops`, `private-order-{id}` and the assigned (or released) partner's channel:
+   * the order's delivery changed (A34.4, S5.1, W11.1). Names, phones, positions and distances
+   * are fetched through the authorized data layer, never sent here.
+   */
+  'delivery.changed': DeliveryChangedEvent;
+  /** F7, on `private-ops`: a partner went online or offline; the boards' couriers chip (A35.1). */
+  'couriers.changed': CouriersChangedEvent;
   /** On `private-ops`: "86 it" from any board (design 4.3). */
   'menu.availability-changed': { dishId: string; available: boolean; at: string };
   'courier.location': {

@@ -37,6 +37,7 @@ import {
   stepUpLockedText,
 } from '@/lib/board/text';
 import { isOrderChangedDetails } from '@/lib/board/model';
+import { cancelCourierLine, holdingCourier } from '@/lib/board/courier-text';
 import { ActionDialog } from './action-dialog';
 import {
   DishTicks,
@@ -321,7 +322,14 @@ export function CancelDialog({
 
   const reasons = refuse ? REFUSE_REASONS : STAFF_CANCEL_REASONS;
   const lines = data?.lines ?? card.lines;
-  const outcomeLines = data ? (refuse ? [refuseOutcomeText(data)] : cancelOutcomeLines(data)) : [];
+  // F7 (design 2.11): a courier on the way is told it's cancelled.
+  const courier = holdingCourier(card.courier);
+  const outcomeLines = data
+    ? [
+        ...(refuse ? [refuseOutcomeText(data)] : cancelOutcomeLines(data)),
+        ...(courier && !refuse ? [cancelCourierLine(courier)] : []),
+      ]
+    : [];
   const closeOnly = alert?.kind === 'gone';
   const blockedReason = offline ? "You're offline." : lockedUntil ? alert?.text : null;
 

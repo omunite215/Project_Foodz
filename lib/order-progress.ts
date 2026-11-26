@@ -118,9 +118,10 @@ export function stepLine(view: OrderView, step: ProgressStep, collected: boolean
     case 'preparing':
       return 'The kitchen is cooking your food now.';
     case 'ready':
-      return "It's packed and waiting for the courier.";
+      return courierReadyLine(view) ?? "It's packed and waiting for the courier.";
     case 'pickedUp':
-      return collected ? 'Your order has been handed over.' : 'Your order has left the kitchen.';
+      if (collected) return 'Your order has been handed over.';
+      return courierOnItsWayLine(view) ?? 'Your order has left the kitchen.';
     case 'delivered':
     default: {
       const at = view.progress.deliveredAt;
@@ -131,6 +132,110 @@ export function stepLine(view: OrderView, step: ProgressStep, collected: boolean
         : `Delivered at ${when.clock}. Enjoy your meal.`;
     }
   }
+}
+
+// ------------------------------------------------------------------ the courier (F7 design 3)
+
+const FINDING = "It's packed. We're finding a courier to bring it to you.";
+const SLOW =
+  "It's packed, but finding a courier is taking longer than usual. We're on it and will update this page.";
+
+/**
+ * The line under the h1 while the order is ready (F7 S1 to S3). Once the arrival window has
+ * passed, F5's arrival note carries the apology, so the hero goes back to the plain finding
+ * line (D27). Null without the courier view (older answers): F5's line stands.
+ */
+export function courierReadyLine(view: Pick<OrderView, 'progress'>): string | null {
+  const dispatch = view.progress.dispatch;
+  if (!dispatch) return null;
+  switch (dispatch.state) {
+    case 'searching':
+      return FINDING;
+    case 'slow':
+      return view.progress.arrival?.kind === 'pastDue' ? FINDING : SLOW;
+    case 'assigned':
+      return dispatch.courier
+        ? `It's packed. ${dispatch.courier.firstName} is on the way to pick it up.`
+        : FINDING;
+    default:
+      return null;
+  }
+}
+
+/** "Luis is bringing your order." when the assigned courier picked it up (F7 S2). */
+export function courierOnItsWayLine(view: Pick<OrderView, 'progress'>): string | null {
+  const dispatch = view.progress.dispatch;
+  if (dispatch?.state !== 'pickedUp' || !dispatch.courier) return null;
+  return `${dispatch.courier.firstName} is bringing your order.`;
+}
+
+/** "Delivered by Luis." on its own line after the delivered line (F7 design 3.1). */
+export function deliveredByLine(view: Pick<OrderView, 'progress'>): string | null {
+  const dispatch = view.progress.dispatch;
+  if (dispatch?.state !== 'delivered') return null;
+  // After delivery the server names the courier only (security S8).
+  const firstName = dispatch.deliveredBy?.firstName ?? dispatch.courier?.firstName;
+  return firstName ? `Delivered by ${firstName}.` : null;
+}
+
+/**
+ * The timeline's courier entry (F7 S2.3, design 3.4): the current courier and when they
+ * accepted. It stays once the order is picked up and delivered: it's history. Without a
+ * vehicle after delivery (S8), the disc shows a plain courier mark.
+ */
+export function courierTimelineEntry(
+  view: Pick<OrderView, 'progress'>,
+): { firstName: string; vehicleWords: string | null; at: string | null } | null {
+  const dispatch = view.progress.dispatch;
+  if (!dispatch) return null;
+  const at = dispatch.assignedAt ?? null;
+  if ((dispatch.state === 'assigned' || dispatch.state === 'pickedUp') && dispatch.courier) {
+    return {
+      firstName: dispatch.courier.firstName,
+      vehicleWords: dispatch.courier.vehicleWords,
+      at,
+    };
+  }
+  if (dispatch.state === 'delivered') {
+    const firstName = dispatch.deliveredBy?.firstName ?? dispatch.courier?.firstName;
+    return firstName
+      ? { firstName, vehicleWords: dispatch.courier?.vehicleWords ?? null, at }
+      : null;
+  }
+  return null;
+}
+
+/** The changed notice shows until the order is picked up (design 3.3, amended after review). */
+export const courierChangedShown = (view: Pick<OrderView, 'progress'>) =>
+  Boolean(view.progress.dispatch?.changed && view.progress.dispatch.state === 'assigned');
+
+/** The courier block shows from acceptance until delivery (F7 S2.1). */
+export function courierShown(view: Pick<OrderView, 'progress'>) {
+  const dispatch = view.progress.dispatch;
+  if (!dispatch?.courier) return null;
+  return dispatch.state === 'assigned' || dispatch.state === 'pickedUp' ? dispatch.courier : null;
+}
+
+/** "Your courier changed. Grace is now on the way to pick it up." (F7 S4.2). */
+export const courierChangedText = (firstName: string) =>
+  `Your courier changed. ${firstName} is now on the way to pick it up.`;
+
+/** The timeline entry for the current courier only (F7 S2.3). */
+export const courierTimelineText = (firstName: string) =>
+  `${firstName} is on the way to the kitchen`;
+
+/** "Scooter · 7KT 342" read aloud: "Scooter, plate 7KT 342". */
+export function vehicleSpokenWords(vehicleWords: string): string {
+  const [vehicle = vehicleWords, plate] = vehicleWords.split(' · ');
+  return plate ? `${vehicle}, plate ${plate}` : vehicle;
+}
+
+/** "4.6 · 31 ratings" and "Rated 4.6 from 31 ratings"; null with no rating (never "0" or "New"). */
+export function ratingWords(rating: { average: number; count: number } | null) {
+  if (!rating || rating.count <= 0) return null;
+  const average = rating.average.toFixed(1);
+  const ratings = `${rating.count} ${rating.count === 1 ? 'rating' : 'ratings'}`;
+  return { text: `${average} · ${ratings}`, spoken: `Rated ${average} from ${ratings}` };
 }
 
 /** "Order 1042: Cooking. The kitchen is cooking your food now." (S8.1). */

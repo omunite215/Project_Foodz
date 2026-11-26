@@ -1,3 +1,4 @@
+import type { CustomerDispatchView } from '@/server/modules/delivery/schema';
 import { z } from 'zod';
 
 /*
@@ -152,6 +153,11 @@ export interface CustomerTimelineEntry {
 // ------------------------------------------------------------------ the whole thing
 
 export interface OrderProgress {
+  /**
+   * F7 (S1 to S4): the courier line and card. Sent with the order page; optional so older
+   * fixtures still type-check.
+   */
+  dispatch?: CustomerDispatchView;
   /** The server's clock when this was built; the page words every time from it. */
   asOf: string;
   /** The order's version: compare with `order.status-changed` events (S3.7). */

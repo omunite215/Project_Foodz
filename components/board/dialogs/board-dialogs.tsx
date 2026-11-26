@@ -10,6 +10,7 @@ import {
 import { withStatus } from '@/lib/board/model';
 import type { BoardWriter } from '@/lib/data/board';
 import { CancelDialog } from './cancel-dialog';
+import { AssignCourierDialog, TakeOffCourierDialog } from './courier-dialogs';
 import { HandoverDialog, MoveBackDialog } from './status-dialogs';
 
 /*
@@ -18,7 +19,16 @@ import { HandoverDialog, MoveBackDialog } from './status-dialogs';
  * join the strip, and focus lands on the next card or back on the moved one.
  */
 
-export type DialogKind = 'refuse' | 'cancel' | 'moveBack' | 'pickUp' | 'deliver';
+export type DialogKind =
+  | 'refuse'
+  | 'cancel'
+  | 'moveBack'
+  | 'pickUp'
+  | 'deliver'
+  // F7 (design 2.7, 2.8).
+  | 'assignCourier'
+  | 'takeOffCourier'
+  | 'chooseAnother';
 
 export interface DialogState {
   kind: DialogKind;
@@ -39,6 +49,7 @@ export function BoardDialogs({
   onSignedOut,
   onClose,
   focusAfter,
+  onChain,
 }: {
   dialog: DialogState | null;
   /** The board's copy of the dialog's order now; null once it left the board. */
@@ -51,6 +62,8 @@ export function BoardDialogs({
   onClose: () => void;
   /** Focus after a change: the next card when it left, or the card in its new column. */
   focusAfter: (card: BoardCard, next: BoardCard | null) => void;
+  /** F7 (D23): "Choose another courier" opens the assign dialog once the take-off is done. */
+  onChain?: (kind: DialogKind) => void;
 }) {
   const finished = useRef(false);
   if (!dialog) return null;
@@ -106,7 +119,53 @@ export function BoardDialogs({
     onSignedOut,
   };
 
+  // F7: a courier change shows on the card as soon as the server has it.
+  const courierDone = () => {
+    void writer.refreshCouriers([card.id]).catch(() => undefined);
+  };
+  const courierFocus = () => {
+    if (dialog.opener?.isConnected) {
+      dialog.opener.focus();
+      return true;
+    }
+    focusAfter(card, current);
+    return true;
+  };
+
   switch (dialog.kind) {
+    case 'assignCourier':
+      return (
+        <AssignCourierDialog
+          key={`${dialog.cardId}-assign`}
+          {...common}
+          readOnly={can.readOnly}
+          onCloseFocus={courierFocus}
+          onFinished={() => {
+            courierDone();
+            onClose();
+          }}
+        />
+      );
+    case 'takeOffCourier':
+    case 'chooseAnother': {
+      const courier = (current ?? card).courier;
+      return (
+        <TakeOffCourierDialog
+          key={`${dialog.cardId}-take-off`}
+          {...common}
+          readOnly={can.readOnly}
+          shortName={courier?.shortName ?? 'the courier'}
+          expectedVersion={courier?.deliveryVersion ?? 0}
+          chooseAnother={dialog.kind === 'chooseAnother'}
+          onCloseFocus={courierFocus}
+          onFinished={() => {
+            courierDone();
+            if (dialog.kind === 'chooseAnother' && onChain) onChain('assignCourier');
+            else onClose();
+          }}
+        />
+      );
+    }
     case 'refuse':
     case 'cancel':
       return (

@@ -556,9 +556,13 @@ export async function goOffline(
 }
 
 export function listOnlinePartners(ctx: DbContext) {
-  return db(ctx).$queryRaw<{ id: string; userId: string; onlineSince: Date; isDemo: boolean }[]>`
+  return db(ctx).$queryRaw<
+    { id: string; userId: string; onlineSince: Date; isDemo: boolean; holdsOrder: boolean }[]
+  >`
     SELECT p.id::text AS "id", p.user_id::text AS "userId", p.online_since AS "onlineSince",
-           u.is_demo AS "isDemo"
+           u.is_demo AS "isDemo",
+           EXISTS (SELECT 1 FROM deliveries d WHERE d.partner_id = p.id
+                   AND d.status IN ('ASSIGNED', 'AT_RESTAURANT', 'PICKED_UP')) AS "holdsOrder"
     FROM delivery_partners p JOIN users u ON u.id = p.user_id
     WHERE p.is_online`;
 }

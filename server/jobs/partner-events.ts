@@ -62,6 +62,7 @@ export const partnerWentOffline = eventType('partner.went-offline', {
         'suspended',
         'signed-out',
         'demo-other-visitor',
+        'missed-offers',
       ]),
       at: instant,
     })

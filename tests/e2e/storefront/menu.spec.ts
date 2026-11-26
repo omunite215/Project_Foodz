@@ -75,6 +75,10 @@ test.describe('Menu', () => {
     await expect(page).toHaveURL(/cuisine=thai/);
     await page.keyboard.press('End');
     await expect(page.getByRole('tab', tab('Vietnamese'))).toBeFocused();
+    // Choosing a tab loads that cuisine's dishes: let the list settle first, or the card that
+    // takes focus can be swapped out under it.
+    await expect(page).toHaveURL(/cuisine=vietnamese/);
+    await page.waitForLoadState('networkidle');
 
     // From the tabs, Tab goes straight to the first dish card.
     await page.keyboard.press('Tab');
