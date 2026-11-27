@@ -1283,6 +1283,9 @@ export async function partnerListMoney(
   const money = new Map<string, PartnerListMoney>();
   for (const row of rows) {
     const hidden = viewer.isDemo && !row.isDemo;
+    // A66.3: real staff never see a demo partner's figures (practice ratings, demo runs), the
+    // isolation F8 keeps for demo runs: the columns read "—" for them.
+    const otherPool = !viewer.isDemo && row.isDemo;
     const demo = demoRatings.get(row.partnerId);
     const ratingCount = demo ? demo.ratingCount : row.ratingCount;
     const ratingAvg = demo ? demo.ratingAvg : row.ratingAvg;
@@ -1292,21 +1295,24 @@ export async function partnerListMoney(
     money.set(row.partnerId, {
       hidden,
       rating:
-        hidden || ratingCount === 0
+        hidden || otherPool || ratingCount === 0
           ? null
           : { average: ratingAvg, count: ratingCount, shownToCustomers: ratingCount >= 5 },
       week:
-        hidden || row.weekDeliveries + row.weekEarnedCents === 0
+        hidden || otherPool || row.weekDeliveries + row.weekEarnedCents === 0
           ? null
           : { deliveries: row.weekDeliveries, earnedCents: row.weekEarnedCents },
       cash:
-        hidden || owedCents === 0 || !row.owedSince
+        hidden || otherPool || owedCents === 0 || !row.owedSince
           ? null
           : { owedCents, since: row.owedSince.toISOString(), amber: amber.amber, why: amber.why },
-      holdingCents: hidden ? 0 : (row.holdingCents ?? 0),
+      holdingCents: hidden || otherPool ? 0 : (row.holdingCents ?? 0),
       actions: {
         recordCash:
-          !viewer.isDemo && can(viewer.role, DIALOG_PERMISSION.cash) && (row.holdingCents ?? 0) > 0,
+          !viewer.isDemo &&
+          !otherPool &&
+          can(viewer.role, DIALOG_PERMISSION.cash) &&
+          (row.holdingCents ?? 0) > 0,
       },
     });
   }

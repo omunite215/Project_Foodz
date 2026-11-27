@@ -50,6 +50,9 @@ const earnings = await import('@/server/modules/earnings/service');
 const actions = await import('@/server/modules/earnings/actions');
 const reportRoute = await import('@/app/admin/partners/earnings/export/route');
 const entriesRoute = await import('@/app/admin/partners/[id]/earnings/export/route');
+const ratings = await import('@/server/modules/ratings/service');
+const reviews = await import('@/server/modules/partners/review-service');
+const { listQueryFromSearch } = await import('@/server/modules/partners/review-schema');
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3456';
 
@@ -490,6 +493,47 @@ describe('the partner page and the report (A59, A63, A66)', () => {
       entries: { rows: [], total: 0 },
     });
     expect(demo).toMatchObject({ hiddenForDemo: false, balance: { balanceCents: 764 } });
+  });
+
+  it("keeps demo partners' figures from real staff: list, rating sort, ratings page (A66.3)", async () => {
+    // Riley's practice figure, as the demo seed sets it.
+    await migrator.$executeRaw`
+      UPDATE delivery_partners SET rating_base_avg = 4.8, rating_base_count = 126
+      WHERE id = ${riley.partnerId}::uuid`;
+    await migrator.$executeRaw`SELECT app_recalc_partner_rating(${riley.partnerId}::uuid)`;
+
+    const real = await asBrowser(daniel.browser, () =>
+      earnings.partnerListMoney(daniel.actor, [riley.partnerId, jamie.partnerId], new Date()),
+    );
+    for (const id of [riley.partnerId, jamie.partnerId]) {
+      expect(real.get(id)).toMatchObject({
+        hidden: false,
+        rating: null,
+        week: null,
+        cash: null,
+        holdingCents: 0,
+        actions: { recordCash: false },
+      });
+    }
+    // The demo admin still reads its own pool's figures.
+    const demo = await asBrowser(demoAdmin.browser, () =>
+      earnings.partnerListMoney(demoAdmin.actor, [riley.partnerId], new Date()),
+    );
+    expect(demo.get(riley.partnerId)?.rating).toMatchObject({ average: 4.8, count: 126 });
+
+    const page = await asBrowser(morgan.browser, () =>
+      ratings.getPartnerRatings(morgan.actor, { partnerId: riley.partnerId, cursor: null }),
+    );
+    expect(page?.summary).toMatchObject({ average: null, count: 0, baselineCount: 0 });
+
+    // Sorting by rating never puts the demo partner first for real staff.
+    const list = await asBrowser(daniel.browser, () =>
+      reviews.listPartnerApplications(
+        daniel.actor,
+        listQueryFromSearch({ tab: 'approved', sort: 'rating', dir: 'desc' }),
+      ),
+    );
+    expect(list.rows[0]?.partnerId).not.toBe(riley.partnerId);
   });
 
   it('adds up every row, splits balance totals, and keeps the pools apart', async () => {

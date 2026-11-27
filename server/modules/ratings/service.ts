@@ -511,6 +511,8 @@ export async function getPartnerRatings(
       nextCursor: null,
     };
     if (viewer.isDemo && !figures.isDemo) return empty;
+    // A66.3: a demo partner's ratings are practice and demo-pool figures; real staff see none.
+    if (!viewer.isDemo && figures.isDemo) return { ...empty, hiddenForDemo: false };
     const average = demoFigures?.ratingAvg ?? figures.ratingAvg;
     const count = demoFigures?.ratingCount ?? figures.ratingCount;
     const stats = await repo.partnerRatingStats(
@@ -628,6 +630,14 @@ export async function getMyRatingsSummary(
         liked: [...PRACTICE_RATINGS.liked],
         mentioned: [...PRACTICE_RATINGS.mentioned],
       };
+    }
+    // The access table (contract 4.1): approved partners and the demo partner only.
+    const status = await repo.myPartnerStatus(ctx);
+    if (status === 'SUSPENDED') {
+      throw new AppError('PARTNER_SUSPENDED', 'Your partner account is suspended.', 403);
+    }
+    if (status !== 'APPROVED') {
+      throw new AppError('NOT_APPROVED', 'Your partner account is not approved to deliver.', 403);
     }
     const summary = await repo.mySummary(ctx, before, tagsSince);
     if (!summary)

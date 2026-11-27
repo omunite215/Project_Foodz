@@ -742,9 +742,13 @@ function sortColumn(query: PartnerListQuery): Prisma.Sql {
     case 'decided':
       return Prisma.sql`coalesce(d.suspended_at, d.decided_at, d.approved_at) ${dir} NULLS LAST, d.id`;
     // F9 (A57.1): the money columns, from tables each viewer may read under row-level security.
+    // A66.3: only partners of the viewer's own pool sort by rating; the others go last, so
+    // neither real staff nor the demo admin can order the other pool by figures they can't see.
     case 'rating':
-      return Prisma.sql`(SELECT p.rating_avg FROM delivery_partners p WHERE p.id = d.id) ${dir} NULLS LAST,
-        (SELECT p.rating_count FROM delivery_partners p WHERE p.id = d.id) ${dir} NULLS LAST, d.id`;
+      return Prisma.sql`(SELECT CASE WHEN d.is_demo = app_is_demo() THEN p.rating_avg END
+          FROM delivery_partners p WHERE p.id = d.id) ${dir} NULLS LAST,
+        (SELECT CASE WHEN d.is_demo = app_is_demo() THEN p.rating_count END
+          FROM delivery_partners p WHERE p.id = d.id) ${dir} NULLS LAST, d.id`;
     case 'week':
       return Prisma.sql`(SELECT coalesce(sum(x.delivery_pay_cents + x.tips_cents + x.adjustments_cents), 0)
         FROM partner_ledger_days x
