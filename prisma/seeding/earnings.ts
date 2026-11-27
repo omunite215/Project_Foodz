@@ -28,18 +28,21 @@ export async function clearEarningsForPartners(tx: Tx, partnerIds: readonly stri
 }
 
 /**
- * Before orders are deleted: their deliveries' ledger rows go (the ledger keeps a delivery with
- * RESTRICT) and the partners concerned are recomputed from what is left.
+ * Before orders are deleted (the ledger keeps a delivery with RESTRICT): every partner with an
+ * entry on their deliveries loses his whole ledger. Recomputing him from what is left would
+ * count later hand-ins and payouts against cash and pay that are gone, which can leave him
+ * holding less than nothing (partner_ledgers_counts).
  */
 export async function clearEarningsForOrders(tx: Tx, orderIds: readonly string[]) {
   if (orderIds.length === 0) return;
   const partners = await tx.$queryRaw<{ id: string }[]>`
-    DELETE FROM partner_earnings e USING deliveries d
-    WHERE e.delivery_id = d.id AND d.order_id = ANY (${[...orderIds]}::uuid[])
-    RETURNING e.partner_id::text AS id`;
-  for (const id of new Set(partners.map((row) => row.id))) {
-    await tx.$executeRaw`SELECT app_rebuild_partner_ledger(${id}::uuid)`;
-  }
+    SELECT DISTINCT e.partner_id::text AS id
+    FROM partner_earnings e JOIN deliveries d ON d.id = e.delivery_id
+    WHERE d.order_id = ANY (${[...orderIds]}::uuid[])`;
+  await clearEarningsForPartners(
+    tx,
+    partners.map((row) => row.id),
+  );
 }
 
 /** Splits a day's pay into `count` deliveries whose fee and tip add up exactly. */
@@ -219,6 +222,11 @@ export async function resetEarningsFixtures(
     select: { id: true },
   });
   await clearEarningsForPartners(tx, ids);
+  // Anyone else with an entry on those orders (a staff adjustment naming one, say).
+  await clearEarningsForOrders(
+    tx,
+    oldOrders.map((order) => order.id),
+  );
   await tx.$executeRaw`DELETE FROM partner_rating_snapshots WHERE partner_id = ANY (${ids}::uuid[])`;
   await tx.order.deleteMany({ where: { id: { in: oldOrders.map((order) => order.id) } } });
   await tx.partnerOnlineSession.deleteMany({
