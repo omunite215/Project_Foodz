@@ -864,7 +864,10 @@ describe('staff cancellations and their money (A7, T7, T8)', () => {
     const locked = await again({ method: 'totp', code: '000000' });
     expect(locked?.serverError).toMatchObject({
       code: 'STEP_UP_LOCKED',
-      message: expect.stringMatching(/^Too many wrong codes\. Try again at \d{1,2}:\d{2} [ap]m\.$/),
+      // A lockout ending on the hour reads "6 am", as the app writes times (F5 clock style).
+      message: expect.stringMatching(
+        /^Too many wrong codes\. Try again at \d{1,2}(:\d{2})? [ap]m\.$/,
+      ),
       details: { retryAt: expect.any(String) },
     });
     expect(locked?.serverError?.retryAfterSeconds).toBeGreaterThan(14 * 60);
