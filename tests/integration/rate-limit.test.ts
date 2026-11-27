@@ -5,6 +5,7 @@ import {
   blockedFor,
   enforceRateLimit,
   formatWait,
+  limitError,
   takeAttempt,
   takeAttempts,
 } from '@/server/security/rate-limit';
@@ -66,6 +67,16 @@ describe('refundable attempts', () => {
       message: 'Too many attempts. Try again in 5 minutes, or reset your password.',
     });
     expect((blocked as AppError).retryAfterSeconds).toBeGreaterThan(290);
+  });
+
+  it('never reads a wait longer than the window of its policy, whatever the clocks say', () => {
+    // Redis a moment ahead of the app read a 15-minute limit as 901 s, "16 minutes".
+    const late = limitError('account.delete', 900_400);
+    expect(late.message).toBe('Too many attempts. Try again in 15 minutes.');
+    expect(late.retryAfterSeconds).toBe(900);
+    // A block outlasts its window: the block is the limit (5 minutes after a minute's tries).
+    expect(limitError('auth.sign-in.email', 300_900).retryAfterSeconds).toBe(300);
+    expect(limitError('account.delete', 120_000).retryAfterSeconds).toBe(120);
   });
 
   it('formats waits as people say them', () => {
