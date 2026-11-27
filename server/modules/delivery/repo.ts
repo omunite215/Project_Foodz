@@ -540,6 +540,9 @@ export function searchCandidates(
              AND f.partner_id = p.id AND f.kind = 'auto')
       AND u.is_demo = (${q.pool} = 'DEMO')
       AND p.unseen_in_row < 2
+      -- F9 B10: never his own food order.
+      AND p.user_id <> (SELECT o.user_id FROM deliveries d2 JOIN orders o ON o.id = d2.order_id
+                        WHERE d2.id = ${q.deliveryId}::uuid)
     ORDER BY coalesce(p.waiting_since, p.online_since), "distanceM", p.id
     LIMIT ${q.limit}`;
 }
@@ -796,7 +799,8 @@ export async function listCourierFacts(
 ): Promise<CourierFactsRow[]> {
   if (partnerIds.length === 0) return [];
   return db(ctx).$queryRaw<CourierFactsRow[]>`
-    SELECT p.id::text AS "partnerId", u.name, (u.is_demo OR u.is_sample) AS "shownToDemo",
+    SELECT p.id::text AS "partnerId", p.user_id::text AS "userId", u.name,
+           (u.is_demo OR u.is_sample) AS "shownToDemo",
            u.phone, p.vehicle_type AS "vehicleType", p.vehicle_plate AS "vehiclePlate",
            ph.key AS "photoKey", p.rating_avg AS "ratingAvg", p.rating_count AS "ratingCount",
            p.last_point_at AS "lastPointAt",
@@ -838,6 +842,7 @@ export interface AssignRow {
   busyOrderNumber: string | null;
   hasOpenOffer: boolean;
   isDemo: boolean;
+  userId: string;
 }
 
 /**

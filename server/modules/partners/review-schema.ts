@@ -1,3 +1,4 @@
+import type { PartnerListMoney } from '@/server/modules/earnings/schema';
 import { z } from 'zod';
 import type { PartnerStatus, VehicleType } from '@/server/db/enums';
 import { stepUpInput } from '@/server/modules/staff/schema';
@@ -55,17 +56,26 @@ export const PARTNER_TABS = [
 ] as const;
 export type PartnerTab = (typeof PARTNER_TABS)[number];
 
-export const PARTNER_SORTS = ['name', 'sent', 'decided', 'changed'] as const;
+/** F9 (A57.1) adds rating, this week's earnings and cash owed. */
+export const PARTNER_SORTS = [
+  'name',
+  'sent',
+  'decided',
+  'changed',
+  'rating',
+  'week',
+  'cash',
+] as const;
 export type PartnerSort = (typeof PARTNER_SORTS)[number];
 
 /** A19.2, A19.7: the sorts each tab offers; the first is its default. */
 export const TAB_SORTS: Record<PartnerTab, readonly [PartnerSort, ...PartnerSort[]]> = {
   review: ['sent', 'name'],
   waiting: ['sent', 'name'],
-  approved: ['decided', 'name'],
-  suspended: ['decided', 'name'],
+  approved: ['decided', 'name', 'rating', 'week', 'cash'],
+  suspended: ['decided', 'name', 'cash'],
   rejected: ['decided', 'name'],
-  all: ['changed', 'name'],
+  all: ['changed', 'name', 'cash'],
 };
 
 /** Oldest first to review; latest first once decided (A19.2). */
@@ -87,6 +97,8 @@ export const partnerListInput = z
       .transform((value) => (value.length >= 2 ? value : '')),
     vehicle: z.enum(VEHICLE_TYPES).nullable().catch(null),
     flags: z.boolean().catch(false),
+    /** F9 A57.2: only partners who owe Foodz cash (`?owes=1`). */
+    owes: z.boolean().catch(false),
     sort: z.enum(PARTNER_SORTS).nullable().catch(null),
     dir: z.enum(['asc', 'desc']).nullable().catch(null),
     page: z.int().min(1).max(10_000).catch(1),
@@ -115,6 +127,7 @@ export function listQueryFromSearch(search: Record<string, string | string[] | u
     q: one('q'),
     vehicle: vehicle === undefined || vehicle === '' ? null : vehicle,
     flags: one('flags') === '1',
+    owes: one('owes') === '1',
     sort: one('sort') ?? null,
     dir: one('dir') ?? null,
     page: Number.parseInt(one('page') ?? '1', 10),
@@ -253,6 +266,8 @@ export interface PartnerListRow {
   isDemoPartner: boolean;
   /** Name, email and plate arrive masked for the demo admin (A29.3). */
   masked: boolean;
+  /** F9 (A57): rating, this week and cash; null on the applicant tabs. */
+  money?: PartnerListMoney | null;
 }
 
 export interface PartnerListResult {

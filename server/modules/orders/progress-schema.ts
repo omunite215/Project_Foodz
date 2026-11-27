@@ -1,4 +1,5 @@
 import type { CustomerDispatchView } from '@/server/modules/delivery/schema';
+import type { OrderRatingView } from '@/server/modules/ratings/schema';
 import type { CustomerTracking } from '@/server/modules/tracking/schema';
 import { z } from 'zod';
 
@@ -161,6 +162,8 @@ export interface OrderProgress {
   dispatch?: CustomerDispatchView;
   /** F8 (B7): the live map, estimate and code; null before a courier accepts and after the end. */
   tracking?: CustomerTracking | null;
+  /** F9 (B4): the rating card; `state: 'none'` until delivery and for a cancelled order. */
+  rating?: OrderRatingView | null;
   /** The server's clock when this was built; the page words every time from it. */
   asOf: string;
   /** The order's version: compare with `order.status-changed` events (S3.7). */
@@ -198,7 +201,14 @@ export interface OrderSummaryProgress {
 }
 
 /** The status key of an order notice (S6.1), on `notification.created`. */
-export type OrderNoticeStatus = 'accepted' | 'ready' | 'pickedUp' | 'delivered' | 'cancelled';
+/** F9 adds `rate`: the one rating reminder (S4.1), kept off that order's page like the others. */
+export type OrderNoticeStatus =
+  | 'accepted'
+  | 'ready'
+  | 'pickedUp'
+  | 'delivered'
+  | 'cancelled'
+  | 'rate';
 
 // ------------------------------------------------------------------ order again (S7.5, B23)
 

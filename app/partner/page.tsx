@@ -82,7 +82,14 @@ export default async function PartnerPage({ searchParams }: { searchParams: Sear
       const actor = state.dispatch.delivery ? await getActor() : null;
       const delivery =
         actor?.kind === 'user' ? await getCurrentDeliveryF8(actor).catch(() => null) : null;
-      return <PartnerHome state={state} asOf={new Date().toISOString()} delivery={delivery} />;
+      return (
+        <PartnerHome
+          state={state}
+          userId={userId}
+          asOf={new Date().toISOString()}
+          delivery={delivery}
+        />
+      );
     }
   }
 }

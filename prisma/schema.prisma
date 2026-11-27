@@ -180,25 +180,29 @@ enum Cuisine {
 }
 
 model MenuItem {
-  id          String    @id @default(uuid(7)) @db.Uuid
-  slug        String    @unique
-  title       String
-  description String
-  priceCents  Int       @map("price_cents")
-  cuisine     Cuisine
-  images      String[]
-  flavors     String[]
-  prepMinutes Int       @default(20) @map("prep_minutes")
-  isSpecial   Boolean   @default(false) @map("is_special")
-  isAvailable Boolean   @default(true) @map("is_available")
+  id              String    @id @default(uuid(7)) @db.Uuid
+  slug            String    @unique
+  title           String
+  description     String
+  priceCents      Int       @map("price_cents")
+  cuisine         Cuisine
+  images          String[]
+  flavors         String[]
+  prepMinutes     Int       @default(20) @map("prep_minutes")
+  isSpecial       Boolean   @default(false) @map("is_special")
+  isAvailable     Boolean   @default(true) @map("is_available")
   /// "86 it" (F5): when and by whom the dish was marked sold out; null while it is on the menu.
-  soldOutAt   DateTime? @map("sold_out_at")
-  soldOutById String?   @map("sold_out_by") @db.Uuid
-  ratingAvg   Float     @default(0) @map("rating_avg")
-  ratingCount Int       @default(0) @map("rating_count")
-  soldCount   Int       @default(0) @map("sold_count")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  soldOutAt       DateTime? @map("sold_out_at")
+  soldOutById     String?   @map("sold_out_by") @db.Uuid
+  ratingAvg       Float     @default(0) @map("rating_avg")
+  ratingCount     Int       @default(0) @map("rating_count")
+  /// F9 (U17): the seeded figures real ratings add to; `rating_avg`/`rating_count` are
+  /// recalculated over them (app_recalc_dish_rating) and never set by the app.
+  ratingBaseAvg   Decimal   @default(0) @map("rating_base_avg") @db.Decimal(3, 2)
+  ratingBaseCount Int       @default(0) @map("rating_base_count")
+  soldCount       Int       @default(0) @map("sold_count")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   /// Search document (title, cuisine name, description), a column the database generates (F3
   /// migration f3_menu_search). The default below is that generation expression exactly as
@@ -334,6 +338,10 @@ model Order {
   prepMinutes           Int?                                   @map("prep_minutes")
   /// Customer notices already sent (accepted, ready, picked-up, delivered, cancelled): each once.
   notifiedSteps         String[]                               @default([]) @map("notified_steps")
+  /// F9 (S3): the customer pressed "Skip" on the rating card; the reminder is off.
+  ratingSkippedAt       DateTime?                              @map("rating_skipped_at")
+  /// F9 (S4): the one rating reminder went out.
+  ratingRemindedAt      DateTime?                              @map("rating_reminded_at")
   version               Int                                    @default(0)
   /// The version at which the status last changed (trigger orders_track_status).
   statusChangedVersion  Int                                    @default(0) @map("status_changed_version")
@@ -435,6 +443,11 @@ model DeliveryPartner {
   lastSeenAt             DateTime?                              @map("last_seen_at")
   ratingAvg              Float                                  @default(0) @map("rating_avg")
   ratingCount            Int                                    @default(0) @map("rating_count")
+  /// F9 (U17): seeded figures the counted courier ratings add to.
+  ratingBaseAvg          Decimal                                @default(0) @map("rating_base_avg") @db.Decimal(3, 2)
+  ratingBaseCount        Int                                    @default(0) @map("rating_base_count")
+  /// F9 (P53): the partner's own daily goal in cents (whole dollars); set through app_set_daily_goal.
+  dailyGoalCents         Int?                                   @map("daily_goal_cents")
   reviewNote             String?                                @map("review_note")
   approvedAt             DateTime?                              @map("approved_at")
   submittedAt            DateTime?                              @map("submitted_at")
@@ -481,6 +494,11 @@ model DeliveryPartner {
   deliveries             Delivery[]
   offers                 DeliveryOffer[]
   earnings               PartnerEarning[]
+  ledger                 PartnerLedger?
+  ledgerDays             PartnerLedgerDay[]
+  onlineSessions         PartnerOnlineSession[]
+  ratingSnapshot         PartnerRatingSnapshot?
+  endedDeliveries        Delivery[]                             @relation("DeliveryEndedPartner")
   ratings                PartnerRating[]
   reports                PartnerReport[]
   history                PartnerApplicationEvent[]
@@ -562,6 +580,9 @@ model Delivery {
   etaEstimated            Boolean            @default(false) @map("eta_estimated")
   routeUpdatedAt          DateTime?          @map("route_updated_at")
   handoverHow             String?            @map("handover_how")
+  /// F9: who held the delivery when it ended (F5's cancellation clears `partner_id`).
+  endedPartnerId          String?            @map("ended_partner_id") @db.Uuid
+  endedPartner            DeliveryPartner?   @relation("DeliveryEndedPartner", fields: [endedPartnerId], references: [id], onDelete: SetNull)
   code                    DeliveryCode?
   version                 Int                @default(0)
   createdAt               DateTime           @default(now()) @map("created_at")
@@ -632,21 +653,121 @@ enum EarningType {
   TIP
   BONUS
   ADJUSTMENT
+  CASH_COLLECTED
+  CASH_HANDED_IN
+  PAYOUT
 }
 
+/// F9: the append-only ledger in cents (E1). Written only by the definer functions in the F9
+/// migration: delivery entries from a trigger on the delivery's status, staff entries through
+/// app_record_staff_entry. The partial unique (delivery_id, type) for the automatic kinds and the
+/// CHECKs live in SQL.
 model PartnerEarning {
-  id          String          @id @default(uuid(7)) @db.Uuid
-  partnerId   String          @map("partner_id") @db.Uuid
-  deliveryId  String?         @map("delivery_id") @db.Uuid
-  type        EarningType
-  amountCents Int             @map("amount_cents")
-  note        String?
-  createdAt   DateTime        @default(now()) @map("created_at")
-  partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  delivery    Delivery?       @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  id                String               @id @default(uuid(7)) @db.Uuid
+  partnerId         String               @map("partner_id") @db.Uuid
+  deliveryId        String?              @map("delivery_id") @db.Uuid
+  type              EarningType
+  amountCents       Int                  @map("amount_cents")
+  occurredAt        DateTime             @default(dbgenerated("app_now()")) @map("occurred_at")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  /// system | staff: the only "who" a partner may read.
+  recordedKind      String               @default("system") @map("recorded_kind")
+  reason            String?
+  partnerMessage    String?              @map("partner_message")
+  method            String?
+  reference         String?
+  paidOn            DateTime?            @map("paid_on") @db.Date
+  pool              String               @default("REAL")
+  idempotencyKey    String               @unique @map("idempotency_key")
+  versionAfter      Int                  @map("version_after")
+  balanceAfterCents BigInt               @map("balance_after_cents")
+  holdingAfterCents BigInt               @map("holding_after_cents")
+  partner           DeliveryPartner      @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  delivery          Delivery?            @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+  staff             PartnerEarningStaff?
 
-  @@index([partnerId, createdAt])
+  @@index([partnerId, occurredAt, versionAfter])
+  @@index([deliveryId])
   @@map("partner_earnings")
+}
+
+/// F9 (P60.3): who recorded a staff entry and the staff note; staff read it, partners never.
+model PartnerEarningStaff {
+  earningId    String         @id @map("earning_id") @db.Uuid
+  recordedBy   String         @map("recorded_by") @db.Uuid
+  recordedName String         @map("recorded_name")
+  recordedRole String         @map("recorded_role")
+  staffNote    String?        @map("staff_note")
+  createdAt    DateTime       @default(dbgenerated("app_now()")) @map("created_at")
+  earning      PartnerEarning @relation(fields: [earningId], references: [id], onDelete: Cascade)
+
+  @@map("partner_earning_staff")
+}
+
+/// F9 (E1.3): one row per partner, kept by every append under its row lock.
+model PartnerLedger {
+  partnerId         String          @id @map("partner_id") @db.Uuid
+  pool              String          @default("REAL")
+  version           Int             @default(0)
+  balanceCents      BigInt          @default(0) @map("balance_cents")
+  holdingCents      BigInt          @default(0) @map("holding_cents")
+  owedSince         DateTime?       @map("owed_since")
+  firstEntryAt      DateTime?       @map("first_entry_at")
+  lastEntryAt       DateTime?       @map("last_entry_at")
+  lastPayoutEntryId String?         @map("last_payout_entry_id") @db.Uuid
+  updatedAt         DateTime        @default(dbgenerated("app_now()")) @map("updated_at")
+  partner           DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@map("partner_ledgers")
+}
+
+/// F9 (A63.6): store-day totals per partner, written with each entry.
+model PartnerLedgerDay {
+  partnerId          String          @map("partner_id") @db.Uuid
+  day                DateTime        @db.Date
+  pool               String          @default("REAL")
+  deliveries         Int             @default(0)
+  deliveryPayCents   BigInt          @default(0) @map("delivery_pay_cents")
+  tipsCents          BigInt          @default(0) @map("tips_cents")
+  adjustmentsCents   BigInt          @default(0) @map("adjustments_cents")
+  cashCollectedCents BigInt          @default(0) @map("cash_collected_cents")
+  cashHandedInCents  BigInt          @default(0) @map("cash_handed_in_cents")
+  paidOutCents       BigInt          @default(0) @map("paid_out_cents")
+  netCents           BigInt          @default(0) @map("net_cents")
+  partner            DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@id([partnerId, day])
+  @@index([pool, day])
+  @@map("partner_ledger_days")
+}
+
+/// F9 (security gate S1): the rating figures a partner sees, published only after 5 new counted
+/// ratings. Read and written only by app_my_rating_summary.
+model PartnerRatingSnapshot {
+  partnerId        String          @id @map("partner_id") @db.Uuid
+  publishedThrough DateTime?       @map("published_through")
+  publishedAt      DateTime        @default(dbgenerated("app_now()")) @map("published_at")
+  ratingCount      Int             @default(0) @map("rating_count")
+  ratingAvg        Float?          @map("rating_avg")
+  tagsShown        Boolean         @default(false) @map("tags_shown")
+  tags             Json            @default("[]")
+  partner          DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@map("partner_rating_snapshots")
+}
+
+/// F9 (E6): one row per stretch online, opened and closed by a trigger on `is_online`.
+model PartnerOnlineSession {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partnerId String          @map("partner_id") @db.Uuid
+  startedAt DateTime        @map("started_at")
+  endedAt   DateTime?       @map("ended_at")
+  endReason String?         @map("end_reason")
+  pool      String          @default("REAL")
+  partner   DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, startedAt])
+  @@map("partner_online_sessions")
 }
 
 // ------------------------------------------------------------------ promotions
@@ -745,36 +866,58 @@ enum ReviewStatus {
   HIDDEN
 }
 
+/// A dish rating (F9). `status` PUBLISHED counts toward the dish, HIDDEN is excluded by staff;
+/// no comment is public before F14. Row-level security and the column guard live in SQL.
 model Review {
-  id         String       @id @default(uuid(7)) @db.Uuid
-  userId     String       @map("user_id") @db.Uuid
-  menuItemId String       @map("menu_item_id") @db.Uuid
-  orderId    String       @map("order_id") @db.Uuid
-  rating     Int
-  comment    String?
-  status     ReviewStatus @default(PUBLISHED)
-  createdAt  DateTime     @default(now()) @map("created_at")
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  menuItem   MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id             String       @id @default(uuid(7)) @db.Uuid
+  /// Null once the customer deleted her account (V9.2): the stars stay, unlinked.
+  userId         String?      @map("user_id") @db.Uuid
+  menuItemId     String       @map("menu_item_id") @db.Uuid
+  orderId        String       @map("order_id") @db.Uuid
+  rating         Int
+  tags           String[]     @default([])
+  comment        String?
+  status         ReviewStatus @default(PUBLISHED)
+  pool           String       @default("REAL")
+  editedAt       DateTime?    @map("edited_at")
+  excludedReason String?      @map("excluded_reason")
+  excludedNote   String?      @map("excluded_note")
+  moderatedBy    String?      @map("moderated_by") @db.Uuid
+  moderatedAt    DateTime?    @map("moderated_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  menuItem       MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, menuItemId, orderId])
+  @@unique([orderId, menuItemId])
   @@index([menuItemId, status, createdAt])
+  @@index([userId])
   @@map("reviews")
 }
 
+/// A courier rating (F9): one per order; partners read only aggregates about themselves.
 model PartnerRating {
-  id        String          @id @default(uuid(7)) @db.Uuid
-  userId    String          @map("user_id") @db.Uuid
-  partnerId String          @map("partner_id") @db.Uuid
-  orderId   String          @unique @map("order_id") @db.Uuid
-  rating    Int
-  comment   String?
-  createdAt DateTime        @default(now()) @map("created_at")
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partner   DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id             String          @id @default(uuid(7)) @db.Uuid
+  userId         String?         @map("user_id") @db.Uuid
+  partnerId      String          @map("partner_id") @db.Uuid
+  orderId        String          @unique @map("order_id") @db.Uuid
+  rating         Int
+  tags           String[]        @default([])
+  comment        String?
+  status         ReviewStatus    @default(PUBLISHED)
+  pool           String          @default("REAL")
+  editedAt       DateTime?       @map("edited_at")
+  excludedReason String?         @map("excluded_reason")
+  excludedNote   String?         @map("excluded_note")
+  moderatedBy    String?         @map("moderated_by") @db.Uuid
+  moderatedAt    DateTime?       @map("moderated_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  partner        DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([partnerId, status, createdAt])
+  @@index([userId])
   @@map("partner_ratings")
 }
 

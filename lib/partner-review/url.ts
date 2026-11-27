@@ -22,6 +22,7 @@ export function listHref(query: PartnerListQuery): Route {
   if (query.q) params.set('q', query.q);
   if (query.vehicle) params.set('vehicle', query.vehicle.toLowerCase());
   if (query.flags) params.set('flags', '1');
+  if (query.owes && ownsCash(query.tab)) params.set('owes', '1');
   const defaultSort = TAB_SORTS[query.tab][0];
   if (query.sort !== defaultSort || query.dir !== defaultDir(query.tab)) {
     params.set('sort', query.sort);
@@ -32,6 +33,10 @@ export function listHref(query: PartnerListQuery): Route {
   return isSitePath(href) ? href : LIST_PATH;
 }
 
+/** F9 A57.2: "Owes cash" filters the partner tabs only (a suspended partner can still owe). */
+export const ownsCash = (tab: PartnerTab) =>
+  tab === 'approved' || tab === 'suspended' || tab === 'all';
+
 /**
  * Another tab: search and filters stay, the page goes back to 1 and the tab keeps its own sort
  * (A19.7).
@@ -39,6 +44,7 @@ export function listHref(query: PartnerListQuery): Route {
 export const withTab = (query: PartnerListQuery, tab: PartnerTab): PartnerListQuery => ({
   ...query,
   tab,
+  owes: query.owes && ownsCash(tab),
   page: 1,
   sort: TAB_SORTS[tab][0],
   dir: defaultDir(tab),
@@ -47,7 +53,7 @@ export const withTab = (query: PartnerListQuery, tab: PartnerTab): PartnerListQu
 /** A filter or search changed: back to page 1. */
 export const withFilters = (
   query: PartnerListQuery,
-  patch: Partial<Pick<PartnerListQuery, 'q' | 'vehicle' | 'flags'>>,
+  patch: Partial<Pick<PartnerListQuery, 'q' | 'vehicle' | 'flags' | 'owes'>>,
 ): PartnerListQuery => ({ ...query, ...patch, page: 1 });
 
 /** A sort header pressed: the same column flips its direction; another starts at its default. */
@@ -64,7 +70,7 @@ export const withPage = (query: PartnerListQuery, page: number): PartnerListQuer
 });
 
 export const hasFilters = (query: PartnerListQuery) =>
-  Boolean(query.q) || query.vehicle !== null || query.flags;
+  Boolean(query.q) || query.vehicle !== null || query.flags || (query.owes && ownsCash(query.tab));
 
 /** A search shorter than this isn't sent (A19.6). */
 export const MIN_SEARCH = 2;
@@ -74,8 +80,15 @@ export const MIN_SEARCH = 2;
  * it carries the list's query (tab, search, filters, sort, page), so "Back to partners" returns
  * to the same list (A20.1); the application page reads it back with `listQueryFromSearch`.
  */
-export function applicationHref(partnerId: string, list?: PartnerListQuery | null): Route {
-  const search = list ? (listHref(list).split('?')[1] ?? '') : '';
+export function applicationHref(
+  partnerId: string,
+  list?: PartnerListQuery | null,
+  /** F9: the partner page's section and range (`view`, `from`, `to`). */
+  extra?: Record<string, string>,
+): Route {
+  const params = new URLSearchParams(list ? (listHref(list).split('?')[1] ?? '') : '');
+  for (const [key, value] of Object.entries(extra ?? {})) params.set(key, value);
+  const search = params.toString();
   const href = `${LIST_PATH}/${partnerId}${search ? `?${search}` : ''}`;
   return isSitePath(href) ? href : LIST_PATH;
 }

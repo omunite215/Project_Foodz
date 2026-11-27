@@ -28,7 +28,7 @@ export const notifyInput = z
       .object({
         orderId: z.uuid(),
         orderNumber: z.string().min(1).max(20),
-        status: z.enum(['accepted', 'ready', 'pickedUp', 'delivered', 'cancelled']),
+        status: z.enum(['accepted', 'ready', 'pickedUp', 'delivered', 'cancelled', 'rate']),
       })
       .strict()
       .optional(),

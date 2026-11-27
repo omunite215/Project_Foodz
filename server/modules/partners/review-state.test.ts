@@ -31,6 +31,7 @@ describe('tabs (A19.1)', () => {
       q: '6vh',
       vehicle: 'CAR',
       flags: true,
+      owes: false,
       sort: 'sent',
       dir: 'asc',
       page: 1,
@@ -42,6 +43,12 @@ describe('tabs (A19.1)', () => {
       sort: 'decided',
       dir: 'desc',
     });
+    // F9 A57: the money sorts and the "Owes cash" chip live in the address too.
+    expect(listQueryFromSearch({ tab: 'approved', sort: 'cash', owes: '1' })).toMatchObject({
+      sort: 'cash',
+      owes: true,
+    });
+    expect(listQueryFromSearch({ tab: 'review', sort: 'cash' }).sort).toBe('sent');
   });
 
   it('captions the table for screen readers (A32.5)', () => {

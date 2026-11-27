@@ -692,6 +692,9 @@ const summaryFields = {
   prepMinutes: true,
   arrivalFromMinutes: true,
   arrivalToMinutes: true,
+  // F9: what the Orders list's "Rate" and "Rated" need (S6.1).
+  deliveredAt: true,
+  ratingSkippedAt: true,
   items: { orderBy: { id: 'asc' }, select: { title: true, quantity: true } },
   // Only what "Collected" (U23) needs: the hand-overs and the steps that reverse them.
   events: {

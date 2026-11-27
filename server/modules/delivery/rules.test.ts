@@ -108,6 +108,11 @@ describe('who may be offered (W2)', () => {
     expect(notOfferable({ ...ok, isDemo: true }, { ...context, pool: 'DEMO' })).toBeNull();
     expect(notOfferable(ok, { ...context, pool: 'DEMO' })).toBe('other-pool');
   });
+
+  it('never offers a partner his own food order (F9 B10)', () => {
+    expect(notOfferable({ ...ok, ownOrder: true }, context)).toBe('own-order');
+    expect(notOfferable({ ...ok, ownOrder: false }, context)).toBeNull();
+  });
 });
 
 describe('ranking and rounds (W3, W4)', () => {

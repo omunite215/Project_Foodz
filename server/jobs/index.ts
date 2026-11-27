@@ -1,6 +1,7 @@
 import 'server-only';
 import type { InngestFunction } from 'inngest';
 import { accountEmail } from './functions/account-email';
+import { demoNightlyReset, earningsReconcile, ratingReminder } from './functions/earnings';
 import {
   deliveryEta,
   deliveryLocationsRetention,
@@ -49,4 +50,7 @@ export const functions: InngestFunction.Any[] = [
   deliveryNoAnswer,
   deliveryLocationsRetention,
   demoDeliveryRun,
+  ratingReminder,
+  earningsReconcile,
+  demoNightlyReset,
 ];

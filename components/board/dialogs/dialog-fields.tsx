@@ -188,6 +188,7 @@ export function StaffNoteField({
   onChange,
   onBlur,
   hint = 'Only staff see this note.',
+  max = STAFF_NOTE_MAX,
 }: {
   required: boolean;
   value: string;
@@ -196,6 +197,8 @@ export function StaffNoteField({
   onBlur: () => void;
   /** F6's reinstate and reopen say why the note is asked for. */
   hint?: string;
+  /** F9's cash hand-in keeps its note to 200 characters. */
+  max?: number;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -209,7 +212,7 @@ export function StaffNoteField({
         id={id}
         value={value}
         rows={3}
-        maxLength={STAFF_NOTE_MAX * 2}
+        maxLength={max * 2}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         aria-invalid={error ? true : undefined}
@@ -224,10 +227,10 @@ export function StaffNoteField({
           aria-hidden
           className={cn(
             'text-caption tabular-nums',
-            value.length > STAFF_NOTE_MAX ? 'text-destructive' : 'text-neutral-3',
+            value.length > max ? 'text-destructive' : 'text-neutral-3',
           )}
         >
-          {value.length}/{STAFF_NOTE_MAX}
+          {value.length}/{max}
         </span>
       </div>
       <FieldError id={errorId}>{error}</FieldError>

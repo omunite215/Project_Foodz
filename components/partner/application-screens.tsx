@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Smartphone,
   SquarePen,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -570,7 +571,14 @@ export function SuspendedScreen({
         </Link>
         .
       </p>
-      <Button asChild variant="outline" size="kitchen" className="mt-6 w-full">
+      {/* F9 P61.1: what Foodz still owes him, read-only. */}
+      <Button asChild variant="outline" size="kitchen" className="mt-6 w-full bg-card text-strong">
+        <Link href="/partner/earnings">
+          <Wallet className="size-5" aria-hidden />
+          See your earnings
+        </Link>
+      </Button>
+      <Button asChild variant="outline" size="kitchen" className="mt-3 w-full">
         <Link href="/menu">Order food</Link>
       </Button>
     </PartnerFrame>

@@ -1,7 +1,7 @@
 import 'server-only';
 import { ZodError } from 'zod';
-import { isStaff } from '@/server/auth/roles';
-import { getActor, getSession, type UserActor } from '@/server/auth/session';
+import { isStaff, type Permission } from '@/server/auth/roles';
+import { getActor, getSession, requirePermission, type UserActor } from '@/server/auth/session';
 import { AppError, forbidden, unauthenticated } from '@/server/errors';
 import { logger } from '@/server/logger';
 import { enforceRateLimit, type RateLimitPolicy } from '@/server/security/rate-limit';
@@ -23,6 +23,8 @@ export interface RouteContext {
   body: unknown;
   /** The dynamic segments of the route (`[offerId]`), checked by the handler's own schema. */
   params: Record<string, string>;
+  /** The query string, checked by the handler's own schema. */
+  query: Record<string, string>;
 }
 
 /** What Next passes a route handler as its second argument (params is a promise in Next 16). */
@@ -117,6 +119,7 @@ export function partnerRoute<T>(options: {
         sessionId,
         body,
         params: await readParams(context),
+        query: Object.fromEntries(new URL(request.url).searchParams),
       });
       return Response.json(result, { headers: NO_STORE });
     } catch (error) {
@@ -140,4 +143,87 @@ export function partnerRoute<T>(options: {
       logger.info({ route: options.name, ms: Math.round(performance.now() - started) }, 'route');
     }
   };
+}
+
+/**
+ * The wrapper for staff file downloads (F9 A64: the payouts CSVs). POST only, so a download that
+ * writes an audit entry and spends a limit can't be triggered by a link from another site;
+ * same-origin; the permission with two-factor (the demo admin may read); the rate limit; the
+ * capped JSON body. The handler returns the file response; errors leave as JSON.
+ */
+export function staffRoute(options: {
+  name: string;
+  rateLimit: RateLimitPolicy;
+  permission: Permission;
+  handler: (context: {
+    actor: UserActor;
+    body: unknown;
+    params: Record<string, string>;
+  }) => Promise<Response>;
+}) {
+  return async function handle(request: Request, context?: HandlerContext): Promise<Response> {
+    const started = performance.now();
+    try {
+      if (request.method !== 'POST') {
+        return Response.json(
+          { code: 'INVALID_INPUT', message: 'Use POST.' },
+          { status: 405, headers: { ...NO_STORE, allow: 'POST' } },
+        );
+      }
+      if (!isSameOrigin(request)) throw forbidden();
+      const actor = await requirePermission(options.permission, { write: false });
+      if (!isStaff(actor.role)) throw forbidden();
+      await enforceRateLimit(options.rateLimit, `user:${actor.userId}`);
+      const body = await readBody(request);
+      return await options.handler({ actor, body, params: await readParams(context) });
+    } catch (error) {
+      if (error instanceof AppError) return errorResponse(error);
+      if (error instanceof ZodError) {
+        const fieldErrors: Record<string, string[]> = {};
+        for (const issue of error.issues) {
+          const key = issue.path.join('.') || 'body';
+          (fieldErrors[key] ??= []).push(issue.message);
+        }
+        return errorResponse(
+          new AppError('INVALID_INPUT', 'Check the request.', 422, { fieldErrors }),
+        );
+      }
+      logger.error({ err: error, route: options.name }, 'route failed');
+      return Response.json(
+        { code: 'INTERNAL', message: 'Something went wrong. Please try again.' },
+        { status: 500, headers: NO_STORE },
+      );
+    } finally {
+      logger.info({ route: options.name, ms: Math.round(performance.now() - started) }, 'route');
+    }
+  };
+}
+
+/** A text file as a streamed, never-cached download. */
+export function fileResponse(file: {
+  fileName: string;
+  body: string;
+  contentType: string;
+}): Response {
+  const bytes = new TextEncoder().encode(file.body);
+  const chunk = 64 * 1024;
+  let offset = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= bytes.length) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(bytes.subarray(offset, offset + chunk));
+      offset += chunk;
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      ...NO_STORE,
+      'content-type': file.contentType,
+      'content-disposition': `attachment; filename="${file.fileName}"`,
+      'x-content-type-options': 'nosniff',
+    },
+  });
 }

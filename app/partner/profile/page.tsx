@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: partnerTitle('Profile') };
 
 /** `/partner/profile` (F6 design 6.7): approved partners only; everyone else sees `/partner`. */
 export default async function PartnerProfilePage() {
-  const { state } = await requirePartnerState('/partner/profile');
+  const { state, userId } = await requirePartnerState('/partner/profile');
   if (state.screen !== 'home') redirect('/partner');
-  return <ProfileScreen state={state} asOf={new Date().toISOString()} />;
+  return <ProfileScreen state={state} userId={userId} asOf={new Date().toISOString()} />;
 }

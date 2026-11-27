@@ -232,7 +232,12 @@ export interface CustomerTracking {
 
 /** P38, P41: the hand-over answer; the same for a repeat (L7.1). */
 export type HandOverResult =
-  | { outcome: 'delivered'; payWords: string }
+  /** F9 P51.3: `today` is read in the hand-over's own transaction, so it includes this one. */
+  | {
+      outcome: 'delivered';
+      payWords: string;
+      today?: { earnedCents: number; deliveries: number } | null;
+    }
   | { outcome: 'wrong'; triesLeft: number }
   | { outcome: 'locked' };
 

@@ -1,4 +1,5 @@
 import { createCipheriv, createHmac, randomBytes } from 'node:crypto';
+import { clearEarningsForPartners } from './earnings';
 import { v5 as uuidv5 } from 'uuid';
 import type { PrismaClient } from '../../server/db/generated/client';
 
@@ -434,6 +435,8 @@ export async function resetPartnerFixtures(
   await tx.$executeRaw`
     UPDATE deliveries SET status = 'CANCELLED', partner_id = NULL, assigned_at = NULL
     WHERE partner_id = ANY (${ids}::uuid[])`;
+  // F9: the ledger keeps a partner (RESTRICT): the fixtures' ledger rows go first.
+  await clearEarningsForPartners(tx, ids);
   await tx.deliveryPartner.deleteMany({ where: { id: { in: ids } } });
   await tx.upload.deleteMany({
     where: {
@@ -616,7 +619,12 @@ export async function resetPartnerFixtures(
           decidedAt: new Date(approved),
           decidedBy: morgan.id,
           welcomedAt: new Date(approved),
-          ...(fixture.key === 'omar' && { ratingAvg: 4.6, ratingCount: 31 }),
+          ...(fixture.key === 'omar' && {
+            ratingAvg: 4.6,
+            ratingCount: 31,
+            ratingBaseAvg: 4.6,
+            ratingBaseCount: 31,
+          }),
         });
         history.push({ type: 'approved', at: approved, actor: morgan });
         break;

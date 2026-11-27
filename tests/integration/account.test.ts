@@ -435,6 +435,37 @@ describe('deleting the account (S6.4 to S6.7)', () => {
     expect((await migrator.user.findUniqueOrThrow({ where: { id: userId } })).deletedAt).toBeNull();
   });
 
+  it("is refused for a partner whose Foodz balance isn't settled (F9 P61.2, T20)", async () => {
+    const { userId } = await signUp('partner');
+    await migrator.user.update({ where: { id: userId }, data: { role: 'partner' } });
+    const partner = await migrator.deliveryPartner.create({
+      data: {
+        userId,
+        status: 'APPROVED',
+        vehicleType: 'SCOOTER',
+        approvedAt: new Date(),
+        version: 2,
+      },
+      select: { id: true },
+    });
+    // Foodz owes him $3.00 (a bonus recorded by staff).
+    await migrator.$executeRaw`
+      SELECT app_append_entry(${partner.id}::uuid, 'BONUS', 300, NULL, 'bonus', 'Thanks', NULL, NULL, NULL,
+        'REAL', ${uuid()}, app_now(), 'staff')`;
+    expect((await account.deleteAccountAction({}))?.serverError).toEqual({
+      code: 'BALANCE_NOT_SETTLED',
+      message:
+        "Your Foodz balance isn't settled yet. Call Foodz Kitchen before deleting your account.",
+    });
+    expect((await migrator.user.findUniqueOrThrow({ where: { id: userId } })).deletedAt).toBeNull();
+    // Paid out: square, so the account can go; his ledger rows stay for accounting.
+    await migrator.$executeRaw`
+      SELECT app_append_entry(${partner.id}::uuid, 'PAYOUT', -300, NULL, NULL, NULL, 'bank-transfer', NULL,
+        app_store_date(app_now()), 'REAL', ${uuid()}, app_now(), 'staff')`;
+    expect((await account.deleteAccountAction({}))?.data).toEqual({ deleted: true });
+    expect(await migrator.partnerEarning.count({ where: { partnerId: partner.id } })).toBe(2);
+  });
+
   it('is refused for the demo account and for staff', async () => {
     const demo = await signUp('demo');
     await migrator.user.update({ where: { id: demo.userId }, data: { isDemo: true } });

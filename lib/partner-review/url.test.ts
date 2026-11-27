@@ -66,6 +66,22 @@ describe('the list address', () => {
     expect(withSort(base, 'name').dir).toBe('asc');
   });
 
+  it('keeps "Owes cash" on the partner tabs only (F9 A57.2)', () => {
+    const approved = withFilters(withTab(base, 'approved'), { owes: true });
+    expect(listHref(approved)).toBe('/admin/partners?tab=approved&owes=1');
+    expect(hasFilters(approved)).toBe(true);
+    expect(withTab(approved, 'suspended').owes).toBe(true);
+    expect(withTab(approved, 'review').owes).toBe(false);
+    expect(listHref({ ...base, owes: true })).toBe('/admin/partners?tab=review');
+  });
+
+  it("opens a partner's section with the list kept", () => {
+    const id = '0192f6a4-5b6c-7d8e-9f01-23456789abcd';
+    expect(applicationHref(id, withTab(base, 'approved'), { view: 'ratings' })).toBe(
+      `/admin/partners/${id}?tab=approved&view=ratings`,
+    );
+  });
+
   it('knows when anything filters the list', () => {
     expect(hasFilters(base)).toBe(false);
     expect(hasFilters(withFilters(base, { vehicle: 'BICYCLE' }))).toBe(true);

@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Banknote,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -29,6 +30,7 @@ import {
   useState,
 } from 'react';
 import type { VehicleType } from '@/server/db/enums';
+import type { PartnerListMoney } from '@/server/modules/earnings/schema';
 import {
   listQueryFromSearch,
   PARTNER_TABS,
@@ -52,6 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { NO_PARTNERS_OWE } from '@/lib/admin/earnings-text';
 import { announce } from '@/lib/announce';
 import { useMotion } from '@/lib/motion';
 import {
@@ -75,12 +78,16 @@ import {
   hasFilters,
   listHref,
   MIN_SEARCH,
+  ownsCash,
   withFilters,
   withPage,
   withSort,
   withTab,
 } from '@/lib/partner-review/url';
+import { useOnline } from '@/lib/use-online';
 import { cn } from '@/lib/utils';
+import { MoneyDialog } from './money-dialogs';
+import { CashBlock, HiddenMoney, MoneyRowMenu, RatingCell, WeekCell } from './money-parts';
 import { BannedChip, DemoChip, FlagChips, OnlineLine, StatusChip, WaitingBlock } from './parts';
 import { partnerKeys, ReadError, usePartnerList } from './queries';
 
@@ -346,6 +353,22 @@ function Toolbar({ query }: { query: PartnerListQuery }) {
         <Flag className="size-4" aria-hidden />
         Has flags
       </button>
+      {ownsCash(query.tab) ? (
+        // F9 A57.2: partners who owe Foodz cash.
+        <button
+          type="button"
+          aria-pressed={query.owes}
+          onClick={() => navigateTo(withFilters(query, { owes: !query.owes }))}
+          className={cn(
+            'inline-flex h-11 items-center gap-1.5 rounded-lg border border-input bg-white px-3 text-body-5 font-medium text-neutral-2 outline-none hover:bg-neutral-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid',
+            query.owes && 'border-2 border-brand-strong bg-brand-soft px-[11px] text-neutral-1',
+          )}
+        >
+          {query.owes ? <Check className="size-4 text-brand-strong" aria-hidden /> : null}
+          <Banknote className="size-4" aria-hidden />
+          Owes cash
+        </button>
+      ) : null}
       {hasFilters(query) || text ? (
         <Button
           type="button"
@@ -355,7 +378,7 @@ function Toolbar({ query }: { query: PartnerListQuery }) {
           onClick={() => {
             debouncer.cancel();
             setText('');
-            navigateTo(withFilters(query, { q: '', vehicle: null, flags: false }));
+            navigateTo(withFilters(query, { q: '', vehicle: null, flags: false, owes: false }));
           }}
         >
           Clear filters
@@ -423,6 +446,12 @@ function PersonCell({
       <p className="truncate text-body-5 text-neutral-3" title={row.email}>
         {row.email}
       </p>
+      {tab === 'approved' ? (
+        // F9 3.2: at 1024 the vehicle is the partner's second line; its column comes back at xl.
+        <p className="text-body-5 text-neutral-2 xl:hidden">
+          <VehicleWords words={row.vehicleWords} />
+        </p>
+      ) : null}
       {row.fixedAfterSendBack ? (
         <p className="mt-1 inline-flex items-center gap-1 text-caption text-neutral-3">
           <CircleCheck className="size-3" aria-hidden />
@@ -486,7 +515,68 @@ interface ColumnSpec {
   /** Widths at `xl`; the ID column only exists from `xl`. */
   className: string;
   sort?: PartnerSort;
+  /** F9: a money column, merged into one "Hidden for demo staff" cell on a masked row. */
+  money?: boolean;
+  /** The header is read by screen readers only ("Actions"). */
+  srHeader?: boolean;
   cell: (row: PartnerListRow, timeZone: string) => ReactNode;
+}
+
+/** What the money columns need besides the row (F9 design 3.2). */
+interface MoneyContext {
+  now: Date;
+  isDemo: boolean;
+  onRecordCash: (row: PartnerListRow, opener: HTMLElement | null) => void;
+}
+
+type MoneyRow = PartnerListRow & { money: PartnerListMoney };
+const hasMoney = (row: PartnerListRow): row is MoneyRow => Boolean(row.money);
+
+function moneyColumns(query: PartnerListQuery, context: MoneyContext) {
+  const cash: ColumnSpec = {
+    id: 'cash',
+    header: 'Cash',
+    className: '',
+    sort: 'cash',
+    money: true,
+    cell: (row, timeZone) =>
+      hasMoney(row) ? (
+        <CashBlock cash={row.money.cash} now={context.now} timeZone={timeZone} />
+      ) : null,
+  };
+  const actions: ColumnSpec = {
+    id: 'actions',
+    header: 'Actions',
+    srHeader: true,
+    className: 'w-14',
+    cell: (row) =>
+      hasMoney(row) ? (
+        <MoneyRowMenu
+          row={row}
+          query={query}
+          isDemo={context.isDemo}
+          onRecordCash={(opener) => context.onRecordCash(row, opener)}
+          className="-my-2"
+        />
+      ) : null,
+  };
+  const rating: ColumnSpec = {
+    id: 'rating',
+    header: 'Rating',
+    className: '',
+    sort: 'rating',
+    money: true,
+    cell: (row) => (hasMoney(row) ? <RatingCell rating={row.money.rating} /> : null),
+  };
+  const week: ColumnSpec = {
+    id: 'week',
+    header: 'This week',
+    className: '',
+    sort: 'week',
+    money: true,
+    cell: (row) => (hasMoney(row) ? <WeekCell week={row.money.week} /> : null),
+  };
+  return { cash, actions, rating, week };
 }
 
 const personHeader: Record<PartnerTab, string> = {
@@ -507,8 +597,9 @@ const decided = (header: string): ColumnSpec => ({
     row.decided ? decidedCell(row.decided.at, row.decided.byName, timeZone) : null,
 });
 
-function columnsFor(query: PartnerListQuery): ColumnSpec[] {
+function columnsFor(query: PartnerListQuery, context: MoneyContext): ColumnSpec[] {
   const tab = query.tab;
+  const money = moneyColumns(query, context);
   const person: ColumnSpec = {
     id: 'person',
     header: personHeader[tab],
@@ -575,25 +666,37 @@ function columnsFor(query: PartnerListQuery): ColumnSpec[] {
         { ...flags, className: 'w-[15%]' },
       ];
     case 'approved':
+      // F9 3.2: at 1024 the vehicle joins the partner cell and "Partner since" goes.
       return [
-        { ...person, className: 'w-[30%]' },
-        { ...vehicle, className: 'w-[16%]' },
-        { id: 'status', header: 'Status', className: 'w-[32%]', cell: (row) => onlineState(row) },
+        { ...person, className: 'w-[26%] xl:w-[20%]' },
+        { ...vehicle, className: 'hidden xl:table-cell xl:w-[11%]' },
+        {
+          id: 'status',
+          header: 'Status',
+          className: 'w-[20%] xl:w-[17%]',
+          cell: (row) => onlineState(row),
+        },
+        { ...money.rating, className: 'w-[17%] xl:w-[13%]' },
+        { ...money.week, className: 'w-[18%] xl:w-[14%]' },
+        { ...money.cash, className: 'w-[19%] xl:w-[13%]' },
         {
           id: 'since',
           header: 'Partner since',
-          className: 'w-[22%]',
+          className: 'hidden xl:table-cell xl:w-[8%]',
           sort: 'decided',
           cell: (row, timeZone) =>
             row.partnerSince ? longDateOf(row.partnerSince, timeZone) : null,
         },
+        money.actions,
       ];
     case 'suspended':
       return [
-        { ...person, className: 'w-[32%]' },
-        { ...vehicle, className: 'w-[16%]' },
-        { ...decided('Suspended'), className: 'w-[32%]' },
-        { ...flags, className: 'w-[20%]' },
+        { ...person, className: 'w-[28%]' },
+        { ...vehicle, className: 'w-[14%]' },
+        { ...decided('Suspended'), className: 'w-[26%]' },
+        { ...flags, className: 'w-[14%]' },
+        { ...money.cash, className: 'w-[18%]' },
+        money.actions,
       ];
     case 'rejected':
       return [
@@ -633,22 +736,24 @@ function columnsFor(query: PartnerListQuery): ColumnSpec[] {
       ];
     default:
       return [
-        { ...person, className: 'w-[28%]' },
-        { ...vehicle, className: 'w-[14%]' },
+        { ...person, className: 'w-[24%]' },
+        { ...vehicle, className: 'w-[12%]' },
         {
           id: 'status',
           header: 'Status',
-          className: 'w-[20%]',
+          className: 'w-[17%]',
           cell: (row) => <StatusChip tab={row.tab} />,
         },
         {
           id: 'changed',
           header: 'Last change',
-          className: 'w-[20%]',
+          className: 'w-[17%]',
           sort: 'changed',
           cell: (row, timeZone) => dateTime(row.lastChangeAt, timeZone),
         },
-        { ...flags, className: 'w-[18%]' },
+        { ...flags, className: 'w-[12%]' },
+        { ...money.cash, className: 'w-[18%]' },
+        money.actions,
       ];
   }
 }
@@ -680,15 +785,18 @@ function ResultsTable({
   timeZone,
   busy,
   skeleton,
+  context,
 }: {
   result: PartnerListResult;
   query: PartnerListQuery;
   timeZone: string;
   busy: boolean;
   skeleton: boolean;
+  context: MoneyContext;
 }) {
   const router = useRouter();
-  const specs = useMemo(() => columnsFor(result.query), [result.query]);
+  const specs = useMemo(() => columnsFor(result.query, context), [result.query, context]);
+  const moneyIds = specs.filter((spec) => spec.money).map((spec) => spec.id);
   const columns = useMemo(
     () =>
       helper.columns(
@@ -743,6 +851,8 @@ function ResultsTable({
                   >
                     {spec.sort ? (
                       <SortButton spec={{ ...spec, sort: spec.sort }} query={query} />
+                    ) : spec.srHeader ? (
+                      <span className="sr-only">{spec.header}</span>
                     ) : (
                       spec.header
                     )}
@@ -782,13 +892,29 @@ function ResultsTable({
                   onClick={(event) => {
                     // A click anywhere on the row follows its name link (mouse only, 7.5).
                     const target = event.target;
-                    if (target instanceof Element && target.closest('a, button')) return;
+                    // The row menu is portaled, but React still bubbles its clicks to the row.
+                    if (target instanceof Element && target.closest('a, button, [role="menu"]')) {
+                      return;
+                    }
                     if (window.getSelection()?.toString()) return;
                     router.push(applicationHref(row.original.partnerId, result.query));
                   }}
                 >
                   {row.getAllCells().map((cell) => {
                     const spec = specOf(cell.column.id);
+                    // A real partner for the demo admin: one cell over the money columns (D29).
+                    if (spec?.money && row.original.money?.hidden) {
+                      if (cell.column.id !== moneyIds[0]) return null;
+                      return (
+                        <td
+                          key={cell.id}
+                          colSpan={moneyIds.length}
+                          className="px-3 py-3 align-top text-body-5"
+                        >
+                          <HiddenMoney />
+                        </td>
+                      );
+                    }
                     return (
                       // A table cell, not a control: the row's name link is the control.
                       // oxlint-disable-next-line jsx-a11y/control-has-associated-label
@@ -812,7 +938,7 @@ function ResultsTable({
 }
 
 /** A 2 px bar sweeping the table's top edge while a sort or filter loads (static, reduced). */
-function BusyBar() {
+export function BusyBar() {
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -859,14 +985,44 @@ function CardKey({ row, timeZone }: { row: PartnerListRow; timeZone: string }) {
   }
 }
 
+/** F9 3.2: the card's money, in the key line's order: rating, this week, cash. */
+function CardMoney({
+  row,
+  tab,
+  timeZone,
+  now,
+}: {
+  row: MoneyRow;
+  tab: PartnerTab;
+  timeZone: string;
+  now: Date;
+}) {
+  const money = row.money;
+  // A masked card already says it once, under the name.
+  if (money.hidden) return row.masked ? null : <HiddenMoney />;
+  return (
+    <>
+      {tab === 'approved' && money.rating ? <RatingCell rating={money.rating} /> : null}
+      {tab === 'approved' && money.week ? (
+        <span>
+          This week · <WeekCell week={money.week} />
+        </span>
+      ) : null}
+      {money.cash ? <CashBlock cash={money.cash} now={now} timeZone={timeZone} /> : null}
+    </>
+  );
+}
+
 function ResultCards({
   result,
   timeZone,
   skeleton,
+  context,
 }: {
   result: PartnerListResult;
   timeZone: string;
   skeleton: boolean;
+  context: MoneyContext;
 }) {
   if (skeleton) {
     return (
@@ -899,7 +1055,18 @@ function ResultCards({
             >
               {row.name}
             </Link>
-            <ChevronRight className="size-5 shrink-0 text-neutral-3" aria-hidden />
+            {hasMoney(row) ? (
+              // Above the stretched name link: the card keeps one link plus one menu.
+              <MoneyRowMenu
+                row={row}
+                query={result.query}
+                isDemo={context.isDemo}
+                onRecordCash={(opener) => context.onRecordCash(row, opener)}
+                className="relative z-10 -mt-1 -mr-2 shrink-0"
+              />
+            ) : (
+              <ChevronRight className="size-5 shrink-0 text-neutral-3" aria-hidden />
+            )}
           </div>
           <p className="truncate text-body-5 text-neutral-3">{row.email}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-body-5 text-neutral-1">
@@ -908,6 +1075,9 @@ function ResultCards({
             </span>
             {result.query.tab === 'all' ? <StatusChip tab={row.tab} /> : null}
             <CardKey row={row} timeZone={timeZone} />
+            {hasMoney(row) ? (
+              <CardMoney row={row} tab={result.query.tab} timeZone={timeZone} now={context.now} />
+            ) : null}
             <FlagChips flags={row.flags} compact="always" />
             {row.banned ? <BannedChip /> : null}
             {row.isDemoPartner ? <DemoChip /> : null}
@@ -1009,7 +1179,19 @@ function useSkeletonFlag(flag: boolean) {
 }
 
 const filterKeyOf = (query: PartnerListQuery) =>
-  JSON.stringify({ tab: query.tab, q: query.q, vehicle: query.vehicle, flags: query.flags });
+  JSON.stringify({
+    tab: query.tab,
+    q: query.q,
+    vehicle: query.vehicle,
+    flags: query.flags,
+    owes: query.owes,
+  });
+
+interface CashDialog {
+  partnerId: string;
+  name: string;
+  opener: HTMLElement | null;
+}
 
 export function PartnersList({ initial }: { initial: PartnerListResult }) {
   const shell = useStaffShell();
@@ -1023,6 +1205,19 @@ export function PartnersList({ initial }: { initial: PartnerListResult }) {
   const resultsRef = useRef<HTMLDivElement>(null);
   const showingRef = useRef<HTMLParagraphElement>(null);
   const focused = useRef<{ id: string; index: number } | null>(null);
+  const online = useOnline();
+  const [cashDialog, setCashDialog] = useState<CashDialog | null>(null);
+  // The cash block's "since Tue" reads the list's own server time.
+  const asOf = result.asOf;
+  const context = useMemo<MoneyContext>(
+    () => ({
+      now: new Date(asOf),
+      isDemo: shell.user.isDemo,
+      onRecordCash: (row, opener) =>
+        setCashDialog({ partnerId: row.partnerId, name: row.name, opener }),
+    }),
+    [asOf, shell.user.isDemo],
+  );
 
   const pending = list.isPlaceholderData && list.isFetching;
   const pageChanging = pending && result.page !== query.page;
@@ -1108,11 +1303,13 @@ export function PartnersList({ initial }: { initial: PartnerListResult }) {
     results = (
       <div className="rounded-2xl border border-neutral-6 bg-white px-4 py-10">
         <EmptyState
-          title="No matching applications"
-          description="No applications match these filters."
+          title={result.query.owes ? 'No matching partners' : 'No matching applications'}
+          description={result.query.owes ? NO_PARTNERS_OWE : 'No applications match these filters.'}
           action={
             <Button asChild variant="outline" size="touch">
-              <ListLink query={withFilters(query, { q: '', vehicle: null, flags: false })}>
+              <ListLink
+                query={withFilters(query, { q: '', vehicle: null, flags: false, owes: false })}
+              >
                 Clear filters
               </ListLink>
             </Button>
@@ -1130,10 +1327,16 @@ export function PartnersList({ initial }: { initial: PartnerListResult }) {
             timeZone={shell.timeZone}
             busy={pending && !pageChanging}
             skeleton={skeleton}
+            context={context}
           />
         </div>
         <div className="lg:hidden" aria-busy={pending || undefined}>
-          <ResultCards result={result} timeZone={shell.timeZone} skeleton={skeleton} />
+          <ResultCards
+            result={result}
+            timeZone={shell.timeZone}
+            skeleton={skeleton}
+            context={context}
+          />
         </div>
       </>
     );
@@ -1165,6 +1368,30 @@ export function PartnersList({ initial }: { initial: PartnerListResult }) {
         </div>
         {failed ? null : <Pager result={result} query={query} showingRef={showingRef} />}
       </div>
+      {cashDialog ? (
+        <MoneyDialog
+          key={cashDialog.partnerId}
+          kind="cash"
+          partnerId={cashDialog.partnerId}
+          partnerName={cashDialog.name}
+          timeZone={shell.timeZone}
+          offline={!online}
+          onClose={() => setCashDialog(null)}
+          onCloseFocus={() => {
+            const opener = cashDialog.opener;
+            if (opener?.isConnected) {
+              opener.focus();
+              return true;
+            }
+            return false;
+          }}
+          onDone={() => {
+            setCashDialog(null);
+            void queryClient.invalidateQueries({ queryKey: partnerKeys.all });
+          }}
+          onSignedOut={() => setSignedOut(true)}
+        />
+      ) : null}
       {signedOut || sessionEnded ? <SignedOutOverlay /> : null}
     </AdminPage>
   );

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
  * (P13.2). Decorative: hidden from screen readers. Static: nothing floats or loops.
  */
 
-export type DoodleName = 'coffee' | 'meditating' | 'sprinting';
+export type DoodleName = 'coffee' | 'meditating' | 'sprinting' | 'strolling';
 
 const layer = (name: DoodleName, part: 'ink' | 'accent'): CSSProperties => {
   const url = `url(/illustrations/doodles/${name}-${part}.svg)`;

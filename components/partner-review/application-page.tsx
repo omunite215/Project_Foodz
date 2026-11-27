@@ -17,7 +17,16 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useEffectEvent, useId, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+} from 'react';
+import type { PartnerEarningsPage } from '@/server/modules/earnings/schema';
 import { partnerVersionAction } from '@/server/modules/partners/review-actions';
 import type {
   DecisionResult,
@@ -30,6 +39,7 @@ import type {
   ReviewFlag,
 } from '@/server/modules/partners/review-schema';
 import { flagOtherLine, flagSentence } from '@/server/modules/partners/review-state';
+import type { PartnerRatingsPage } from '@/server/modules/ratings/schema';
 import { longDate, weekdayDate } from '@/server/modules/partners/text';
 import { BackLink } from '@/components/account/back-link';
 import { AdminPage, useSessionPhase } from '@/components/admin/admin-page';
@@ -39,6 +49,7 @@ import { FormAlert } from '@/components/forms/form-alert';
 import { BLOCKED_BUTTON_CLASS } from '@/components/forms/submit-button';
 import { Button } from '@/components/ui/button';
 import { callAction } from '@/lib/action-result';
+import type { PartnerSection } from '@/lib/admin/earnings-text';
 import { announce } from '@/lib/announce';
 import { useMotion } from '@/lib/motion';
 import {
@@ -66,9 +77,12 @@ import { useOnline } from '@/lib/use-online';
 import { cn } from '@/lib/utils';
 import { ApplicationHistory } from './application-history';
 import { DecisionDialog, type DialogDraft, EMPTY_DRAFT } from './decision-dialogs';
+import { PartnerEarningsPanel } from './earnings-panel';
+import { PartnerSectionsNav } from './partner-sections';
 import { PartnerImages } from './partner-images';
 import { BannedChip, ChangedChip, DemoChip, OnlineLine, StatusChip, WaitingBlock } from './parts';
 import { partnerKeys, ReadError, usePartnerReview } from './queries';
+import { PartnerRatingsPanel } from './ratings-panel';
 
 /*
  * One application (F6 design 8, A20): everything a reviewer needs to decide, refreshed every
@@ -631,13 +645,23 @@ const EMPTY_DRAFTS: Record<ReviewAction, DialogDraft> = {
   reopen: EMPTY_DRAFT,
 };
 
+/** F9 (design 3.3): an approved or suspended partner's page has three sections. */
+export interface PartnerSectionsData {
+  view: PartnerSection;
+  /** The server's first read of the section shown; null when it failed. */
+  earnings: PartnerEarningsPage | null;
+  ratings: PartnerRatingsPage | null;
+}
+
 export function ApplicationPage({
   initial,
   list,
+  sections = null,
 }: {
   initial: PartnerReview;
   /** The list it was opened from (its address carries the query, A20.1). */
   list: PartnerListQuery;
+  sections?: PartnerSectionsData | null;
 }) {
   const shell = useStaffShell();
   const router = useRouter();
@@ -661,6 +685,15 @@ export function ApplicationPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const openers = useRef<Partial<Record<ReviewAction, HTMLButtonElement | null>>>({});
   const focusResult = useRef(false);
+  // F9 3.3: after switching sections, focus goes to the new panel's h2.
+  const panelHeading = useRef<HTMLHeadingElement>(null);
+  const view = sections?.view ?? null;
+  const shownView = useRef(view);
+  useEffect(() => {
+    if (!view || shownView.current === view) return;
+    shownView.current = view;
+    requestAnimationFrame(() => panelHeading.current?.focus());
+  }, [view]);
 
   // Someone else changed or decided it: say so once, in place (8.9). Our own decision doesn't.
   useEffect(() => {
@@ -728,6 +761,8 @@ export function ApplicationPage({
     return () => clearTimeout(timer);
   }, [result, dialog]);
 
+  const markSignedOut = useCallback(() => setSignedOut(true), []);
+
   const checkChanges = () => {
     setDialog(null);
     void (async () => {
@@ -789,6 +824,10 @@ export function ApplicationPage({
           <HeaderActions actions={actions} onOpen={setDialog} openerRefs={openers} />
         </header>
 
+        {sections ? (
+          <PartnerSectionsNav partnerId={data.partnerId} list={list} current={sections.view} />
+        ) : null}
+
         <div className="mt-6 space-y-6 xl:space-y-8">
           {result ? (
             <RiseIn alertRef={resultRef}>
@@ -836,23 +875,64 @@ export function ApplicationPage({
             </RiseIn>
           ) : null}
 
-          <DecisionBlock review={data} timeZone={timeZone} />
-          <FlagsList flags={data.flags} timeZone={timeZone} />
+          {sections?.view === 'earnings' ? (
+            <PartnerEarningsPanel
+              key="earnings"
+              initial={sections.earnings}
+              partnerId={data.partnerId}
+              partnerName={data.name}
+              timeZone={timeZone}
+              offline={!online}
+              enabled={!signedOut && !sessionEnded}
+              headingRef={panelHeading}
+              onSignedOut={markSignedOut}
+            />
+          ) : sections?.view === 'ratings' ? (
+            <PartnerRatingsPanel
+              key="ratings"
+              initial={sections.ratings}
+              partnerId={data.partnerId}
+              partnerName={data.name}
+              timeZone={timeZone}
+              offline={!online}
+              enabled={!signedOut && !sessionEnded}
+              headingRef={panelHeading}
+              onSignedOut={markSignedOut}
+            />
+          ) : (
+            <section
+              aria-labelledby={sections ? `${historyId}-application` : undefined}
+              className="space-y-6 xl:space-y-8"
+            >
+              {sections ? (
+                <h2
+                  id={`${historyId}-application`}
+                  ref={panelHeading}
+                  tabIndex={-1}
+                  className="sr-only"
+                >
+                  Application
+                </h2>
+              ) : null}
+              <DecisionBlock review={data} timeZone={timeZone} />
+              <FlagsList flags={data.flags} timeZone={timeZone} />
 
-          <div className="space-y-6 xl:grid xl:grid-cols-[480px_minmax(0,1fr)] xl:items-start xl:gap-8 xl:space-y-0">
-            <div className="space-y-6 xl:space-y-8">
-              {images}
-              <WhatToCheck review={data} />
-            </div>
-            <div className="space-y-6 xl:space-y-8">
-              <FactsCards review={data} timeZone={timeZone} />
-              <ApplicationHistory
-                entries={data.history}
-                timeZone={timeZone}
-                headingId={historyId}
-              />
-            </div>
-          </div>
+              <div className="space-y-6 xl:grid xl:grid-cols-[480px_minmax(0,1fr)] xl:items-start xl:gap-8 xl:space-y-0">
+                <div className="space-y-6 xl:space-y-8">
+                  {images}
+                  <WhatToCheck review={data} />
+                </div>
+                <div className="space-y-6 xl:space-y-8">
+                  <FactsCards review={data} timeZone={timeZone} />
+                  <ApplicationHistory
+                    entries={data.history}
+                    timeZone={timeZone}
+                    headingId={historyId}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
         </div>
       </div>
 

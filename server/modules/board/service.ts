@@ -19,6 +19,7 @@ import {
 import { getStoreStatus } from '@/server/modules/menu/service';
 import type { OrderEffect } from '@/server/modules/orders/effects';
 import { readyLateMinutes } from '@/server/modules/orders/progress';
+import { staffOrderFeedbackIn } from '@/server/modules/ratings/service';
 import { passStepUp, stepUpFreshUntilFor } from '@/server/modules/staff/service';
 import { STEP_UP_WINDOW_MS } from '@/server/modules/staff/schema';
 import { isRealtimeConfigured } from '@/server/realtime/config';
@@ -415,10 +416,16 @@ export async function getStaffOrderDetail(
     now,
     names,
   );
+  // F9 (A65): feedback for SUPPORT and ADMIN only; the kitchen's shape never carries it.
+  const feedback =
+    detail.view === 'full' && (viewer.role === 'support' || viewer.role === 'admin')
+      ? await runAs(actor, (ctx) => staffOrderFeedbackIn(ctx, viewer, found.order.id, now))
+      : undefined;
   return {
     ...detail,
     courierSection: await courierSection(viewer, found.order, now),
     tracking: await staffTrackingDetail(viewer, found.order.id, now),
+    ...(detail.view === 'full' && { feedback: feedback ?? null }),
   };
 }
 

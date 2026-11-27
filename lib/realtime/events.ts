@@ -57,6 +57,10 @@ export const PARTNER_NOTICE_TYPES = [
   'partner.offline-kitchen-closed',
   // F7 P25.2.
   'partner.offline-missed-offers',
+  // F9: staff recorded cash, an adjustment or a payout (never naming them).
+  'earnings.cash-recorded',
+  'earnings.adjusted',
+  'earnings.payout-recorded',
 ] as const;
 export type PartnerNoticeType = (typeof PARTNER_NOTICE_TYPES)[number];
 
@@ -189,6 +193,11 @@ export interface RealtimeEvents {
       | 'locked';
     at: string;
   };
+  /**
+   * F9, on `private-partner-{id}`: his ledger or goal changed. No amounts (P60.2): the app
+   * fetches the figures.
+   */
+  'earnings.changed': { at: string };
   /** F8, on `private-ops-map-demo`: the demo run started, moved on or ended (A54). */
   'demo.run-changed': { running: boolean; endsAt: string | null; at: string };
 }

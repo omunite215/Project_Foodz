@@ -741,6 +741,22 @@ function sortColumn(query: PartnerListQuery): Prisma.Sql {
       return Prisma.sql`d.submitted_at ${dir} NULLS LAST, d.id`;
     case 'decided':
       return Prisma.sql`coalesce(d.suspended_at, d.decided_at, d.approved_at) ${dir} NULLS LAST, d.id`;
+    // F9 (A57.1): the money columns, from tables each viewer may read under row-level security.
+    // A66.3: only partners of the viewer's own pool sort by rating; the others go last, so
+    // neither real staff nor the demo admin can order the other pool by figures they can't see.
+    case 'rating':
+      return Prisma.sql`(SELECT CASE WHEN d.is_demo = app_is_demo() THEN p.rating_avg END
+          FROM delivery_partners p WHERE p.id = d.id) ${dir} NULLS LAST,
+        (SELECT CASE WHEN d.is_demo = app_is_demo() THEN p.rating_count END
+          FROM delivery_partners p WHERE p.id = d.id) ${dir} NULLS LAST, d.id`;
+    case 'week':
+      return Prisma.sql`(SELECT coalesce(sum(x.delivery_pay_cents + x.tips_cents + x.adjustments_cents), 0)
+        FROM partner_ledger_days x
+        WHERE x.partner_id = d.id
+          AND x.day >= date_trunc('week', app_store_date(app_now()))::date
+          AND x.day < date_trunc('week', app_store_date(app_now()))::date + 7) ${dir}, d.id`;
+    case 'cash':
+      return Prisma.sql`(SELECT greatest(0, -l.balance_cents) FROM partner_ledgers l WHERE l.partner_id = d.id) ${dir} NULLS LAST, d.id`;
     default:
       return Prisma.sql`d.updated_at ${dir}, d.id`;
   }
@@ -750,6 +766,11 @@ function filters(query: PartnerListQuery, today: Date): Prisma.Sql {
   const parts: Prisma.Sql[] = [tabCondition(query.tab)];
   if (query.vehicle) parts.push(Prisma.sql`d.vehicle_type = ${query.vehicle}::"VehicleType"`);
   if (query.flags) parts.push(flaggedCondition(today));
+  if (query.owes) {
+    parts.push(
+      Prisma.sql`EXISTS (SELECT 1 FROM partner_ledgers l WHERE l.partner_id = d.id AND l.balance_cents < 0)`,
+    );
+  }
   if (query.q) {
     const like = `%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const plate = query.q.toUpperCase().replace(/[\s-]/g, '');

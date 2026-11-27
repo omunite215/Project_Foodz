@@ -15,6 +15,9 @@ export interface SeedMenuItem {
   isAvailable: boolean;
   ratingAvg: number;
   ratingCount: number;
+  /** F9 (U17): the same figures, as the baseline real ratings add to. */
+  ratingBaseAvg: number;
+  ratingBaseCount: number;
   soldCount: number;
 }
 
@@ -50,11 +53,15 @@ function hash(value: string) {
 
 function demoStats(slug: string, cuisine: Cuisine) {
   const h = hash(slug);
+  const ratingAvg = Math.round((4.2 + (h % 8) / 10) * 10) / 10;
+  const ratingCount = 40 + (h % 260);
   return {
     flavors: FLAVORS[cuisine].filter((_, index) => (h >> index) & 1).slice(0, 4),
     prepMinutes: 12 + (h % 4) * 4,
-    ratingAvg: Math.round((4.2 + (h % 8) / 10) * 10) / 10,
-    ratingCount: 40 + (h % 260),
+    ratingAvg,
+    ratingCount,
+    ratingBaseAvg: ratingAvg,
+    ratingBaseCount: ratingCount,
     soldCount: 120 + (h % 1400),
   };
 }

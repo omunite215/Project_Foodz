@@ -74,6 +74,13 @@ export interface DispatchNotice {
 /** How the card last closed: where focus goes next (design, Focus). */
 export type CardClose = { id: number; how: 'ended' | 'accepted' | 'declined' | 'waiting' };
 
+/**
+ * F9 (QA U1): an offer accepted since `seenId`: a screen without the pick-up map (Earnings,
+ * Your ratings) then goes to Home, where the map is, without another tap.
+ */
+export const acceptedSince = (seenId: number, close: CardClose | null): close is CardClose =>
+  close !== null && close.how === 'accepted' && close.id !== seenId;
+
 export interface DispatchState {
   partnerId: string | null;
   isDemo: boolean;
@@ -82,9 +89,19 @@ export interface DispatchState {
   notice: DispatchNotice | null;
   delivery: PartnerDeliveryF8 | null;
   /** F8 P41.3: his own right code; the sheet shows the pay, then Home (never the customer). */
-  delivered: { orderNumber: string; pay: string } | null;
+  delivered: {
+    orderNumber: string;
+    pay: string;
+    /** F9 P51.3: today's figures read with the hand-over, so they include this one. */
+    today: { earnedCents: number; deliveries: number } | null;
+  } | null;
   /** F8 P43.4: staff asked him to wait; the waiting card says so until the clock restarts. */
   askedToWaitAt: string | null;
+  /**
+   * F9 (QA F4): today's figures from his latest hand-over, kept after the delivered moment, so
+   * Home's line never trails the sheet that just showed them.
+   */
+  latestToday: { earnedCents: number; deliveries: number; at: number } | null;
   missedInRow: number;
   howOffersWork: PartnerDispatchState['howOffersWork'];
   /** Server clock minus the device's. */
@@ -104,6 +121,7 @@ const initial: DispatchState = {
   notice: null,
   delivery: null,
   delivered: null,
+  latestToday: null,
   askedToWaitAt: null,
   missedInRow: 0,
   howOffersWork: {
@@ -753,11 +771,26 @@ async function released(before: PartnerDeliveryF8) {
     kind === 'cancelledBringBack' ||
     kind === 'markedDelivered'
   ) {
-    showNotice(releaseNotice(kind, before.orderNumber, endingExtra(before)), {
-      persistent: true,
-      key: typeof at === 'string' ? at : null,
-    });
+    showNotice(
+      releaseNotice(kind, before.orderNumber, { ...endingExtra(before), feeCents: feeOf(notice) }),
+      { persistent: true, key: typeof at === 'string' ? at : null },
+    );
   }
+}
+
+/**
+ * P57.3: the fee he keeps after "Cancel and bring it back" isn't on the event (no amounts on
+ * realtime); his partner state has it, so the notice gains its sentence once that's read.
+ */
+async function addKeptFee(held: PartnerDeliveryF8, key: string) {
+  const answer = await request('GET', `${BASE}/me`);
+  const fee = feeOf(field(field(answer?.body, 'dispatch'), 'notice'));
+  const current = get().notice;
+  if (fee === null || current?.key !== key) return;
+  showNotice(
+    releaseNotice('cancelledBringBack', held.orderNumber, { ...endingExtra(held), feeCents: fee }),
+    { persistent: true, key },
+  );
 }
 
 /** The pay and the kitchen for F8's endings, from what he held (never the customer). */
@@ -783,6 +816,7 @@ export function onDeliveryChanged(event: DeliveryChangedEvent) {
       persistent: true,
       key: event.at,
     });
+    if (event.notice === 'cancelledBringBack') void addKeptFee(held, event.at);
     return;
   }
   if (event.notice === 'askedToWait') {
@@ -882,11 +916,28 @@ export type HandOverOutcome =
   | { kind: 'cash' }
   | { kind: 'offline' | 'unavailable' | 'gone' | 'limit' | 'failed' };
 
+/** The hand-over answer's `today`, or null when it lacks it (the line is then left out). */
+function todayOf(value: unknown): { earnedCents: number; deliveries: number } | null {
+  const earnedCents = field(value, 'earnedCents');
+  const deliveries = field(value, 'deliveries');
+  return typeof earnedCents === 'number' && typeof deliveries === 'number'
+    ? { earnedCents, deliveries }
+    : null;
+}
+
+/** P57.3: the fee he keeps on a cancellation after pickup, from his partner state. */
+function feeOf(notice: unknown): number | null {
+  const fee = field(notice, 'feeCents');
+  return typeof fee === 'number' && fee > 0 ? fee : null;
+}
+
 function handOverResult(body: unknown): HandOverResult | null {
   const outcome = field(body, 'outcome');
   const payWords = field(body, 'payWords');
   const triesLeft = field(body, 'triesLeft');
-  if (outcome === 'delivered' && typeof payWords === 'string') return { outcome, payWords };
+  if (outcome === 'delivered' && typeof payWords === 'string') {
+    return { outcome, payWords, today: todayOf(field(body, 'today')) };
+  }
   if (outcome === 'wrong' && typeof triesLeft === 'number') return { outcome, triesLeft };
   if (outcome === 'locked') return { outcome };
   return null;
@@ -920,7 +971,10 @@ export async function handOverCode(
       const pay = earnedOf(result.payWords, held.payText);
       ownRelease = held.deliveryId;
       // The delivered moment first, so the sheet goes straight from the code to the pay.
-      set({ delivered: { orderNumber: held.orderNumber, pay } });
+      set({
+        delivered: { orderNumber: held.orderNumber, pay, today: result.today ?? null },
+        ...(result.today ? { latestToday: { ...result.today, at: Date.now() } } : {}),
+      });
       if (get().delivery?.deliveryId === held.deliveryId) endHeld(held);
       return { kind: 'delivered', pay };
     }
@@ -1119,10 +1173,10 @@ export function adoptDispatch(facts: DispatchFacts) {
   setHoldingOrder(Boolean(facts.dispatch.delivery));
   const notice = facts.dispatch.notice;
   if (notice && !get().notice && !wasDismissed(notice.at)) {
-    showNotice(releaseNotice(notice.kind, notice.orderNumber), {
-      persistent: true,
-      key: notice.at,
-    });
+    showNotice(
+      releaseNotice(notice.kind, notice.orderNumber, { feeCents: notice.feeCents ?? null }),
+      { persistent: true, key: notice.at },
+    );
   }
   if (facts.dispatch.delivery && !facts.delivery) void loadDelivery();
 }

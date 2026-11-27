@@ -63,6 +63,11 @@ describe('logger redaction', () => {
     'addressCity',
     'courierInstructions',
     'note',
+    'comment',
+    'staffNote',
+    'excludedNote',
+    'partnerMessage',
+    'reference',
   ])('hides %s at the top level and in form input', (key) => {
     const line = capture({ [key]: SECRET, input: { [key]: SECRET } });
     expect(line[key]).toBe('[redacted]');

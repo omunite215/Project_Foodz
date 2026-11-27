@@ -80,6 +80,11 @@ export type AppErrorCode =
   | 'CONFIRM_NOT_ALLOWED'
   | 'DEMO_RUN_BUSY'
   | 'DEMO_RUN_LIMIT'
+  // F9: ratings and the earnings ledger.
+  | 'RATING_NOT_OPEN'
+  | 'RATING_CHANGED'
+  | 'LEDGER_CHANGED'
+  | 'BALANCE_NOT_SETTLED'
   // Sign-in and account flows.
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_SUSPENDED'

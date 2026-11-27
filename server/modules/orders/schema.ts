@@ -369,6 +369,11 @@ export interface OrderSummary extends OrderSummaryProgress {
   method: 'cash' | 'card';
   /** Shown beside the total (S12.4). */
   moneyFlag: 'refunded' | 'partlyRefunded' | 'disputed' | null;
+  /**
+   * F9 (S6.1): "Rate" while the window is open and nothing is rated or skipped, "Rated" once
+   * anything is. Optional so older fixtures still type-check; the server always sends it.
+   */
+  rating?: 'rate' | 'rated' | null;
 }
 
 export interface OrdersPage {

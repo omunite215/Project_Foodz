@@ -14,6 +14,7 @@ import {
 import { logger } from '@/server/logger';
 import { staffChannelOf } from '@/server/modules/orders/live';
 import { publish } from '@/server/realtime/pusher';
+import { announceEarnings } from '@/server/modules/earnings/effects';
 import type { OfferEnding, OfferKind } from './schema';
 
 /*
@@ -151,6 +152,10 @@ async function runOne(effect: DispatchEffect) {
       await publish(channels.ops, 'couriers.changed', { at: effect.at.toISOString() });
       return;
     case 'assignmentEnded':
+      // F9: a delivery that ended delivered or cancelled may have paid him; his app refetches.
+      if (effect.how === 'delivered' || effect.how === 'cancelled') {
+        await announceEarnings(effect.partnerId);
+      }
       await inngest.send(
         deliveryAssignmentEnded.create(
           {

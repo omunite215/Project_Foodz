@@ -424,6 +424,8 @@ test.describe('Privacy and data (S6)', () => {
       'favorites',
       'orders',
       'savedCards',
+      // F9 (S9.6): her own ratings, empty for a new account.
+      'ratings',
     ]);
     expect(Object.keys(data.profile)).not.toContain('password');
     expect(data.devices).toHaveLength(1);

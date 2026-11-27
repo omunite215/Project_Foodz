@@ -3,6 +3,7 @@ import type {
   ProblemKind,
   TrackingRoute,
 } from '@/server/modules/tracking/schema';
+import { keepsFeeSentence } from '@/lib/partner/earnings-text';
 
 /*
  * The courier's F8 words (design 2, "Copy"): the map's figure, the counter card, the slider,
@@ -233,6 +234,8 @@ export function endingNotice(
   kind: Exclude<PartnerTrackingNotice, 'askedToWait'>,
   orderNumber: string,
   pay: string | null,
+  /** F9 P57.3: the fee he keeps when it was cancelled after pickup. */
+  feeCents: number | null = null,
 ): { text: string; tone: NoticeTone; bringBack: boolean } {
   switch (kind) {
     case 'confirmed':
@@ -245,7 +248,9 @@ export function endingNotice(
       };
     case 'cancelledBringBack':
       return {
-        text: `Order ${orderNumber} was cancelled. Bring the food back to Foodz Kitchen.`,
+        text: `Order ${orderNumber} was cancelled. Bring the food back to Foodz Kitchen.${
+          feeCents ? ` ${keepsFeeSentence(feeCents)}` : ''
+        }`,
         tone: 'warning',
         bringBack: true,
       };

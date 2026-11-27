@@ -61,7 +61,7 @@ export function FindOrder({
     }
     const number = normalizeOrderNumber(value);
     if (!number) {
-      const message = 'Enter an order number, like 1042.';
+      const message = 'Enter an order number like 1042.';
       setBubble(message);
       announce(message);
       return;

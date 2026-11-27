@@ -1,6 +1,14 @@
 'use client';
 
-import { CircleX, ClipboardCheck, House, type LucideIcon, PackageCheck, Truck } from 'lucide-react';
+import {
+  CircleX,
+  ClipboardCheck,
+  House,
+  type LucideIcon,
+  PackageCheck,
+  Star,
+  Truck,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useReducer, useRef, useState } from 'react';
@@ -16,6 +24,7 @@ import {
   viewOrderName,
 } from '@/lib/order-notices';
 import { orderHref } from '@/lib/order-text';
+import { RATING_COPY, rateHref, rateOrderName } from '@/lib/rating-text';
 import { channels } from '@/lib/realtime/channels';
 import { useChannelEvent } from '@/lib/realtime/client';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -34,6 +43,7 @@ const ICONS: Record<OrderNoticeStatus, LucideIcon> = {
   pickedUp: Truck,
   delivered: House,
   cancelled: CircleX,
+  rate: Star,
 };
 
 const TICK_MS = 500;
@@ -48,6 +58,8 @@ export function OrderNoticeCard({
   const ref = useRef<HTMLElement>(null);
   const Icon = ICONS[notice.status];
   const cancelled = notice.status === 'cancelled';
+  // F9 design 2.12: the rating reminder's button opens the card on the order page.
+  const rate = notice.status === 'rate';
   const titleId = `order-notice-${notice.orderId}`;
 
   useMotion(
@@ -81,9 +93,21 @@ export function OrderNoticeCard({
           <p className="mt-0.5 line-clamp-3 text-body-5 text-neutral-3">{notice.body}</p>
           <div className="mt-3 flex gap-2">
             <Button asChild variant="outline" size="touch" className="bg-white">
-              <Link href={orderHref(notice.orderId)} aria-label={viewOrderName(notice.orderNumber)}>
-                View order
-              </Link>
+              {rate ? (
+                <Link
+                  href={rateHref(notice.orderId)}
+                  aria-label={rateOrderName(notice.orderNumber)}
+                >
+                  {RATING_COPY.rate}
+                </Link>
+              ) : (
+                <Link
+                  href={orderHref(notice.orderId)}
+                  aria-label={viewOrderName(notice.orderNumber)}
+                >
+                  View order
+                </Link>
+              )}
             </Button>
             <Button
               type="button"

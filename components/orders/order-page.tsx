@@ -64,6 +64,7 @@ import {
   WithPhone,
 } from './order-progress';
 import { PaymentStep } from './payment-step';
+import { RatingCard } from './rating-card';
 import { AtDoorBanner, TrackingMapCard } from './tracking';
 import { useLiveOrder } from './use-live-order';
 import { OrderAgainButton } from './use-reorder';
@@ -105,6 +106,12 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
   if (shown.from !== initial) setShown({ from: initial, view: initial });
   const view = shown.view;
   const setView = (next: OrderView) => setShown((current) => ({ ...current, view: next }));
+  // F9 (design 2.3): the rating card's answer replaces the order's card in place.
+  const setRating = (rating: NonNullable<OrderView['progress']['rating']>) =>
+    setShown((current) => ({
+      ...current,
+      view: { ...current.view, progress: { ...current.view.progress, rating } },
+    }));
 
   const [confirming, setConfirming] = useState(false);
   const [confirmingSince, setConfirmingSince] = useState<number | null>(null);
@@ -449,6 +456,14 @@ export function OrderPage({ view: initial, payment }: OrderPageProps) {
           markHiddenOnPhone={liveTracking !== null}
         />
         <OrderNumber number={view.number} />
+        <RatingCard
+          orderId={view.id}
+          orderNumber={view.number}
+          rating={view.progress.rating}
+          customerFirst={view.contact.firstName || null}
+          courierPhotoUrl={view.progress.dispatch?.courier?.photoUrl ?? null}
+          onChange={setRating}
+        />
         {storeCancelled ? (
           <CancellationCard
             view={view}

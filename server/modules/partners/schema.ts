@@ -333,6 +333,8 @@ export type PartnerState =
   /** P8, P9, P10. */
   | {
       screen: 'home';
+      /** F9 P51.3: "Today · $19.57 · 3 deliveries" (practice figures for the demo partner). */
+      today?: { earnedCents: number; deliveries: number };
       partner: {
         /** The partner's own id, for its realtime channel `private-partner-{id}` (B10). */
         id: string;

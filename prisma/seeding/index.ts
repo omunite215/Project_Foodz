@@ -268,6 +268,8 @@ export async function seedDatabase(prisma: PrismaClient, config: SeedConfig): Pr
             vehiclePlate: 'FDZ 204',
             ratingAvg: 4.8,
             ratingCount: 126,
+            ratingBaseAvg: 4.8,
+            ratingBaseCount: 126,
             approvedAt: now,
             submittedAt: now,
             welcomedAt: now,

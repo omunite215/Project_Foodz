@@ -14,6 +14,7 @@ import { deliveryTrackingStarted } from '@/server/jobs/tracking-events';
 import { redis } from '@/server/redis';
 import { presignDownload } from '@/server/storage/s3';
 import type { TurnResult } from '@/server/jobs/dispatch-run';
+import { cancelledFeeIn } from '@/server/modules/earnings/service';
 import { type DispatchEffect, runDispatchEffects } from './effects';
 import * as repo from './repo';
 import type { DeliveryRow, DispatchOrderRow, OfferRowData } from './repo';
@@ -688,10 +689,17 @@ export async function partnerDispatchState(
   now = new Date(),
 ): Promise<PartnerDispatchState> {
   const t = timings();
-  const { partner, active } = await runAsSystem('partner dispatch state', async (ctx) => ({
-    partner: await repo.findPartnerForDispatch(ctx, partnerId),
-    active: await repo.findActiveDeliveryOfPartner(ctx, partnerId),
-  }));
+  const { partner, active, feeCents } = await runAsSystem('partner dispatch state', async (ctx) => {
+    const found = await repo.findPartnerForDispatch(ctx, partnerId);
+    return {
+      partner: found,
+      active: await repo.findActiveDeliveryOfPartner(ctx, partnerId),
+      // F9 P57.3: "You'll still get the $2.64 delivery fee." on the cancel notice.
+      feeCents: found?.releasedOrderNumber
+        ? await cancelledFeeIn(ctx, partnerId, found.releasedOrderNumber)
+        : null,
+    };
+  });
   const staleAt =
     partner?.isOnline && !partner.isDemo && partner.lastPointAt
       ? new Date(partner.lastPointAt.getTime() + t.freshPointSeconds * 1000)
@@ -705,6 +713,7 @@ export async function partnerDispatchState(
           kind: RELEASE_KINDS.find((kind) => kind === partner.releasedKind) ?? 'cancelled',
           orderNumber: partner.releasedOrderNumber,
           at: partner.releasedAt.toISOString(),
+          feeCents,
         }
       : null;
   return {
@@ -864,7 +873,9 @@ export async function listAssignableCouriers(
             ? `On order ${row.busyOrderNumber}`
             : row.hasOpenOffer
               ? 'Has another offer open'
-              : null,
+              : row.userId === order.userId
+                ? 'Their own order'
+                : null,
           masked: name !== row.name,
         };
       }),
@@ -921,6 +932,14 @@ export async function sendStaffOffer(
         'offline',
         `${partner ? shortName(partner.name) : 'That courier'} went offline a moment ago. Choose another courier.`,
       );
+    }
+    // F9 B10: a partner is never offered his own food order.
+    if (partner.userId === order.userId) {
+      throw invalidState(`That's ${shortName(partner.name)}'s own order. Choose another courier.`, {
+        orderId,
+        number: order.number,
+        status: order.status,
+      });
     }
     const busy = await repo.findActiveDeliveryOfPartner(ctx, partnerId);
     if (busy) {
@@ -1520,8 +1539,9 @@ export async function getCustomerDispatch(
           vehicle: partner.vehicleType,
           vehicleWords: courierVehicle(partner.vehicleType, partner.vehiclePlate),
           plate: partner.vehiclePlate,
+          // F9 U14: shown to customers from 5 counted ratings (baseline included).
           rating:
-            partner.ratingCount > 0
+            partner.ratingCount >= 5
               ? { average: Math.round(partner.ratingAvg * 10) / 10, count: partner.ratingCount }
               : null,
         }
