@@ -3,6 +3,7 @@ import {
   expect,
   expectNoAxeViolations,
   isPhone,
+  isTablet,
   SAMPLE_PASSWORD,
   signInDemoAdmin,
   signInStaff,
@@ -71,6 +72,10 @@ test('the list: rating, this week and cash, "Owes cash" and the row menu', async
     await expect(page.getByRole('columnheader', { name: 'This week' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Cash' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Actions' })).toBeAttached();
+    // Design 3.2: at 1024 the vehicle joins the partner cell and "Partner since" goes.
+    const since = page.getByRole('columnheader', { name: 'Partner since' });
+    if (isTablet(testInfo)) await expect(since).toBeHidden();
+    else await expect(since).toBeVisible();
   }
   await expectNoAxeViolations(page);
 
