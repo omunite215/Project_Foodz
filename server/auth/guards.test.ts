@@ -7,46 +7,31 @@ const demo = { isDemo: true, twoFactorEnabled: false };
 const customer = { isDemo: false, twoFactorEnabled: false };
 
 describe('auth admin endpoints', () => {
+  // Closed to everyone, an ADMIN with two-factor included: staff tools are Server Actions with
+  // the code step, the last-admin rule, audit and a ban's effects (F11 Y1.4).
   it.each([
     ['POST', '/api/auth/admin/ban-user'],
     ['POST', '/api/auth/admin/set-role'],
+    ['POST', '/api/auth/admin/set-user-password'],
+    ['POST', '/api/auth/admin/remove-user'],
     ['GET', '/api/auth/admin/list-users'],
     ['POST', '/api/auth/admin/revoke-user-sessions/'],
-  ])('allow %s %s for an admin with two-factor', (method, pathname) => {
-    expect(authRequestAllowed({ method, pathname, user: admin })).toBe(true);
-  });
-
-  it.each([
-    ['a demo admin', demo],
-    ['an admin without two-factor', adminWithoutTwoFactor],
-    ['a customer', customer],
-    ['nobody signed in', null],
-  ])('refuse %s', (_who, user) => {
-    expect(
-      authRequestDecision({ method: 'POST', pathname: '/api/auth/admin/ban-user', user }),
-    ).toBe('forbidden');
-    expect(
-      authRequestAllowed({ method: 'GET', pathname: '/api/auth/admin/list-users', user }),
-    ).toBe(false);
+    ['POST', '/api/auth/admin'],
+  ])('answer 404 to %s %s, for an admin with two-factor too', (method, pathname) => {
+    for (const user of [admin, adminWithoutTwoFactor, demo, customer, null]) {
+      expect(authRequestDecision({ method, pathname, user })).toBe('not-found');
+      expect(authRequestAllowed({ method, pathname, user })).toBe(false);
+    }
   });
 
   it('cannot be reached with doubled or trailing slashes', () => {
-    expect(
-      authRequestAllowed({ method: 'POST', pathname: '/api/auth//admin/ban-user', user: demo }),
-    ).toBe(false);
-    expect(
-      authRequestAllowed({
-        method: 'POST',
-        pathname: '/api//auth/admin//set-role',
-        user: adminWithoutTwoFactor,
-      }),
-    ).toBe(false);
-    expect(authRequestAllowed({ method: 'POST', pathname: '/api/auth/admin/', user: demo })).toBe(
-      false,
-    );
-    expect(authRequestAllowed({ method: 'POST', pathname: '/api/auth/admin', user: demo })).toBe(
-      false,
-    );
+    for (const pathname of [
+      '/api/auth//admin/ban-user',
+      '/api//auth/admin//set-role',
+      '/api/auth/admin/',
+    ]) {
+      expect(authRequestDecision({ method: 'POST', pathname, user: admin })).toBe('not-found');
+    }
   });
 });
 

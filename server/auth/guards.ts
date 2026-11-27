@@ -8,7 +8,9 @@
  * server (server/auth/session.ts); the library's session endpoint would hand the session token,
  * IP address and ban reason to page scripts, so it is closed.
  *
- * - Admin endpoints need a real staff account with two-factor on; the demo admin is read-only.
+ * - The library's admin endpoints (/admin/*) are closed to everyone: an ADMIN could otherwise
+ *   ban, change roles or set passwords over HTTP without the code step, the last-admin rule, the
+ *   audit entry or a ban's effects. Staff tools go through Server Actions instead.
  * - Demo accounts are shared by everyone trying the site, so they may only follow links and sign
  *   out.
  */
@@ -56,9 +58,7 @@ export function authRequestDecision({ method, pathname, user }: AuthRequest): Au
   const path = authPath(pathname);
   const verb = method.toUpperCase();
 
-  if (path === '/admin' || path.startsWith('/admin/')) {
-    return user && !user.isDemo && user.twoFactorEnabled ? 'allow' : 'forbidden';
-  }
+  if (path === '/admin' || path.startsWith('/admin/')) return 'not-found';
   const endpoint = ENDPOINTS.find((e) => e.path.test(path) && e.methods.includes(verb));
   if (!endpoint) return 'not-found';
   if (user?.isDemo && !endpoint.demo) return 'demo-read-only';

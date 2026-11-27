@@ -435,8 +435,11 @@ export function formatWait(seconds: number): string {
 
 /** The 429 for a policy, with the real wait in the message and in `retryAfterSeconds`. */
 export function limitError(policy: RateLimitPolicy, msBeforeNext: number): AppError {
-  const retryAfterSeconds = Math.max(1, Math.ceil(msBeforeNext / 1000));
-  const template = policyOf(policy).message;
+  const { duration, blockDuration, message: template } = policyOf(policy);
+  // A wait is never longer than the policy's own window (or block): Redis's clock running a
+  // moment ahead of ours would otherwise read a 15-minute limit as 901 s, "16 minutes".
+  const longest = Math.max(duration, blockDuration ?? 0);
+  const retryAfterSeconds = Math.min(longest, Math.max(1, Math.ceil(msBeforeNext / 1000)));
   return template
     ? rateLimited(template.replace('{wait}', formatWait(retryAfterSeconds)), retryAfterSeconds)
     : rateLimited(
