@@ -3,15 +3,17 @@ import type { OfferDetail } from '@/server/modules/delivery/schema';
 import type { PartnerDeliveryF8 } from '@/server/modules/tracking/schema';
 import {
   ACCEPTED_HOLD_MS,
+  acceptedSince,
   acceptOffer,
   adoptDispatch,
   catchUp,
+  clearDelivered,
   confirmPickUp,
   declineOffer,
   dispatchStore,
   giveBackOrder,
-  handOverCode,
   GRACE_MS,
+  handOverCode,
   NOTICE_MS,
   onDeliveryChanged,
   onOfferEnded,
@@ -416,6 +418,9 @@ describe('the order he holds', () => {
       pay: '$7.64',
       today: { earnedCents: 1957, deliveries: 3 },
     });
+    // QA F4: Home's line takes the same figures, and keeps them after the sheet closes.
+    clearDelivered();
+    expect(dispatchStore.state.latestToday).toMatchObject({ earnedCents: 1957, deliveries: 3 });
   });
 
   it('re-sends a code only when it never left the phone (gate S8)', async () => {
@@ -539,5 +544,14 @@ describe('the order he holds', () => {
     expect(await giveBackOrder('vehicle')).toBe('done');
     expect(dispatchStore.state.delivery).toBeNull();
     expect(calls.at(-1)?.body).toEqual({ reason: 'vehicle' });
+  });
+});
+
+describe('an accepted offer on a screen without the map (QA U1)', () => {
+  it('opens the delivery once per accept, never for other endings', () => {
+    expect(acceptedSince(0, { id: 3, how: 'accepted' })).toBe(true);
+    expect(acceptedSince(3, { id: 3, how: 'accepted' })).toBe(false);
+    expect(acceptedSince(0, { id: 4, how: 'declined' })).toBe(false);
+    expect(acceptedSince(0, null)).toBe(false);
   });
 });

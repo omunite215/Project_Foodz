@@ -24,6 +24,7 @@ import { OfferLayer, useOfferOpen } from '../offers/offer-layer';
 import { DispatchNoticeSlot } from '../offers/offer-notices';
 import { IconDisc, PartnerFrame, PartnerNotice, PartnerTabBar, StatusHeader } from '../shell';
 import { MoneyNoticeSlot } from './money-notices';
+import { useOpenDeliveryOnAccept } from './use-open-delivery';
 
 /*
  * "Your ratings" (F9 design 1.12, P58): his average, how many, and what customers picked, from
@@ -48,6 +49,7 @@ export function RatingsScreen({
 }) {
   const { sharing, online, holding } = usePartnerSession(state, asOf);
   const offerOpen = useOfferOpen();
+  useOpenDeliveryOnAccept();
   return (
     <>
       <div inert={sharing.suspended || offerOpen ? true : undefined}>

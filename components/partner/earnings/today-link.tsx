@@ -1,9 +1,11 @@
 'use client';
 
+import { useSelector } from '@tanstack/react-store';
 import { ChevronRight, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import type { TodayLine } from '@/server/modules/earnings/schema';
+import { dispatchStore } from '@/lib/partner/dispatch';
 import { todayLine } from '@/lib/partner/earnings-text';
 import { channels } from '@/lib/realtime/channels';
 import { useChannelEvent } from '@/lib/realtime/client';
@@ -15,11 +17,21 @@ import { fetchSummary } from './earnings-data';
  */
 
 export function TodayLink({ partnerId, initial }: { partnerId: string; initial: TodayLine }) {
-  const [today, setToday] = useState(initial);
+  const [fetched, setFetched] = useState({ line: initial, at: 0 });
+  // QA F4: the delivered sheet's own figures, read with the hand-over, win until a newer read.
+  const handedOver = useSelector(dispatchStore, (state) => state.latestToday);
+  const today =
+    handedOver && handedOver.at > fetched.at
+      ? { earnedCents: handedOver.earnedCents, deliveries: handedOver.deliveries }
+      : fetched.line;
   const refresh = () => {
+    const asked = Date.now();
     fetchSummary()
       .then((summary) =>
-        setToday({ earnedCents: summary.today.earnedCents, deliveries: summary.today.deliveries }),
+        setFetched({
+          line: { earnedCents: summary.today.earnedCents, deliveries: summary.today.deliveries },
+          at: asked,
+        }),
       )
       .catch(() => {
         // The last value stays (design, States: "Last value").

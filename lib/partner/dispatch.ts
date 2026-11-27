@@ -74,6 +74,13 @@ export interface DispatchNotice {
 /** How the card last closed: where focus goes next (design, Focus). */
 export type CardClose = { id: number; how: 'ended' | 'accepted' | 'declined' | 'waiting' };
 
+/**
+ * F9 (QA U1): an offer accepted since `seenId`: a screen without the pick-up map (Earnings,
+ * Your ratings) then goes to Home, where the map is, without another tap.
+ */
+export const acceptedSince = (seenId: number, close: CardClose | null): close is CardClose =>
+  close !== null && close.how === 'accepted' && close.id !== seenId;
+
 export interface DispatchState {
   partnerId: string | null;
   isDemo: boolean;
@@ -90,6 +97,11 @@ export interface DispatchState {
   } | null;
   /** F8 P43.4: staff asked him to wait; the waiting card says so until the clock restarts. */
   askedToWaitAt: string | null;
+  /**
+   * F9 (QA F4): today's figures from his latest hand-over, kept after the delivered moment, so
+   * Home's line never trails the sheet that just showed them.
+   */
+  latestToday: { earnedCents: number; deliveries: number; at: number } | null;
   missedInRow: number;
   howOffersWork: PartnerDispatchState['howOffersWork'];
   /** Server clock minus the device's. */
@@ -109,6 +121,7 @@ const initial: DispatchState = {
   notice: null,
   delivery: null,
   delivered: null,
+  latestToday: null,
   askedToWaitAt: null,
   missedInRow: 0,
   howOffersWork: {
@@ -958,7 +971,10 @@ export async function handOverCode(
       const pay = earnedOf(result.payWords, held.payText);
       ownRelease = held.deliveryId;
       // The delivered moment first, so the sheet goes straight from the code to the pay.
-      set({ delivered: { orderNumber: held.orderNumber, pay, today: result.today ?? null } });
+      set({
+        delivered: { orderNumber: held.orderNumber, pay, today: result.today ?? null },
+        ...(result.today ? { latestToday: { ...result.today, at: Date.now() } } : {}),
+      });
       if (get().delivery?.deliveryId === held.deliveryId) endHeld(held);
       return { kind: 'delivered', pay };
     }

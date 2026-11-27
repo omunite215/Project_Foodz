@@ -80,7 +80,7 @@ export function PeriodBar({
       ) : null}
       <fieldset className="min-w-0">
         <legend className="sr-only">Show</legend>
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
           {(['today', 'week'] as const).map((value) => (
             <label
               key={value}

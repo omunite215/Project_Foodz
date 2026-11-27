@@ -522,7 +522,9 @@ export function loadView(read: { hasData: boolean; isError: boolean; paused: boo
 export const listLoadView = (list: LoadView, week: LoadView): LoadView | 'hidden' =>
   week === 'error' || week === 'offline' ? 'hidden' : list;
 
-export const WEEK_OFFLINE = "This week loads when you're back online.";
+/** The week names itself (QA U2): "This week", "Last week" or "Week of Nov 9 loads when…". */
+export const weekOfflineLine = (start: IsoDate, currentStart: IsoDate) =>
+  `${weekTitle(start, currentStart)} loads when you're back online.`;
 export const LIST_OFFLINE = "Your deliveries load when you're back online.";
 
 /**

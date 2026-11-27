@@ -44,6 +44,7 @@ import {
   tagSentence,
   todayLine,
   weekRangeWords,
+  weekOfflineLine,
   weekTitle,
   wholeDollars,
   workedOutRows,
@@ -389,6 +390,18 @@ describe('loading states (review S4, S5, P5)', () => {
     expect(loadView({ hasData: false, isError: false, paused: false })).toBe('skeleton');
     expect(loadView({ hasData: false, isError: true, paused: true })).toBe('error');
     expect(loadView({ hasData: true, isError: true, paused: true })).toBe('data');
+  });
+
+  it('names the week that loads later (QA U2)', () => {
+    expect(weekOfflineLine('2026-11-16', '2026-11-16')).toBe(
+      "This week loads when you're back online.",
+    );
+    expect(weekOfflineLine('2026-11-09', '2026-11-16')).toBe(
+      "Last week loads when you're back online.",
+    );
+    expect(weekOfflineLine('2026-11-02', '2026-11-16')).toBe(
+      "Week of Nov 2 loads when you're back online.",
+    );
   });
 
   it('shows one problem block, not one for the week and one for the list', () => {
