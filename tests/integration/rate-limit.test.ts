@@ -75,6 +75,11 @@ describe('refundable attempts', () => {
     expect(formatWait(61)).toBe('2 minutes');
     expect(formatWait(600)).toBe('10 minutes');
     expect(formatWait(3600)).toBe('1 hour');
+    // An hour-long window read a moment late never doubles (F2's download limit).
+    expect(formatWait(3601)).toBe('61 minutes');
+    expect(formatWait(7140)).toBe('119 minutes');
+    expect(formatWait(7200)).toBe('2 hours');
+    expect(formatWait(7201)).toBe('3 hours');
   });
 });
 

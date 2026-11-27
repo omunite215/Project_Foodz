@@ -426,8 +426,11 @@ export function formatWait(seconds: number): string {
   if (s < 60) return `${s} ${s === 1 ? 'second' : 'seconds'}`;
   const minutes = Math.ceil(s / 60);
   if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
-  const hours = Math.ceil(minutes / 60);
-  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  if (minutes === 60) return '1 hour';
+  // Under two hours minutes say it exactly: an hour-long limit read a second late is "61 minutes",
+  // not "2 hours".
+  if (minutes < 120) return `${minutes} minutes`;
+  return `${Math.ceil(minutes / 60)} hours`;
 }
 
 /** The 429 for a policy, with the real wait in the message and in `retryAfterSeconds`. */
