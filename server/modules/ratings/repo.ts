@@ -346,6 +346,13 @@ export async function startOfToday(ctx: DbContext): Promise<Date> {
   return rows[0]?.start ?? new Date();
 }
 
+/** The signed-in partner's own status (his row under row-level security), or null. */
+export async function myPartnerStatus(ctx: DbContext): Promise<string | null> {
+  const rows = await db(ctx).$queryRaw<{ status: string }[]>`
+    SELECT status::text AS status FROM delivery_partners WHERE id = app_partner_id()`;
+  return rows[0]?.status ?? null;
+}
+
 export async function mySummary(ctx: DbContext, before: Date, tagsSince: Date) {
   const rows = await db(ctx).$queryRaw<
     {

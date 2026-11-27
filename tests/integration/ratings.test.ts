@@ -488,6 +488,25 @@ async function ratingOfLuis(stars: number, tags: string[], daysAgo = 2) {
 }
 
 describe("the partner's own summary (P58, V8, U14, gate S1)", () => {
+  it('answers approved partners only: an applicant and a suspended partner are refused (QA B1)', async () => {
+    const applicant = await approvedPartner(migrator, 'Ana Applicant');
+    await migrator.deliveryPartner.update({
+      where: { id: applicant.partnerId },
+      data: { status: 'APPLIED', approvedAt: null },
+    });
+    await expect(ratings.getMyRatingsSummary(applicant.actor)).rejects.toMatchObject({
+      code: 'NOT_APPROVED',
+    });
+    const suspended = await approvedPartner(migrator, 'Victor Suspended');
+    await migrator.deliveryPartner.update({
+      where: { id: suspended.partnerId },
+      data: { status: 'SUSPENDED' },
+    });
+    await expect(ratings.getMyRatingsSummary(suspended.actor)).rejects.toMatchObject({
+      code: 'PARTNER_SUSPENDED',
+    });
+  });
+
   it('publishes a new figure only after 5 new counted ratings, tags included, and shows nothing before', async () => {
     expect(await ratings.getMyRatingsSummary(luis.actor)).toMatchObject({
       count: 0,
