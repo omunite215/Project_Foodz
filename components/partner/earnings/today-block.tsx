@@ -227,7 +227,9 @@ export function TodayBlock({
                 type="button"
                 variant="outline"
                 size="kitchen"
-                className="bg-card text-strong"
+                // At 200% text the label wraps inside the button instead of pushing the page
+                // sideways (WCAG 1.4.10), like "Back to the delivery".
+                className="h-auto min-h-12 max-w-full bg-card py-2 text-center whitespace-normal text-strong"
                 onClick={onGoal}
               >
                 <Target className="size-5" aria-hidden />
