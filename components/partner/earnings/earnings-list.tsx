@@ -305,26 +305,32 @@ function RowView({
     { scope: ref, dependencies: [isNew] },
   );
 
+  // The words keep at least 9rem (or the whole width): at large text sizes the amount and the
+  // chevron move under them instead of squeezing them to one letter a line (QA F1, P63.1).
   const content = (
     <>
       <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block text-body-4 font-medium text-strong [overflow-wrap:anywhere]">
-          {rowFirstLine(row, timeZone)}
-        </span>
-        {second ? (
-          // On a row's hover fill the grey line would drop under 4.5:1, so it darkens too.
-          <span className="mt-0.5 block text-body-5 text-muted-foreground group-hover:text-foreground [overflow-wrap:anywhere]">
-            {second}
+      <span className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <span className="min-w-[min(100%,9rem)] flex-1">
+          <span className="block text-body-4 font-medium text-strong [overflow-wrap:anywhere]">
+            {rowFirstLine(row, timeZone)}
           </span>
-        ) : null}
+          {second ? (
+            // On a row's hover fill the grey line would drop under 4.5:1, so it darkens too.
+            <span className="mt-0.5 block text-body-5 text-muted-foreground group-hover:text-foreground [overflow-wrap:anywhere]">
+              {second}
+            </span>
+          ) : null}
+        </span>
+        <span className="ml-auto flex shrink-0 items-start gap-3">
+          <span className="text-body-3 font-semibold whitespace-nowrap text-strong tabular-nums">
+            {rowAmount(row)}
+          </span>
+          {sheet ? (
+            <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
+          ) : null}
+        </span>
       </span>
-      <span className="text-body-3 font-semibold whitespace-nowrap text-strong tabular-nums">
-        {rowAmount(row)}
-      </span>
-      {sheet ? (
-        <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden />
-      ) : null}
     </>
   );
   const rowClass = 'relative flex min-h-16 w-full items-start gap-3 px-4 py-3 text-left';

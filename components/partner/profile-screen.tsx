@@ -177,7 +177,12 @@ export function ProfileScreen({
               tone="muted"
               icon={Info}
               action={
-                <Button asChild variant="outline" size="kitchen" className="bg-card text-strong">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="kitchen"
+                  className="h-auto min-h-12 bg-card py-2 text-center whitespace-normal text-strong"
+                >
                   <Link href="/partner">Back to the delivery</Link>
                 </Button>
               }

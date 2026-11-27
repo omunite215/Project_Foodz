@@ -26,6 +26,7 @@ const price = (cents: number) => usd.format(cents / 100);
 
 interface Summary {
   hasEntries: boolean;
+  firstWeekStart: string | null;
   practice: boolean;
   readOnly: boolean;
   today: { earnedCents: number; deliveries: number; goalCents: number | null };
@@ -304,4 +305,59 @@ test('Victor, suspended, sees his earnings read-only', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^(Set a daily goal|Edit goal)$/ })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/partner');
   await expectNoAxeViolationsAtEnd(page);
+});
+
+test('his first week at 200% text: rows keep their words readable, nothing moves when it lands', async ({
+  page,
+}) => {
+  await signInReady(page, LUIS, '/partner/earnings');
+  const summary = await summaryOf(page);
+  test.skip(!summary.firstWeekStart, 'Needs earlier weeks (seed:earnings).');
+  const week = `/partner/earnings?view=week&week=${summary.firstWeekStart}`;
+
+  // QA F3: an uncached week's skeleton is as tall as the week that replaces it.
+  await page.route('**/api/v1/partner/earnings/entries**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    await route.continue();
+  });
+  await open(page, week);
+  const block = page.locator('#period');
+  const skeleton = (await block.boundingBox())?.height ?? 0;
+  await expect(page.getByText(/^(Last week|Week of .+)$/)).toBeVisible({ timeout: 15_000 });
+  const loaded = (await block.boundingBox())?.height ?? 0;
+  expect(Math.abs(loaded - skeleton)).toBeLessThanOrEqual(1);
+  await page.unroute('**/api/v1/partner/earnings/entries**');
+
+  // QA U3: the two segments are 8 px apart.
+  const [today, weekLabel] = await Promise.all(
+    ['Today', 'Week'].map((name) =>
+      page.getByRole('group', { name: 'Show' }).getByText(name, { exact: true }).boundingBox(),
+    ),
+  );
+  expect((weekLabel?.x ?? 0) - ((today?.x ?? 0) + (today?.width ?? 0))).toBeGreaterThanOrEqual(8);
+
+  // QA F1, P63.1: at 200% text a row's words keep a usable width (the amount moves under
+  // them), and nothing scrolls sideways.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+  const firstLine = page
+    .getByRole('region', { name: 'Deliveries and payments' })
+    .locator('span.text-body-4')
+    .first();
+  await firstLine.scrollIntoViewIfNeeded();
+  expect((await firstLine.boundingBox())?.width ?? 0).toBeGreaterThan(150);
+  await expectNoSidewaysScroll(page);
+});
+
+test.describe('a phone set to another time zone', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+
+  test('says the times are Boston time under Today too (QA U4)', async ({ page }) => {
+    await signInReady(page, LUIS, '/partner/earnings');
+    const summary = await summaryOf(page);
+    test.skip(!summary.hasEntries, 'Needs earnings fixtures.');
+    await expect(page.getByText('Times are Boston time.')).toBeVisible();
+    await showPeriod(page, 'Week');
+    await expect(page.getByText('Times are Boston time.')).toBeVisible();
+  });
 });

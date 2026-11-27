@@ -319,7 +319,7 @@ export const Loading: Story = {
   render: () => (
     <Both height={600}>
       <div className="space-y-5 p-4">
-        <WeekSkeleton />
+        <WeekSkeleton withCompare zoneDiffers={false} />
         <ListSkeleton />
       </div>
     </Both>

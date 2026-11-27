@@ -149,23 +149,54 @@ export function WeekBlock({
   );
 }
 
-/** A week not yet cached: the block's exact shapes, so nothing moves when it lands (P59.2). */
-export function WeekSkeleton() {
+/**
+ * A week not yet cached (P59.2): the loaded block's own lines, each holding a grey bar of one
+ * text height, so the skeleton is exactly as tall as the week that replaces it (QA F3).
+ */
+export function WeekSkeleton({
+  withCompare,
+  zoneDiffers,
+}: {
+  /** Every week but his first has a comparison line. */
+  withCompare: boolean;
+  zoneDiffers: boolean;
+}) {
   const heights = ['h-12', 'h-6', 'h-20', 'h-16', 'h-10', 'h-14', 'h-8'];
+  const line = 'inline-block h-[1em] rounded bg-muted align-top';
   return (
     <div aria-hidden className="motion-safe:animate-pulse">
-      <div className="mx-auto h-3.5 w-20 rounded bg-muted" />
-      <div className="mx-auto mt-1 h-12 w-36 rounded-lg bg-muted" />
-      <div className="mx-auto mt-2 h-5 w-48 rounded bg-muted" />
+      <p className="text-center text-body-5 font-medium">
+        <span className={cn(line, 'w-20')} />
+      </p>
+      <p className="mt-1 text-center font-sans text-h2 leading-none font-semibold">
+        <span className={cn(line, 'w-36')} />
+      </p>
+      <p className="mt-2 text-center text-body-5">
+        <span className={cn(line, 'w-48')} />
+      </p>
       <div className="mt-5 grid h-32 grid-cols-7 items-end gap-1">
         {heights.map((height) => (
           <div key={height} className="flex flex-col items-center gap-1.5 pb-1">
             <span className={cn('block w-6 rounded-t-md bg-muted', height)} />
-            <span className="block h-3 w-6 rounded bg-muted" />
+            <span className="block text-caption">
+              <span className={cn(line, 'w-6')} />
+            </span>
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-4 h-6 w-64 max-w-full rounded bg-muted" />
+      <p className="mt-4 text-center text-body-4">
+        <span className={cn(line, 'w-64 max-w-full')} />
+      </p>
+      {withCompare ? (
+        <p className="mt-1 text-center text-body-5">
+          <span className={cn(line, 'w-32')} />
+        </p>
+      ) : null}
+      {zoneDiffers ? (
+        <p className="mt-2 text-center text-body-5">
+          <span className={cn(line, 'w-40')} />
+        </p>
+      ) : null}
     </div>
   );
 }

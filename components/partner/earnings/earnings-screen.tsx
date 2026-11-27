@@ -24,7 +24,7 @@ import {
   loadView,
   offlineLine as offlineFigures,
   periodAnnouncement,
-  WEEK_OFFLINE,
+  weekOfflineLine,
   weekTitle,
 } from '@/lib/partner/earnings-text';
 import { useOnline } from '@/lib/use-online';
@@ -51,6 +51,7 @@ import { EarningsList, type EarningsListHandle, ListSkeleton, useSkeleton } from
 import { DeliverySheet } from './delivery-sheet';
 import { GoalSheet, type SaveGoal } from './goal-sheet';
 import { MoneyNoticeSlot } from './money-notices';
+import { useOpenDeliveryOnAccept } from './use-open-delivery';
 import { type Period, PeriodBar } from './period-bar';
 import { TodayBlock } from './today-block';
 import { WeekBlock, WeekSkeleton } from './week-block';
@@ -114,6 +115,7 @@ export function EarningsScreen({
 }) {
   const { sharing, online, holding } = usePartnerSession(state, asOf);
   const offerOpen = useOfferOpen();
+  useOpenDeliveryOnAccept();
   const frame: FrameParts = {
     header: (
       <StatusHeader
@@ -137,7 +139,12 @@ export function EarningsScreen({
         tone="muted"
         icon={Info}
         action={
-          <Button asChild variant="outline" size="kitchen" className="bg-card text-strong">
+          <Button
+            asChild
+            variant="outline"
+            size="kitchen"
+            className="h-auto min-h-12 bg-card py-2 text-center whitespace-normal text-strong"
+          >
             <Link href="/partner">Back to the delivery</Link>
           </Button>
         }
@@ -528,9 +535,9 @@ export function EarningsBody({
   } else if (weekView === 'error') {
     block = loadFailed;
   } else if (weekView === 'offline') {
-    block = <OfflineLine words={WEEK_OFFLINE} />;
+    block = <OfflineLine words={weekOfflineLine(shownWeek, currentWeek)} />;
   } else {
-    block = <WeekSkeleton />;
+    block = <WeekSkeleton withCompare={shownWeek > firstWeek} zoneDiffers={zoneDiffers} />;
   }
 
   const figuresAt = new Date(summaryQuery.dataUpdatedAt || Date.parse(summary.asOf)).toISOString();
@@ -581,6 +588,10 @@ export function EarningsBody({
           {block}
         </div>
         {list}
+        {/* P52.4, QA U4: Today's rows carry times too, so the zone line shows under them. */}
+        {period === 'today' && zoneDiffers && summary.hasEntries ? (
+          <p className="text-center text-body-5 text-muted-foreground">Times are Boston time.</p>
+        ) : null}
       </PartnerFrame>
       {readOnly ? null : (
         <GoalSheet
